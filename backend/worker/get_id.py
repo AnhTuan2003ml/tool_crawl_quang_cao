@@ -1,6 +1,7 @@
 import requests
 import json
 import re
+import codecs
 from urllib.parse import urlencode, urlparse, parse_qs
 
 # ====== LƯU Ý ======
@@ -13,29 +14,32 @@ from urllib.parse import urlencode, urlparse, parse_qs
 # ================================
 #   HÀM GỌI API VỚI URL VIDEO
 # ================================
-def get_post_id(video_url, profile_id):
+def get_post_id(video_url, profile_id, payload_dict=None, cookies=None):
     """
     Gọi API với URL video để lấy post_id
     
     Args:
         video_url (str): URL của video Facebook (ví dụ: "https://www.facebook.com/reel/1525194028720314/")
         profile_id (str): Profile ID để lấy cookies và payload
+        payload_dict (dict, optional): Payload dictionary (nếu đã có sẵn)
+        cookies (str, optional): Cookie string (nếu đã có sẵn)
         
     Returns:
-        str: post_id hoặc None nếu không tìm thấy
+        tuple: (post_id, owning_profile_dict) hoặc (None, None) nếu không tìm thấy
+        owning_profile_dict: {"__typename": "...", "name": "...", "id": "..."} hoặc None
     """
     from get_payload import get_payload_by_profile_id, get_cookies_by_profile_id
     
-    # Lấy payload và cookies từ profile_id
-    payload_dict = get_payload_by_profile_id(profile_id)
-    if not payload_dict:
-        print(f"❌ Không thể lấy payload từ profile_id: {profile_id}")
-        return None
+    # Lấy payload và cookies nếu chưa có
+    if payload_dict is None:
+        payload_dict = get_payload_by_profile_id(profile_id)
+        if not payload_dict:
+            return None, None
     
-    cookies = get_cookies_by_profile_id(profile_id)
-    if not cookies:
-        print(f"❌ Không thể lấy cookies từ profile_id: {profile_id}")
-        return None
+    if cookies is None:
+        cookies = get_cookies_by_profile_id(profile_id)
+        if not cookies:
+            return None, None
     
     url = "https://www.facebook.com/api/graphql/"
     
@@ -73,18 +77,11 @@ def get_post_id(video_url, profile_id):
         "x-fb-lsd": payload_dict.get("lsd", "")
     }
     
-    print(f"\n🚀 Gọi API với URL video: {video_url}")
-    print(f"📋 Variables: {json.dumps(variables, ensure_ascii=False)}")
-
     # Gửi request
     response = requests.post(url, data=payload, headers=headers)
     
-    print(f"📊 Status Code: {response.status_code}")
-    
     if response.status_code != 200:
-        print(f"❌ Lỗi: Status code {response.status_code}")
-        print(f"Response text: {response.text[:500]}")
-        return None
+        return None, None
     
     # Parse và lấy post_id
     try:
@@ -93,44 +90,123 @@ def get_post_id(video_url, profile_id):
         # Lấy post_id từ response
         post_id = response_json.get("data", {}).get("xma_preview_data", {}).get("post_id")
         
-        if post_id:
-            print(f"✅ Post ID: {post_id}")
-            return post_id
-        else:
-            print(f"⚠️ Không tìm thấy post_id trong response, thử fallback sang view-source...")
-            # Fallback: Tìm post_id trong HTML source
-            return get_post_id_from_html(video_url, profile_id)
+        # Tìm owning_profile trong toàn bộ response (có thể ở nhiều vị trí)
+        owning_profile = None
+        
+        # Thử tìm trong xma_preview_data trước
+        xma_data = response_json.get("data", {}).get("xma_preview_data", {})
+        if xma_data:
+            owning_profile = xma_data.get("owning_profile")
+        
+        # Nếu không tìm thấy, tìm trong data trực tiếp
+        if not owning_profile:
+            data = response_json.get("data", {})
+            if isinstance(data, dict):
+                owning_profile = data.get("owning_profile")
+        
+        # Nếu vẫn không tìm thấy, tìm đệ quy trong toàn bộ response
+        if not owning_profile:
+            def find_owning_profile(obj):
+                """Tìm owning_profile đệ quy trong object"""
+                if isinstance(obj, dict):
+                    if "owning_profile" in obj:
+                        return obj["owning_profile"]
+                    for value in obj.values():
+                        result = find_owning_profile(value)
+                        if result:
+                            return result
+                elif isinstance(obj, list):
+                    for item in obj:
+                        result = find_owning_profile(item)
+                        if result:
+                            return result
+                return None
             
-    except json.JSONDecodeError as e:
-        print(f"❌ Lỗi: Response không phải JSON hợp lệ")
-        print(f"Response text (500 ký tự đầu): {response.text[:500]}")
-        print(f"Chi tiết lỗi: {e}")
-        return None
-    except Exception as e:
-        print(f"❌ Lỗi khi parse response: {e}")
-        return None
+            owning_profile = find_owning_profile(response_json)
+        
+        if post_id:
+            # Nếu không tìm thấy owning_profile trong API response, thử tìm trong HTML
+            if not owning_profile:
+                _, owning_profile = get_post_id_from_html(video_url, profile_id, cookies)
+            
+            # Decode Unicode escape sequences trong owning_profile name nếu có
+            if owning_profile and "name" in owning_profile:
+                name = owning_profile['name']
+                if isinstance(name, str) and '\\u' in name:
+                    try:
+                        name = json.loads(f'"{name}"')
+                        owning_profile['name'] = name
+                    except:
+                        try:
+                            name = codecs.decode(name, 'unicode_escape')
+                            owning_profile['name'] = name
+                        except:
+                            pass
+            
+            return post_id, owning_profile
+        else:
+            # Fallback: Tìm post_id trong HTML source (cũng lấy owning_profile)
+            post_id, owning_profile = get_post_id_from_html(video_url, profile_id, cookies)
+            
+            # Decode Unicode escape sequences trong owning_profile name nếu có
+            if owning_profile and "name" in owning_profile:
+                name = owning_profile['name']
+                if isinstance(name, str) and '\\u' in name:
+                    try:
+                        name = json.loads(f'"{name}"')
+                        owning_profile['name'] = name
+                    except:
+                        try:
+                            name = codecs.decode(name, 'unicode_escape')
+                            owning_profile['name'] = name
+                        except:
+                            pass
+            
+            return post_id, owning_profile
+            
+    except json.JSONDecodeError:
+        # Fallback: Tìm post_id trong HTML source
+        post_id, owning_profile = get_post_id_from_html(video_url, profile_id, cookies)
+        
+        # Decode Unicode escape sequences trong owning_profile name nếu có
+        if owning_profile and "name" in owning_profile:
+            name = owning_profile['name']
+            if isinstance(name, str) and '\\u' in name:
+                try:
+                    name = json.loads(f'"{name}"')
+                    owning_profile['name'] = name
+                except:
+                    try:
+                        name = codecs.decode(name, 'unicode_escape')
+                        owning_profile['name'] = name
+                    except:
+                        pass
+        
+        return post_id, owning_profile
+    except Exception:
+        return None, None
 
 
-def get_post_id_from_html(url, profile_id):
+def get_post_id_from_html(url, profile_id, cookies=None):
     """
-    Fallback: Lấy post_id từ HTML source của trang (view-source)
+    Fallback: Lấy post_id và owning_profile từ HTML source của trang (view-source)
     
     Args:
         url (str): URL của Facebook post
         profile_id (str): Profile ID để lấy cookies
+        cookies (str, optional): Cookie string (nếu đã có sẵn)
         
     Returns:
-        str: post_id đầu tiên tìm thấy hoặc None
+        tuple: (post_id, owning_profile_dict) hoặc (None, None) nếu không tìm thấy
+        owning_profile_dict: {"__typename": "...", "name": "...", "id": "..."} hoặc None
     """
     from get_payload import get_cookies_by_profile_id
     
-    # Lấy cookies từ profile_id
-    cookies = get_cookies_by_profile_id(profile_id)
-    if not cookies:
-        print(f"❌ Không thể lấy cookies từ profile_id: {profile_id}")
-        return None
-    
-    print(f"\n🔄 Fallback: Đang lấy HTML source (view-source) từ: {url}")
+    # Lấy cookies nếu chưa có
+    if cookies is None:
+        cookies = get_cookies_by_profile_id(profile_id)
+        if not cookies:
+            return None, None
     
     try:
         # Headers cho GET request (khác với POST)
@@ -154,11 +230,9 @@ def get_post_id_from_html(url, profile_id):
         response = requests.get(url, headers=get_headers)
         
         if response.status_code != 200:
-            print(f"❌ Lỗi: Status code {response.status_code}")
-            return None
+            return None, None
         
         html_content = response.text
-        print(f"📄 Đã lấy HTML source ({len(html_content)} ký tự)")
         
         # Tìm post_id bằng các pattern phổ biến
         post_id_patterns = [
@@ -179,49 +253,112 @@ def get_post_id_from_html(url, profile_id):
             matches = re.findall(pattern, html_content, re.IGNORECASE)
             if matches:
                 found_ids.extend(matches)
-                print(f"   🔍 Tìm thấy {len(matches)} post_id(s) với pattern: {pattern[:30]}...")
         
+        post_id = None
         if found_ids:
             # Lấy post_id đầu tiên (thường là post_id chính)
             post_id = found_ids[0]
-            print(f"✅ Tìm thấy post_id từ HTML: {post_id}")
-            print(f"   📋 Tổng số post_id tìm thấy: {len(set(found_ids))} (unique)")
-            return post_id
-        else:
-            print(f"⚠️ Không tìm thấy post_id trong HTML source")
-            # Lưu HTML để debug
-            with open("html_source_debug.html", "w", encoding="utf-8") as f:
-                f.write(html_content)
-            print(f"   💾 Đã lưu HTML source vào html_source_debug.html để debug")
-            return None
+        
+        # Tìm owning_profile trong HTML
+        owning_profile = None
+        
+        # Pattern 1: Tìm trong JSON structure với các field có thể ở bất kỳ thứ tự nào
+        # "owning_profile":{"__typename":"User","name":"Nhà Bao Drama","id":"100092638646924"}
+        owning_profile_patterns = [
+            # Pattern với thứ tự: __typename, name, id
+            r'"owning_profile"\s*:\s*\{[^}]*"__typename"\s*:\s*"([^"]+)"[^}]*"name"\s*:\s*"([^"]+)"[^}]*"id"\s*:\s*"([^"]+)"',
+            # Pattern với thứ tự: name, __typename, id
+            r'"owning_profile"\s*:\s*\{[^}]*"name"\s*:\s*"([^"]+)"[^}]*"__typename"\s*:\s*"([^"]+)"[^}]*"id"\s*:\s*"([^"]+)"',
+            # Pattern với thứ tự: id, __typename, name
+            r'"owning_profile"\s*:\s*\{[^}]*"id"\s*:\s*"([^"]+)"[^}]*"__typename"\s*:\s*"([^"]+)"[^}]*"name"\s*:\s*"([^"]+)"',
+        ]
+        
+        for pattern in owning_profile_patterns:
+            match = re.search(pattern, html_content, re.DOTALL)
+            if match:
+                # Xác định thứ tự các group dựa trên pattern
+                if '"__typename"' in pattern and pattern.index('"__typename"') < pattern.index('"name"'):
+                    owning_profile = {
+                        "__typename": match.group(1),
+                        "name": match.group(2),
+                        "id": match.group(3)
+                    }
+                elif '"name"' in pattern and pattern.index('"name"') < pattern.index('"__typename"'):
+                    owning_profile = {
+                        "name": match.group(1),
+                        "__typename": match.group(2),
+                        "id": match.group(3)
+                    }
+                else:
+                    owning_profile = {
+                        "id": match.group(1),
+                        "__typename": match.group(2),
+                        "name": match.group(3)
+                    }
+                break
+        
+        # Pattern 2: Tìm riêng lẻ các field (nếu pattern 1 không match)
+        if not owning_profile:
+            # Tìm block owning_profile trước
+            owning_profile_block = re.search(r'"owning_profile"\s*:\s*\{([^}]+)\}', html_content, re.DOTALL)
+            if owning_profile_block:
+                block_content = owning_profile_block.group(1)
+                owning_profile = {}
+                
+                # Tìm __typename
+                typename_match = re.search(r'"__typename"\s*:\s*"([^"]+)"', block_content)
+                if typename_match:
+                    owning_profile["__typename"] = typename_match.group(1)
+                
+                # Tìm name
+                name_match = re.search(r'"name"\s*:\s*"([^"]+)"', block_content)
+                if name_match:
+                    owning_profile["name"] = name_match.group(1)
+                
+                # Tìm id
+                id_match = re.search(r'"id"\s*:\s*"([^"]+)"', block_content)
+                if id_match:
+                    owning_profile["id"] = id_match.group(1)
+        
+        # Decode Unicode escape sequences trong owning_profile name nếu có
+        if owning_profile and "name" in owning_profile:
+            name = owning_profile['name']
+            if isinstance(name, str) and '\\u' in name:
+                try:
+                    name = json.loads(f'"{name}"')
+                    owning_profile['name'] = name
+                except:
+                    try:
+                        name = codecs.decode(name, 'unicode_escape')
+                        owning_profile['name'] = name
+                    except:
+                        pass
+        
+        return post_id, owning_profile
             
-    except Exception as e:
-        print(f"❌ Lỗi khi lấy HTML source: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
+    except Exception:
+        return None, None
 
 
-def get_page_id_from_html(url, profile_id):
+def get_page_id_from_html(url, profile_id, cookies=None):
     """
     Lấy page_id từ HTML source của trang (view-source)
     
     Args:
         url (str): URL của Facebook page/group
         profile_id (str): Profile ID để lấy cookies
+        cookies (str, optional): Cookie string (nếu đã có sẵn)
         
     Returns:
         str: page_id đầu tiên tìm thấy hoặc None
     """
     from get_payload import get_cookies_by_profile_id
     
-    # Lấy cookies từ profile_id
-    cookies = get_cookies_by_profile_id(profile_id)
-    if not cookies:
-        print(f"❌ Không thể lấy cookies từ profile_id: {profile_id}")
-        return None
-    
-    print(f"\n🔄 Đang lấy HTML source (view-source) từ: {url}")
+    # Lấy cookies nếu chưa có
+    if cookies is None:
+        cookies = get_cookies_by_profile_id(profile_id)
+        if not cookies:
+            return None
     
     try:
         # Headers cho GET request
@@ -245,11 +382,9 @@ def get_page_id_from_html(url, profile_id):
         response = requests.get(url, headers=get_headers)
         
         if response.status_code != 200:
-            print(f"❌ Lỗi: Status code {response.status_code}")
             return None
         
         html_content = response.text
-        print(f"📄 Đã lấy HTML source ({len(html_content)} ký tự)")
         
         # Tìm page_id bằng các pattern phổ biến
         page_id_patterns = [
@@ -267,7 +402,6 @@ def get_page_id_from_html(url, profile_id):
             matches = re.findall(pattern, html_content, re.IGNORECASE)
             if matches:
                 found_ids.extend(matches)
-                print(f"   🔍 Tìm thấy {len(matches)} page_id(s) với pattern: {pattern[:50]}...")
         
         # Tìm trong JSON structure như ví dụ: {"987870664956102":{"page_id":"987870664956102","page_id_type":"group"
         # Pattern 1: Lấy từ key của JSON object
@@ -275,17 +409,14 @@ def get_page_id_from_html(url, profile_id):
         json_matches = re.findall(json_key_pattern, html_content)
         if json_matches:
             for match in json_matches:
-                # Lấy cả key (thường là page_id) và value
                 found_ids.append(match[0])  # Key từ JSON
                 found_ids.append(match[1])  # Value từ page_id field
-            print(f"   🔍 Tìm thấy {len(json_matches)} page_id(s) trong JSON structure (key pattern)")
         
         # Pattern 2: Tìm trực tiếp trong JSON với page_id_type
         json_with_type_pattern = r'"page_id"\s*:\s*"(\d+)"\s*,\s*"page_id_type"\s*:\s*"[^"]*"'
         json_type_matches = re.findall(json_with_type_pattern, html_content)
         if json_type_matches:
             found_ids.extend(json_type_matches)
-            print(f"   🔍 Tìm thấy {len(json_type_matches)} page_id(s) với page_id_type")
         
         # Pattern 3: Tìm trong structure phức tạp hơn (có thể có nhiều fields giữa)
         complex_json_pattern = r'{"(\d+)":\s*{[^}]*"page_id"\s*:\s*"(\d+)"'
@@ -294,28 +425,15 @@ def get_page_id_from_html(url, profile_id):
             for match in complex_matches:
                 found_ids.append(match[0])  # Key
                 found_ids.append(match[1])  # page_id value
-            print(f"   🔍 Tìm thấy {len(complex_matches)} page_id(s) trong complex JSON structure")
         
         if found_ids:
             # Lấy page_id đầu tiên (thường là page_id chính)
             page_id = found_ids[0]
-            print(f"✅ Tìm thấy page_id từ HTML: {page_id}")
-            print(f"   📋 Tổng số page_id tìm thấy: {len(set(found_ids))} (unique)")
-            if len(set(found_ids)) > 1:
-                print(f"   📋 Các page_id tìm thấy: {list(set(found_ids))[:5]}")
             return page_id
         else:
-            print(f"⚠️ Không tìm thấy page_id trong HTML source")
-            # Lưu HTML để debug
-            with open("html_source_page_id_debug.html", "w", encoding="utf-8") as f:
-                f.write(html_content)
-            print(f"   💾 Đã lưu HTML source vào html_source_page_id_debug.html để debug")
             return None
             
-    except Exception as e:
-        print(f"❌ Lỗi khi lấy HTML source: {e}")
-        import traceback
-        traceback.print_exc()
+    except Exception:
         return None
 
 
@@ -324,98 +442,72 @@ def get_id_from_url(url, profile_id):
     Hàm tổng hợp tự động phát hiện loại URL và lấy page_id hoặc post_id tương ứng
     
     Logic:
-    - Nếu URL chứa /groups/ hoặc /pages/ → chỉ lấy page_id
-    - Nếu URL là post/video/reel → lấy cả post_id và page_id
+    - Nếu URL chứa "group" → là group (chỉ lấy page_id)
+    - Còn lại tất cả → là post (lấy post_id và owning_profile)
     
     Args:
-        url (str): URL của Facebook (có thể là group, page, post, video, reel, ...)
+        url (str): URL của Facebook (có thể là group hoặc post)
         profile_id (str): Profile ID để lấy cookies và payload
         
     Returns:
         dict: {
             "page_id": str hoặc None,
             "post_id": str hoặc None,
-            "url_type": str ("group", "page", "post", "video", "reel", "unknown")
+            "owning_profile": dict hoặc None,
+            "url_type": str ("group" hoặc "post")
         }
     """
+    from get_payload import get_payload_by_profile_id, get_cookies_by_profile_id
+    
+    # Load cookies và payload một lần duy nhất
+    cookies = get_cookies_by_profile_id(profile_id)
+    payload_dict = get_payload_by_profile_id(profile_id)
+    
+    if not cookies or not payload_dict:
+        return {
+            "page_id": None,
+            "post_id": None,
+            "owning_profile": None,
+            "url_type": "post"
+        }
+    
     url_lower = url.lower()
     result = {
         "page_id": None,
         "post_id": None,
-        "url_type": "unknown"
+        "owning_profile": None,
+        "url_type": "post"  # Mặc định là post
     }
     
-    # Phát hiện loại URL
-    if "/groups/" in url_lower:
+    # Phát hiện loại URL: nếu có "group" trong URL → là group
+    if "group" in url_lower:
         result["url_type"] = "group"
-        page_id = get_page_id_from_html(url, profile_id)
+        page_id = get_page_id_from_html(url, profile_id, cookies)
         result["page_id"] = page_id
         if page_id:
             print(f"page_id: {page_id}")
         return result
-        
-    elif "/pages/" in url_lower:
-        result["url_type"] = "page"
-        page_id = get_page_id_from_html(url, profile_id)
-        result["page_id"] = page_id
-        if page_id:
-            print(f"page_id: {page_id}")
-        return result
-        
-    elif any(keyword in url_lower for keyword in ["/reel/", "/video/", "/watch/", "/share/v/", "/photo/", "/posts/", "/permalink/"]):
-        result["url_type"] = "post"
-        # Lấy post_id
-        post_id = get_post_id(url, profile_id)
-        result["post_id"] = post_id
-        
-        # Lấy cả page_id từ HTML source của post
-        page_id = get_page_id_from_html(url, profile_id)
-        result["page_id"] = page_id
-        
-        # In kết quả
-        if post_id:
-            print(f"post_id: {post_id}")
-        if page_id:
-            print(f"page_id: {page_id}")
-        return result
-        
     else:
-        # URL không rõ ràng, thử cả hai
-        result["url_type"] = "unknown"
+        # Tất cả các URL khác đều là post
+        result["url_type"] = "post"
         
-        # Thử lấy page_id trước
-        page_id = get_page_id_from_html(url, profile_id)
-        result["page_id"] = page_id
+        # Lấy post_id và owning_profile (truyền cookies và payload đã load)
+        post_id_result = get_post_id(url, profile_id, payload_dict, cookies)
+        if isinstance(post_id_result, tuple):
+            post_id, owning_profile = post_id_result
+        else:
+            post_id = post_id_result
+            owning_profile = None
         
-        # Thử lấy post_id
-        post_id = get_post_id(url, profile_id)
         result["post_id"] = post_id
-        
-        # In kết quả
-        if page_id:
-            print(f"page_id: {page_id}")
-        if post_id:
-            print(f"post_id: {post_id}")
-        
+        result["owning_profile"] = owning_profile       
         return result
 
 
 if __name__ == "__main__":
     # Ví dụ sử dụng hàm get_id_from_url (tổng hợp)
     profile_id = "031ca13d-e8fa-400c-a603-df57a2806788"
-    
-    # Test với group URL
-    group_url = "https://www.facebook.com/groups/987870664956102/"
-    result = get_id_from_url(group_url, profile_id)
-    print(f"\n📊 Kết quả:")
-    print(f"   URL Type: {result['url_type']}")
-    print(f"   Page ID: {result['page_id']}")
-    print(f"   Post ID: {result['post_id']}")
-    
     # Test với video/post URL
-    video_url = "https://www.facebook.com/share/v/17qwV639vQ/?mibextid=wwXIfr"
-    result = get_id_from_url(video_url, profile_id)
-    print(f"\n📊 Kết quả:")
-    print(f"   URL Type: {result['url_type']}")
-    print(f"   Page ID: {result['page_id']}")
-    print(f"   Post ID: {result['post_id']}")
+    url = "https://www.facebook.com/share/p/1D11GiNtVy/"
+    result = get_id_from_url(url, profile_id)
+    print(result)

@@ -37,7 +37,6 @@ def get_cookies_by_profile_id(profile_id):
             
             # Loại bỏ ký tự xuống dòng và khoảng trắng thừa
             cookie = " ".join(cookie.split())
-            print(f"✅ Đã lấy cookie từ profile_id: {profile_id}")
             return cookie
         else:
             print(f"❌ Không tìm thấy profile_id '{profile_id}' trong {COOKIES_JSON_FILE}")
@@ -72,10 +71,8 @@ def get_access_token_by_profile_id(profile_id):
             if isinstance(profile_data, dict):
                 access_token = profile_data.get("access_token", "").strip()
                 if access_token:
-                    print(f"✅ Đã lấy access_token từ profile_id: {profile_id}")
                     return access_token
                 else:
-                    print(f"⚠️ Không tìm thấy access_token cho profile_id: {profile_id}")
                     return None
             # Format cũ (string) không có access_token
             else:
