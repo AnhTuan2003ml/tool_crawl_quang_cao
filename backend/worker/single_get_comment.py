@@ -2,6 +2,7 @@ import requests
 import json
 import base64
 from urllib.parse import urlencode
+from datetime import datetime, timezone, timedelta
 
 # ====== LƯU Ý ======
 # Cookies và payload được lấy từ cookies.json và payload.txt thông qua profile_id
@@ -15,6 +16,35 @@ def create_feedback_id(post_id):
     s = f"feedback:{post_id}"
     feedback_id = base64.b64encode(s.encode()).decode()
     return feedback_id
+
+
+# ====== CHUYỂN ĐỔI TIMESTAMP SANG GIỜ VIỆT NAM (UTC+7) ======
+def convert_timestamp_to_vietnam_time(timestamp):
+    """
+    Chuyển đổi Unix timestamp sang giờ Việt Nam (UTC+7)
+    
+    Args:
+        timestamp (int): Unix timestamp (số giây từ epoch)
+        
+    Returns:
+        str: Thời gian định dạng "YYYY-MM-DD HH:MM:SS" (giờ Việt Nam) hoặc None nếu timestamp không hợp lệ
+    """
+    if timestamp is None:
+        return None
+    
+    try:
+        # Tạo datetime từ timestamp (UTC)
+        dt_utc = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        
+        # Chuyển sang giờ Việt Nam (UTC+7)
+        vietnam_tz = timezone(timedelta(hours=7))
+        dt_vietnam = dt_utc.astimezone(vietnam_tz)
+        
+        # Format thành string
+        return dt_vietnam.strftime("%Y-%m-%d %H:%M:%S")
+    except (ValueError, OSError, TypeError) as e:
+        print(f"⚠️ Lỗi khi chuyển đổi timestamp {timestamp}: {e}")
+        return None
 
 
 # ====== EXTRACT USERS TỪ JSON ======
@@ -39,6 +69,12 @@ def extract_users_from_json(data, users_list, seen_ids):
             if "body" in data and isinstance(data["body"], dict):
                 comment_text = data["body"].get("text")
             
+            # Lấy created_time nếu có
+            created_time = data.get("created_time")
+            created_time_vn = None
+            if created_time:
+                created_time_vn = convert_timestamp_to_vietnam_time(created_time)
+            
             if user_id and user_name:
                 # Tạo key duy nhất từ user_id và text (để tránh trùng comment)
                 unique_key = f"{user_id}_{comment_text}" if comment_text else user_id
@@ -46,11 +82,16 @@ def extract_users_from_json(data, users_list, seen_ids):
                 # Chỉ thêm nếu chưa có trong seen_ids
                 if unique_key not in seen_ids:
                     seen_ids.add(unique_key)
-                    users_list.append({
+                    user_data = {
                         "id": user_id,
                         "name": user_name,
                         "text": comment_text if comment_text else ""
-                    })
+                    }
+                    # Thêm created_time_vn nếu có (chỉ lưu giờ Việt Nam)
+                    if created_time_vn:
+                        user_data["created_time_vn"] = created_time_vn
+                    
+                    users_list.append(user_data)
         
         # Đệ quy vào tất cả các values
         for value in data.values():
@@ -293,7 +334,8 @@ def get_all_comments_by_post_id(post_id, payload_dict, profile_id, cookies):
         print(f"\n📋 Danh sách users (10 đầu tiên):")
         for i, user in enumerate(all_users[:10], 1):
             text_preview = user.get('text', '')[:50] + "..." if len(user.get('text', '')) > 50 else user.get('text', '')
-            print(f"  {i}. ID: {user['id']}, Name: {user['name']}, Text: {text_preview}")
+            created_time_vn = user.get('created_time_vn', 'N/A')
+            print(f"  {i}. ID: {user['id']}, Name: {user['name']}, Text: {text_preview}, Created: {created_time_vn}")
         if len(all_users) > 10:
             print(f"  ... và {len(all_users) - 10} users khác")
     
@@ -347,13 +389,29 @@ def get_comments_by_cursor(post_id, payload_dict, profile_id, cookies, cursor=No
             comment_id = comment_node.get("id")
             comment_text = comment_node.get("text")
             author = comment_node.get("author", {})
+            created_time = comment_node.get("created_time")
+            
+            # Chuyển đổi created_time sang giờ Việt Nam
+            created_time_vn = None
+            if created_time:
+                created_time_vn = convert_timestamp_to_vietnam_time(created_time)
             
             if comment_id:
-                comments_list.append({
+                comment_data = {
                     "id": comment_id,
                     "text": comment_text,
                     "author": author
-                })
+                }
+                # Thêm created_time_vn nếu có (chỉ lưu giờ Việt Nam)
+                if created_time_vn:
+                    comment_data["created_time_vn"] = created_time_vn
+                
+                comments_list.append(comment_data)
+                
+                # Print created_time
+                author_name = author.get("name", "Unknown") if isinstance(author, dict) else "Unknown"
+                text_preview = (comment_text[:50] + "...") if comment_text and len(comment_text) > 50 else (comment_text or "")
+                print(f"   💬 Comment ID: {comment_id}, Author: {author_name}, Created: {created_time_vn or 'N/A'}, Text: {text_preview}")
         
         return {
             "comments": comments_list,
