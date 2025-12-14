@@ -3,122 +3,79 @@ import json
 import re
 from urllib.parse import urlencode, urlparse, parse_qs
 
-# ====== ĐỌC COOKIE TỪ FILE ======
-COOKIE_FILE = "backend/config/cookies.txt"
-try:
-    with open(COOKIE_FILE, "r", encoding="utf-8") as f:
-        COOKIE = f.read().strip()
-    # Loại bỏ ký tự xuống dòng và khoảng trắng thừa
-    COOKIE = " ".join(COOKIE.split())
-    print(f"✅ Đã đọc cookie từ {COOKIE_FILE}")
-except FileNotFoundError:
-    print(f"❌ Không tìm thấy file {COOKIE_FILE}!")
-    print(f"Vui lòng tạo file {COOKIE_FILE} và thêm cookie vào đó.")
-    exit(1)
-except Exception as e:
-    print(f"❌ Lỗi khi đọc {COOKIE_FILE}: {e}")
-    exit(1)
-
-# ====== HEADERS TỪ REQUEST ======
-HEADERS = {
-    "accept": "*/*",
-    "accept-encoding": "gzip, deflate, br",  # Loại bỏ zstd vì requests không hỗ trợ tự động
-    "accept-language": "en,vi;q=0.9,en-US;q=0.8",
-    "content-type": "application/x-www-form-urlencoded",
-    "cookie": COOKIE,
-    "origin": "https://www.facebook.com",
-    "priority": "u=1, i",
-    "referer": "https://www.facebook.com/photo/?fbid=965661036626847&set=a.777896542069965",
-    "sec-ch-ua": '"Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
-    "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": '"Windows"',
-    "sec-fetch-dest": "empty",
-    "sec-fetch-mode": "cors",
-    "sec-fetch-site": "same-origin",
-    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
-    "x-asbd-id": "359341",
-    "x-fb-friendly-name": "CometUFIReactionsCountTooltipContentQuery",
-    "x-fb-lsd": "OdWgrzyRzfrz5zMIFQOfKy"
-}
-
-SESSION = requests.Session()
-SESSION.headers.update(HEADERS)
-
-# ====== ĐỌC PAYLOAD TỪ FILE ======
-PAYLOAD_FILE = "backend/config/payload.txt"
-def load_payload_from_file():
-    """
-    Đọc payload từ file payload.txt và trả về dictionary
-    
-    Returns:
-        dict: Payload dictionary từ file
-    """
-    try:
-        with open(PAYLOAD_FILE, "r", encoding="utf-8") as f:
-            content = f.read().strip()
-        
-        # Parse từng dòng key: value
-        payload_dict = {}
-        for line in content.split('\n'):
-            line = line.strip()
-            if not line or not ':' in line:
-                continue
-            
-            # Tách key và value
-            parts = line.split(':', 1)
-            if len(parts) == 2:
-                # Loại bỏ tất cả dấu ngoặc kép, dấu nháy đơn và dấu phẩy
-                key = parts[0].strip().replace('"', '').replace("'", '')
-                value = parts[1].strip().replace('"', '').replace("'", '').rstrip(',').strip()
-                if key and value:  # Chỉ thêm nếu cả key và value đều không rỗng
-                    payload_dict[key] = value
-        
-        print(f"✅ Đã đọc payload từ {PAYLOAD_FILE}")
-        return payload_dict
-    except FileNotFoundError:
-        print(f"❌ Không tìm thấy file {PAYLOAD_FILE}!")
-        print(f"Vui lòng tạo file {PAYLOAD_FILE} và thêm payload vào đó.")
-        exit(1)
-    except Exception as e:
-        print(f"❌ Lỗi khi đọc {PAYLOAD_FILE}: {e}")
-        exit(1)
-
-# Load payload một lần khi import module
-BASE_PAYLOAD = load_payload_from_file()
+# ====== LƯU Ý ======
+# Cookies và payload được lấy từ cookies.json và payload.txt thông qua profile_id
+# Sử dụng get_payload.get_payload_by_profile_id(profile_id) để lấy payload
 
 
 # ================================
 #   HÀM GỌI API VỚI URL VIDEO
 # ================================
-def get_post_id(video_url):
+def get_post_id(video_url, profile_id):
     """
     Gọi API với URL video để lấy post_id
     
     Args:
         video_url (str): URL của video Facebook (ví dụ: "https://www.facebook.com/reel/1525194028720314/")
+        profile_id (str): Profile ID để lấy cookies và payload
         
     Returns:
         str: post_id hoặc None nếu không tìm thấy
     """
+    from get_payload import get_payload_by_profile_id, get_cookies_by_profile_id
+    
+    # Lấy payload và cookies từ profile_id
+    payload_dict = get_payload_by_profile_id(profile_id)
+    if not payload_dict:
+        print(f"❌ Không thể lấy payload từ profile_id: {profile_id}")
+        return None
+    
+    cookies = get_cookies_by_profile_id(profile_id)
+    if not cookies:
+        print(f"❌ Không thể lấy cookies từ profile_id: {profile_id}")
+        return None
+    
     url = "https://www.facebook.com/api/graphql/"
     
     variables = {
         "url": video_url
     }
     
-    # Đọc payload từ file và thêm variables, doc_id
-    payload_dict = BASE_PAYLOAD.copy()
+    # Sử dụng payload và thêm variables, doc_id
+    payload_dict = payload_dict.copy()
     payload_dict["variables"] = json.dumps(variables, ensure_ascii=False)
     payload_dict["doc_id"] = "9840669832713841"
     
     # Chuyển dictionary thành form-urlencoded string
     payload = urlencode(payload_dict)
     
+    # Tạo headers với cookies
+    headers = {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br",
+        "accept-language": "en,vi;q=0.9,en-US;q=0.8",
+        "content-type": "application/x-www-form-urlencoded",
+        "cookie": cookies,
+        "origin": "https://www.facebook.com",
+        "priority": "u=1, i",
+        "referer": "https://www.facebook.com/photo/?fbid=965661036626847&set=a.777896542069965",
+        "sec-ch-ua": '"Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+        "x-asbd-id": "359341",
+        "x-fb-friendly-name": "CometUFIReactionsCountTooltipContentQuery",
+        "x-fb-lsd": payload_dict.get("lsd", "")
+    }
+    
     print(f"\n🚀 Gọi API với URL video: {video_url}")
     print(f"📋 Variables: {json.dumps(variables, ensure_ascii=False)}")
 
     # Gửi request
-    response = SESSION.post(url, data=payload)
+    response = requests.post(url, data=payload, headers=headers)
     
     print(f"📊 Status Code: {response.status_code}")
     
@@ -140,7 +97,7 @@ def get_post_id(video_url):
         else:
             print(f"⚠️ Không tìm thấy post_id trong response, thử fallback sang view-source...")
             # Fallback: Tìm post_id trong HTML source
-            return get_post_id_from_html(video_url)
+            return get_post_id_from_html(video_url, profile_id)
             
     except json.JSONDecodeError as e:
         print(f"❌ Lỗi: Response không phải JSON hợp lệ")
@@ -152,16 +109,25 @@ def get_post_id(video_url):
         return None
 
 
-def get_post_id_from_html(url):
+def get_post_id_from_html(url, profile_id):
     """
     Fallback: Lấy post_id từ HTML source của trang (view-source)
     
     Args:
         url (str): URL của Facebook post
+        profile_id (str): Profile ID để lấy cookies
         
     Returns:
         str: post_id đầu tiên tìm thấy hoặc None
     """
+    from get_payload import get_cookies_by_profile_id
+    
+    # Lấy cookies từ profile_id
+    cookies = get_cookies_by_profile_id(profile_id)
+    if not cookies:
+        print(f"❌ Không thể lấy cookies từ profile_id: {profile_id}")
+        return None
+    
     print(f"\n🔄 Fallback: Đang lấy HTML source (view-source) từ: {url}")
     
     try:
@@ -170,7 +136,7 @@ def get_post_id_from_html(url):
             "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
             "accept-encoding": "gzip, deflate, br",
             "accept-language": "en,vi;q=0.9,en-US;q=0.8",
-            "cookie": COOKIE,
+            "cookie": cookies,
             "referer": "https://www.facebook.com/",
             "sec-ch-ua": '"Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
             "sec-ch-ua-mobile": "?0",
@@ -183,7 +149,7 @@ def get_post_id_from_html(url):
         }
         
         # Lấy HTML source với cookies
-        response = SESSION.get(url, headers=get_headers)
+        response = requests.get(url, headers=get_headers)
         
         if response.status_code != 200:
             print(f"❌ Lỗi: Status code {response.status_code}")
@@ -236,8 +202,9 @@ def get_post_id_from_html(url):
 
 if __name__ == "__main__":
     # Ví dụ sử dụng hàm get_post_id
-    video_url = "https://www.facebook.com/share/p/1BvHoT8PUU/"
-    post_id = get_post_id(video_url)
+    profile_id = "031ca13d-e8fa-400c-a603-df57a2806788"
+    video_url = "https://www.facebook.com/share/p/186uEh93j4/"
+    post_id = get_post_id(video_url, profile_id)
     if post_id:
         print(f"\n✅ Post ID đã lấy được: {post_id}")
 

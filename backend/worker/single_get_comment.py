@@ -3,93 +3,9 @@ import json
 import base64
 from urllib.parse import urlencode
 
-# ====== ĐỌC COOKIE TỪ FILE ======
-COOKIE_FILE = "config/cookies.txt"
-try:
-    with open(COOKIE_FILE, "r", encoding="utf-8") as f:
-        COOKIE = f.read().strip()
-    # Loại bỏ ký tự xuống dòng và khoảng trắng thừa
-    COOKIE = " ".join(COOKIE.split())
-    print(f"✅ Đã đọc cookie từ {COOKIE_FILE}")
-except FileNotFoundError:
-    print(f"❌ Không tìm thấy file {COOKIE_FILE}!")
-    print(f"Vui lòng tạo file {COOKIE_FILE} và thêm cookie vào đó.")
-    exit(1)
-except Exception as e:
-    print(f"❌ Lỗi khi đọc {COOKIE_FILE}: {e}")
-    exit(1)
-
-# ====== HEADERS TỪ REQUEST ======
-HEADERS = {
-    "accept": "*/*",
-    "accept-encoding": "gzip, deflate, br",  # Loại bỏ zstd vì requests không hỗ trợ tự động
-    "accept-language": "en,vi;q=0.9,en-US;q=0.8",
-    "content-type": "application/x-www-form-urlencoded",
-    "cookie": COOKIE,
-    "origin": "https://www.facebook.com",
-    "priority": "u=1, i",
-    "referer": "https://www.facebook.com/photo/?fbid=965661036626847&set=a.777896542069965",
-    "sec-ch-ua": '"Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
-    "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": '"Windows"',
-    "sec-fetch-dest": "empty",
-    "sec-fetch-mode": "cors",
-    "sec-fetch-site": "same-origin",
-    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
-    "x-asbd-id": "359341",
-    "x-fb-friendly-name": "CommentListComponentsRootQuery",
-    "x-fb-lsd": "OdWgrzyRzfrz5zMIFQOfKy"  # Giá trị động, sẽ được cập nhật từ payload nếu cần
-}
-
-SESSION = requests.Session()
-SESSION.headers.update(HEADERS)
-
-# ====== ĐỌC PAYLOAD TỪ FILE ======
-PAYLOAD_FILE = "config/payload.txt"
-def load_payload_from_file():
-    """
-    Đọc payload từ file payload.txt và trả về dictionary
-    
-    Returns:
-        dict: Payload dictionary từ file
-    """
-    try:
-        with open(PAYLOAD_FILE, "r", encoding="utf-8") as f:
-            content = f.read().strip()
-        
-        # Parse từng dòng key: value
-        payload_dict = {}
-        for line in content.split('\n'):
-            line = line.strip()
-            if not line or not ':' in line:
-                continue
-            
-            # Tách key và value
-            parts = line.split(':', 1)
-            if len(parts) == 2:
-                # Loại bỏ tất cả dấu ngoặc kép, dấu nháy đơn và dấu phẩy
-                key = parts[0].strip().replace('"', '').replace("'", '')
-                value = parts[1].strip().replace('"', '').replace("'", '').rstrip(',').strip()
-                if key and value:  # Chỉ thêm nếu cả key và value đều không rỗng
-                    payload_dict[key] = value
-        
-        print(f"✅ Đã đọc payload từ {PAYLOAD_FILE}")
-        print(f"   🔍 Số lượng keys: {len(payload_dict)}")
-        # Debug: In ra một vài keys đầu tiên để kiểm tra
-        sample_keys = list(payload_dict.keys())[:3]
-        for k in sample_keys:
-            print(f"   🔍 Sample: {k} = {payload_dict[k][:50] if len(str(payload_dict[k])) > 50 else payload_dict[k]}")
-        return payload_dict
-    except FileNotFoundError:
-        print(f"❌ Không tìm thấy file {PAYLOAD_FILE}!")
-        print(f"Vui lòng tạo file {PAYLOAD_FILE} và thêm payload vào đó.")
-        exit(1)
-    except Exception as e:
-        print(f"❌ Lỗi khi đọc {PAYLOAD_FILE}: {e}")
-        exit(1)
-
-# Load payload một lần khi import module
-BASE_PAYLOAD = load_payload_from_file()
+# ====== LƯU Ý ======
+# Cookies và payload được lấy từ cookies.json và payload.txt thông qua profile_id
+# Sử dụng get_payload.get_payload_by_profile_id(profile_id) để lấy payload
 
 # ====== TẠO FEEDBACK ID TỪ POST_ID ======
 def create_feedback_id(post_id):
@@ -147,8 +63,15 @@ def extract_users_from_json(data, users_list, seen_ids):
 # ================================
 #   GỬI REQUEST GRAPHQL VỚI CURSOR
 # ================================
-def send_request(post_id, commentsAfterCursor=None):
+def send_request(post_id, payload_dict, profile_id, commentsAfterCursor=None):
     """Gửi request GraphQL để lấy comments với post_id và commentsAfterCursor (nếu có)"""
+    from get_payload import get_cookies_by_profile_id
+    
+    # Lấy cookies từ profile_id
+    cookies = get_cookies_by_profile_id(profile_id)
+    if not cookies:
+        raise ValueError(f"Không thể lấy cookies từ profile_id: {profile_id}")
+    
     # Tạo feedback ID từ post_id
     feedback_id = create_feedback_id(post_id)
     
@@ -177,8 +100,8 @@ def send_request(post_id, commentsAfterCursor=None):
     # Debug: In ra variables để kiểm tra
     print(f"   📋 Variables: {json.dumps(variables, ensure_ascii=False)}")
     
-    # Đọc payload từ file và thêm variables, doc_id, fb_api_req_friendly_name, __crn
-    payload_dict = BASE_PAYLOAD.copy()
+    # Sử dụng payload được truyền vào và thêm variables, doc_id, fb_api_req_friendly_name, __crn
+    payload_dict = payload_dict.copy()
     payload_dict["variables"] = json.dumps(variables, ensure_ascii=False)
     payload_dict["doc_id"] = "25515916584706508"
     payload_dict["fb_api_req_friendly_name"] = "CommentListComponentsRootQuery"
@@ -190,10 +113,32 @@ def send_request(post_id, commentsAfterCursor=None):
     # Debug: In ra payload để kiểm tra (chỉ 500 ký tự đầu)
     print(f"   🔍 Payload preview: {payload[:500]}...")
 
+    # Tạo headers với cookies
+    headers = {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br",
+        "accept-language": "en,vi;q=0.9,en-US;q=0.8",
+        "content-type": "application/x-www-form-urlencoded",
+        "cookie": cookies,
+        "origin": "https://www.facebook.com",
+        "priority": "u=1, i",
+        "referer": "https://www.facebook.com/photo/?fbid=965661036626847&set=a.777896542069965",
+        "sec-ch-ua": '"Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+        "x-asbd-id": "359341",
+        "x-fb-friendly-name": "CommentListComponentsRootQuery",
+        "x-fb-lsd": payload_dict.get("lsd", "")
+    }
+
     url = "https://www.facebook.com/api/graphql/"
     
-    # Gửi payload dưới dạng form-urlencoded
-    response = SESSION.post(url, data=payload)
+    # Gửi payload dưới dạng form-urlencoded với headers
+    response = requests.post(url, data=payload, headers=headers)
     
     return response
 
@@ -201,12 +146,14 @@ def send_request(post_id, commentsAfterCursor=None):
 # ================================
 #   HÀM HOÀN CHỈNH: LẤY TẤT CẢ COMMENTS TỪ POST_ID
 # ================================
-def get_all_comments_by_post_id(post_id):
+def get_all_comments_by_post_id(post_id, payload_dict, profile_id):
     """
     Hàm hoàn chỉnh để lấy tất cả comments từ post_id
     
     Args:
         post_id (str): Facebook ID của post
+        payload_dict (dict): Dictionary chứa payload parameters
+        cookies (str): Cookie string để sử dụng trong request
         
     Returns:
         list: Danh sách comments với format [{"id": "...", "text": "...", "author": {...}}, ...]
@@ -231,8 +178,8 @@ def get_all_comments_by_post_id(post_id):
         if commentsAfterCursor:
             print(f"   CommentsAfterCursor: {commentsAfterCursor[:50]}...")
         
-        # Gửi request với post_id và commentsAfterCursor
-        response = send_request(post_id, commentsAfterCursor)
+        # Gửi request với post_id, payload, profile_id và commentsAfterCursor
+        response = send_request(post_id, payload_dict, profile_id, commentsAfterCursor)
         
         print(f"   STATUS: {response.status_code}")
         
@@ -385,12 +332,14 @@ def get_all_comments_by_post_id(post_id):
 # ================================
 #   HÀM ĐƠN GIẢN: LẤY COMMENTS TỪ CURSOR
 # ================================
-def get_comments_by_cursor(post_id, cursor=None):
+def get_comments_by_cursor(post_id, payload_dict, profile_id, cursor=None):
     """
     Hàm đơn giản: truyền cursor vào, trả về comments và end_cursor
     
     Args:
         post_id (str): Facebook ID của post
+        payload_dict (dict): Dictionary chứa payload parameters
+        cookies (str): Cookie string để sử dụng trong request
         cursor (str, optional): Cursor để lấy trang tiếp theo. None nếu là trang đầu tiên
         
     Returns:
@@ -401,7 +350,7 @@ def get_comments_by_cursor(post_id, cursor=None):
         }
     """
     # Gửi request
-    response = send_request(post_id, cursor)
+    response = send_request(post_id, payload_dict, profile_id, cursor)
     
     if response.status_code != 200:
         print(f"❌ Lỗi: Status code {response.status_code}")
@@ -448,6 +397,12 @@ def get_comments_by_cursor(post_id, cursor=None):
 
 if __name__ == "__main__":
     # Ví dụ sử dụng hàm hoàn chỉnh với vòng lặp tự động
-    post_id = "1326163669524299"  # Thay đổi Post ID ở đây
-    comments = get_all_comments_by_post_id(post_id)
+    from get_payload import get_payload_by_profile_id
+    
+    profile_id = "031ca13d-e8fa-400c-a603-df57a2806788"
+    payload_dict = get_payload_by_profile_id(profile_id)
+    
+    if payload_dict:
+        post_id = "2664708703928050"  # Thay đổi Post ID ở đây
+        comments = get_all_comments_by_post_id(post_id, payload_dict, profile_id)
 
