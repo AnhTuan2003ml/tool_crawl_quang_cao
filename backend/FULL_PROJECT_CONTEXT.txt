@@ -1,0 +1,990 @@
+=== PROJECT CONTEXT EXPORT ===
+
+PROJECT STRUCTURE:
+backend/
+    .env
+    .gitignore
+    main.py
+    requirements.txt
+    test.py
+    app/
+        api.py
+        __init__.py
+    core/
+        browser.py
+        nst.py
+        runner.py
+        scraper.py
+        utils.py
+    data/
+        post_ids/
+            031ca13d-e8fa-400c-a603-df57a2806788.json
+            621e1f5d-0c42-481e-9ddd-7abaafce68ed.json
+
+==================================================
+
+--- START FILE: main.py ---
+from core.runner import AppRunner
+
+if __name__ == "__main__":
+    AppRunner().run()
+
+--- END FILE: main.py ---
+
+--- START FILE: test.py ---
+import os
+import time
+from dotenv import load_dotenv
+from core.nst import connect_profile
+from core.browser import FBController
+
+load_dotenv()
+
+def test_check_resolution():
+    profile_list = os.getenv("PROFILE_IDS", "").split(",")
+    profile_id = profile_list[0].strip()
+    
+    if not profile_id:
+        print("❌ Lỗi: Không tìm thấy PROFILE_IDS")
+        return
+
+    print(f"🧪 Đang test Profile: {profile_id}")
+
+    try:
+        ws_url = connect_profile(profile_id)
+        fb = FBController(ws_url)
+        fb.profile_id = profile_id
+        
+        # Kết nối
+        fb.connect() 
+        
+        # --- [ĐOẠN KIỂM TRA QUAN TRỌNG] ---
+        # 1. Lấy thông số kích thước viewport thực tế
+        vp = fb.page.viewport_size
+        print(f"\n📊 KÍCH THƯỚC MÀN HÌNH HIỆN TẠI: {vp}")
+        
+        if vp and vp['width'] == 1920 and vp['height'] == 1080:
+            print("✅ OK! Đã Full HD 1920x1080.")
+        else:
+            print("⚠️ CẢNH BÁO: Màn hình chưa Full HD! Bot có thể bị lỗi giao diện mobile.")
+
+        # 2. Mở Facebook và chụp ảnh bằng chứng
+        print("🚀 Đang vào Facebook để chụp ảnh...")
+        fb.goto("https://www.facebook.com")
+        time.sleep(5)
+        
+        fb.page.screenshot(path="debug_resolution.png")
+        print("📸 Đã lưu ảnh: debug_resolution.png (Sếp mở lên xem có bị bé không)\n")
+        # -----------------------------------
+
+        # (Phần sau giữ nguyên logic share cũ để test tiếp...)
+        # ...
+
+    except Exception as e:
+        print(f"❌ Lỗi: {e}")
+    finally:
+        print("🛑 Đóng trình duyệt...")
+        try:
+            if fb.browser: fb.browser.close()
+            if fb.play: fb.play.stop()
+        except: pass
+
+if __name__ == "__main__":
+    test_check_resolution()
+--- END FILE: test.py ---
+
+--- START FILE: app\api.py ---
+from multiprocessing import Process
+from typing import Optional
+
+from fastapi import Body, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+from core.runner import AppRunner
+
+app = FastAPI(title="NST Tool API", version="1.0.0")
+
+# Cho phép frontend (file tĩnh) gọi API qua localhost
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Biến toàn cục giữ tiến trình đang chạy AppRunner
+runner_process: Optional[Process] = None
+
+
+class RunRequest(BaseModel):
+    run_minutes: Optional[int] = None
+    rest_minutes: Optional[int] = None
+
+
+def _start_runner(run_minutes: Optional[int] = None, rest_minutes: Optional[int] = None) -> None:
+    """Hàm wrapper để chạy vòng lặp AppRunner trong tiến trình riêng."""
+    AppRunner(run_minutes=run_minutes, rest_minutes=rest_minutes).run()
+
+
+@app.get("/health")
+def health_check() -> dict:
+    return {"status": "ok"}
+
+
+@app.post("/run")
+def run_bot(payload: Optional[RunRequest] = Body(None)) -> dict:
+    """
+    Khởi động AppRunner nếu chưa chạy.
+    Chạy trong process riêng để không khóa FastAPI.
+    """
+    global runner_process
+
+    if runner_process and runner_process.is_alive():
+        return {"status": "running", "pid": runner_process.pid}
+
+    run_minutes = payload.run_minutes if payload else None
+    rest_minutes = payload.rest_minutes if payload else None
+
+    # Không dùng daemon vì AppRunner tự sinh thêm Process con
+    runner_process = Process(
+        target=_start_runner,
+        args=(run_minutes, rest_minutes),
+        daemon=False,
+    )
+    runner_process.start()
+
+    if not runner_process.is_alive():
+        raise HTTPException(status_code=500, detail="Không khởi động được bot")
+
+    return {"status": "started", "pid": runner_process.pid}
+
+
+@app.post("/stop")
+def stop_bot() -> dict:
+    """Dừng tiến trình AppRunner nếu đang chạy."""
+    global runner_process
+
+    if not runner_process or not runner_process.is_alive():
+        return {"status": "not_running"}
+
+    runner_process.terminate()
+    runner_process.join(timeout=5)
+
+    was_alive = runner_process.is_alive()
+    runner_process = None
+
+    if was_alive:
+        raise HTTPException(status_code=500, detail="Không dừng được bot")
+
+    return {"status": "stopped"}
+
+
+@app.get("/status")
+def status() -> dict:
+    is_running = bool(runner_process and runner_process.is_alive())
+    return {"running": is_running, "pid": runner_process.pid if is_running else None}
+
+--- END FILE: app\api.py ---
+
+--- START FILE: app\__init__.py ---
+"""
+App package cho FastAPI endpoints.
+"""
+
+--- END FILE: app\__init__.py ---
+
+--- START FILE: core\browser.py ---
+import time
+import random
+from playwright.sync_api import sync_playwright
+import json
+import re
+from urllib.parse import urlparse, parse_qs, unquote
+import os
+
+# ==============================================================================
+# JS TOOLS & HELPER FUNCTIONS
+# ==============================================================================
+JS_EXPAND_SCRIPT = """
+(node) => {
+    if (!node) return 0;
+    const keywords = ["Xem thêm", "See more"];
+    let clickedCount = 0;
+    const buttons = node.querySelectorAll('[role="button"]');
+    buttons.forEach(btn => {
+        const text = btn.innerText ? btn.innerText.trim() : "";
+        if (keywords.includes(text)) {
+            if (btn.offsetWidth > 0 && btn.offsetHeight > 0) {
+                btn.scrollIntoView({block: "center", inline: "nearest"});
+                btn.click();
+                clickedCount++;
+                btn.style.border = "2px solid red";
+            }
+        }
+    });
+    return clickedCount;
+}
+"""
+
+JS_CHECK_AND_HIGHLIGHT_SCOPED = """
+([node, keywords]) => { 
+    if (!node || !keywords || keywords.length === 0) return false;
+    const strictSelectors = [
+        '[data-ad-preview="message"]',              
+        '[data-ad-rendering-role="story_message"]', 
+        '.userContent'                              
+    ];
+    let targetScope = null;
+    for (const selector of strictSelectors) {
+        const found = node.querySelector(selector);
+        if (found) {
+            targetScope = found;
+            break;
+        }
+    }
+    if (!targetScope) return false;
+
+    const sortedKeywords = keywords.sort((a, b) => b.length - a.length);
+    const pattern = new RegExp(`(${sortedKeywords.join('|')})`, 'gi');
+    let foundCount = 0;
+    function highlightTextNode(textNode) {
+        const text = textNode.nodeValue;
+        if (!pattern.test(text)) return;
+        const fragment = document.createDocumentFragment();
+        const parts = text.split(pattern);
+        parts.forEach(part => {
+            if (pattern.test(part)) {
+                const span = document.createElement('span');
+                Object.assign(span.style, {
+                    backgroundColor: 'yellow', color: 'red', fontWeight: 'bold',
+                    border: '2px solid red', padding: '2px', zIndex: '9999'
+                });
+                span.innerText = part;
+                fragment.appendChild(span);
+                foundCount++;
+            } else {
+                fragment.appendChild(document.createTextNode(part));
+            }
+            pattern.lastIndex = 0; 
+        });
+        textNode.parentNode.replaceChild(fragment, textNode);
+    }
+    const walker = document.createTreeWalker(targetScope, NodeFilter.SHOW_TEXT, {
+        acceptNode: n => {
+            if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'BUTTON', 'INPUT'].includes(n.parentNode.nodeName)) {
+                return NodeFilter.FILTER_REJECT;
+            }
+            if (n.parentNode.isContentEditable) return NodeFilter.FILTER_REJECT;
+            return NodeFilter.FILTER_ACCEPT;
+        }
+    });
+    const textNodes = [];
+    while (walker.nextNode()) textNodes.push(walker.currentNode);
+    textNodes.forEach(highlightTextNode);
+    return foundCount > 0;
+}
+"""
+
+def extract_facebook_post_id(url: str):
+    if not url: return None
+    try: url = unquote(url)
+    except: pass
+    
+    # Ưu tiên tìm pfbid trước
+    patterns = [
+        r"(pfbid[A-Za-z0-9]+)", 
+        r"/posts/(\d+)", 
+        r"/videos/(\d+)", 
+        r"/reel/(\d+)",
+        r"story_fbid=(\d+)", 
+        r"fbid=(\d+)",
+        r"id=(\d+)"
+    ]
+    for p in patterns:
+        m = re.search(p, url)
+        if m: return m.group(1)
+        
+    qs = parse_qs(urlparse(url).query)
+    for k in ["story_fbid", "fbid", "id"]:
+        if k in qs: return qs[k][0]
+    return None
+
+def parse_graphql_payload(post_data):
+    """Phân tích data gửi đi để tìm biến 'url' trong payload."""
+    if not post_data: return None
+    variables_str = None
+    try:
+        if isinstance(post_data, str):
+            json_body = json.loads(post_data)
+        else:
+            json_body = post_data
+        variables_str = json.dumps(json_body.get("variables", {}))
+    except:
+        try:
+            qs = parse_qs(post_data)
+            if "variables" in qs:
+                variables_str = qs["variables"][0]
+        except: pass
+
+    # Tìm các loại URL phổ biến trong payload
+    if variables_str:
+        # 1. Tìm key "url": "..."
+        match = re.search(r'"url"\s*:\s*"([^"]+)"', variables_str)
+        if match: return match.group(1).replace(r"\/", "/")
+        
+        # 2. Tìm key "shareable_url": "..."
+        match2 = re.search(r'"shareable_url"\s*:\s*"([^"]+)"', variables_str)
+        if match2: return match2.group(1).replace(r"\/", "/")
+
+    return None
+
+class FBController:
+    def __init__(self, ws_url):
+        self.ws_url = ws_url
+        self.browser = None
+        self.page = None
+        self.play = None
+        self.profile_id = "unknown"
+        
+        self.captured_response_id = None 
+        self.captured_payload_url = None # Biến chứa Link để soi view-source
+        
+        self.job_keywords = [
+            "tuyển dụng", "tuyển nhân viên", "tuyển gấp", "việc làm", 
+            "lương", "thu nhập", "phỏng vấn", "cv", "hồ sơ",
+            "full-time", "part-time", "thực tập", "kế toán", "may mặc", "kcn",
+            "Ứng viên ", "Ứng tuyển"
+        ]
+
+    def connect(self):
+        self.play = sync_playwright().start()
+        self.browser = self.play.chromium.connect_over_cdp(self.ws_url)
+        context = self.browser.contexts[0]
+        self.page = context.pages[0]
+        
+        # Ép cứng độ phân giải để tránh lỗi mất nút Share
+
+        
+        self.start_network_sniffer()
+        
+        try:
+            # Click vào giữa màn hình để active window
+            viewport = self.page.viewport_size
+            self.page.mouse.click(viewport['width']/2, viewport['height']/2)
+        except: pass
+
+    def goto(self, url):
+        self.page.goto(url, timeout=0)
+        # Zoom out để hiện full giao diện
+       
+
+    def smooth_scroll_to(self, element):
+        """Cuộn mượt đến element"""
+        try:
+            box = element.bounding_box()
+            if not box: return
+            target_y = box['y'] + self.page.evaluate("window.scrollY") - (self.page.viewport_size['height'] / 2)
+            self.page.evaluate(f"window.scrollTo({{top: {target_y}, behavior: 'smooth'}});")
+            time.sleep(1.0)
+        except:
+            element.scroll_into_view_if_needed()
+
+    # ===================== [CORE] NETWORK SNIFFER =====================
+    def start_network_sniffer(self):
+        print("🛰  Đã kích hoạt Sniffer: Chế độ Response > Payload URL...")
+
+        # 1. BẮT URL TỪ REQUEST (DỰ PHÒNG CHO VIEW-SOURCE)
+        def on_request(request):
+            if "facebook.com/api/graphql" in request.url and request.method == "POST":
+                try:
+                    raw_url = parse_graphql_payload(request.post_data)
+                    if raw_url:
+                        # Chỉ lưu nếu nó giống link bài viết
+                        if "facebook.com" in raw_url or "pfbid" in raw_url:
+                            self.captured_payload_url = raw_url
+                            # print(f"🔗 [DEBUG] Bắt được Link tiềm năng: {raw_url[:50]}...")
+                except: pass
+
+        # 2. BẮT ID TỪ RESPONSE (ƯU TIÊN TUYỆT ĐỐI)
+        def on_response(response):
+            if "facebook.com/api/graphql" in response.url and response.status == 200:
+                if not self.captured_response_id:
+                    try:
+                        data = response.json()
+                        preview_data = data.get("data", {}).get("xma_preview_data", {})
+                        pid = preview_data.get("post_id")
+                        if pid:
+                            self.captured_response_id = str(pid)
+                            print(f"🎯 [RES-Json] Bắt dính ID CHÍNH THỨC: {self.captured_response_id}")
+                    except: pass
+
+        self.page.on("request", on_request)
+        self.page.on("response", on_response)
+
+    # ===================== [MỚI] HÀM SOI VIEW-SOURCE =====================
+    def get_id_blocking_mode(self, url):
+        """
+        Mở tab mới -> Soi Code -> Tìm chữ "post_id" đầu tiên -> Trả về ngay.
+        """
+        print(f"⛔ [BLOCKING] Tạm dừng để soi source URL: {url}")
+        new_page = None
+        found_id = None
+        
+        try:
+            context = self.page.context
+            # 1. Mở tab mới
+            new_page = context.new_page()
+            
+            # 2. Truy cập view-source (Treo bot ở đây chờ tải xong mới chạy tiếp)
+            target = f"view-source:{url}"
+            print("    -> Đang tải source code (Chờ DOMContentLoaded)...")
+            new_page.goto(target, wait_until='domcontentloaded', timeout=20000)
+            
+            # 3. Lấy toàn bộ HTML
+            content = new_page.content()
+            
+            # 4. TÌM KIẾM CHÍNH XÁC "post_id"
+            # re.search mặc định sẽ quét từ trên xuống dưới và trả về kết quả ĐẦU TIÊN nó thấy.
+            # Đúng ý Sếp: Thấy cái đầu là chốt luôn.
+            
+            # Pattern 1: Dạng chuẩn "post_id":"12345"
+            match = re.search(r'"post_id":"(\d+)"', content)
+            
+            if match:
+                found_id = match.group(1)
+                print(f"    -> 💉 BẮT ĐƯỢC ID ĐẦU TIÊN (post_id): {found_id}")
+            else:
+                # Fallback: Nếu không thấy "post_id" thì mới tìm "story_fbid" (dự phòng)
+                match_sub = re.search(r'"story_fbid":"(\d+)"', content)
+                if match_sub:
+                    found_id = match_sub.group(1)
+                    print(f"    -> 💉 Không có post_id, lấy tạm story_fbid: {found_id}")
+
+            if not found_id:
+                print("    -> ⚠️ Không tìm thấy ID nào trong source.")
+
+        except Exception as e:
+            print(f"    -> ❌ Lỗi khi soi source: {e}")
+        finally:
+            # 5. Đóng tab ngay lập tức
+            if new_page: 
+                new_page.close()
+                print("    -> Đã đóng tab soi code. Quay lại tab chính...")
+                
+        return found_id
+
+    # ===================== SHARE & CHỜ ID (LOGIC UPDATE) =====================
+    def share_center_ad(self, post_handle):
+        try:
+            print("🚀 Đang thực hiện share để bắt ID...")
+            
+            # 1. Reset biến
+            self.captured_response_id = None
+            self.captured_payload_url = None 
+            
+            # 2. Click nút Share (Trượt êm)
+            xpath_selector = 'xpath=.//div[@data-ad-rendering-role="share_button"]/ancestor::div[@role="button"]'
+            share_btn = post_handle.query_selector(xpath_selector)
+            
+            if share_btn:
+                self.smooth_scroll_to(share_btn)
+                self.page.wait_for_timeout(500) 
+                share_btn.click()
+                print("✅ Đã click nút Share. Đang chờ Server phản hồi...")
+                
+                # 3. Vòng lặp chờ ID từ Server (Chờ 5 giây thôi)
+                for i in range(25): 
+                    if self.captured_response_id:
+                        print(f"🎉 SUCCESS: Server trả ID chuẩn: {self.captured_response_id}")
+                        self.save_post_id(self.captured_response_id)
+                        
+                        self.page.wait_for_timeout(2000)
+                        self.page.keyboard.press("Escape")
+                        return True
+                    self.page.wait_for_timeout(200)
+                
+                # 4. SERVER KHÔNG TRẢ -> KÍCH HOẠT CHẾ ĐỘ VIEW-SOURCE (BLOCKING)
+                print("⚠️ Server không trả ID. Kiểm tra URL dự phòng...")
+                
+                if self.captured_payload_url:
+                    print(f"💡 Có link trong Payload: {self.captured_payload_url}")
+                    
+                    # Gọi hàm này là bot sẽ TỰ ĐỘNG DỪNG mọi việc khác để chờ
+                    source_id = self.get_id_blocking_mode(self.captured_payload_url)
+                    
+                    if source_id:
+                        self.save_post_id(source_id)
+                        self.page.wait_for_timeout(1000)
+                        self.page.keyboard.press("Escape")
+                        return True
+                else:
+                    print("⚠️ Không bắt được cả URL Link -> Bó tay.")
+
+                # 5. Thất bại
+                print("⚠️ SKIP: Không lấy được ID.")
+                self.page.keyboard.press("Escape") 
+                return False
+            else:
+                print("⚠️ Không tìm thấy nút Share.")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Lỗi share_center_ad: {e}")
+            self.page.keyboard.press("Escape")
+            return False
+
+    def save_post_id(self, post_id):
+        try:
+            folder = "data/post_ids"
+            os.makedirs(folder, exist_ok=True)
+            filepath = f"{folder}/{self.profile_id}.json"
+            data = []
+            if os.path.exists(filepath):
+                try:
+                    with open(filepath, "r", encoding="utf8") as f: data = json.load(f)
+                except: pass
+            if post_id in data:
+                print("🔁 ID trùng -> bỏ qua.")
+                return False
+            data.append(post_id)
+            with open(filepath, "w", encoding="utf8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            print(f"💾 Đã lưu ID {post_id} vào file.")
+            return True
+        except: return False
+
+    def scroll_percent(self, ratio=0.5):
+        """Cuộn trang theo % chiều cao"""
+        try:
+            viewport = self.page.viewport_size
+            height = viewport['height'] if viewport else 800
+            scroll_distance = int(height * ratio)
+            # print(f"⬇️ Cuộn {int(ratio*100)}%...")
+            self.page.mouse.wheel(0, scroll_distance)
+            return True
+        except: return False
+
+    def scan_while_scrolling(self):
+        try:
+            viewport = self.page.viewport_size
+            height = viewport['height'] if viewport else 800
+            total_distance = int(height * 0.6) 
+            steps = random.randint(15, 25)
+            step_size = total_distance / steps
+            
+            print(f"⬇️ Đang lướt {total_distance}px...")
+
+            for i in range(steps):
+                self.page.mouse.wheel(0, step_size)
+                time.sleep(random.uniform(0.03, 0.08)) 
+                
+                if i > 0 and i % 4 == 0:
+                    current_post = self.get_center_post()
+                    if current_post and self.check_current_post_is_ad(current_post):
+                        print(f"🛑 BẮT ĐƯỢC ADS! (Tại bước {i}/{steps})")
+                        return current_post
+            
+            time.sleep(random.uniform(2.0, 3.5))
+            return None
+        except Exception as e:
+            try: self.page.keyboard.press("PageDown"); time.sleep(2)
+            except: pass
+            return None
+
+    def like_current_post(self, post_handle):
+        print("❤️ Đang thực hiện Like...")
+        try:
+            element = post_handle.as_element()
+            if not element: return False
+            already_liked = element.query_selector('div[role="button"][aria-label="Gỡ Thích"], div[role="button"][aria-label="Remove Like"]')
+            if already_liked:
+                print("⚠️ Đã Like rồi.")
+                return False
+            selector = 'div[role="button"][aria-label="Thích"], div[role="button"][aria-label="Like"]'
+            like_btn = element.query_selector(selector)
+            if like_btn:
+                self.smooth_scroll_to(like_btn)
+                like_btn.click()
+                print("✅ Like thành công!")
+                return True
+            return False
+        except: return False
+
+    def process_ad_content(self, post_handle):
+        try:
+            expanded = self.page.evaluate(JS_EXPAND_SCRIPT, post_handle)
+            if expanded > 0: time.sleep(1.0)
+            has_keyword = self.page.evaluate(JS_CHECK_AND_HIGHLIGHT_SCOPED, [post_handle, self.job_keywords])
+            if has_keyword:
+                print("    -> ✅ FOUND: Bài Ads chứa từ khóa!")
+                return True
+            else:
+                print("    -> ❌ SKIP: Không thấy từ khóa tuyển dụng.")
+                return False
+        except: return False
+
+    def get_center_post(self):
+        try:
+            return self.page.evaluate_handle("""
+                () => {
+                    const x = window.innerWidth / 2;
+                    const y = window.innerHeight * 0.45;
+                    let el = document.elementFromPoint(x, y);
+                    if (!el) return null;
+                    const post = el.closest('div[role="article"], div.x1lliihq');
+                    if (post) {
+                        post.style.outline = "3px solid #00ff00";
+                        return post;
+                    }
+                    return null;
+                }
+            """)
+        except: return None
+
+    def check_current_post_is_ad(self, post_handle):
+        if not post_handle or not post_handle.as_element(): return False
+        return post_handle.evaluate("""
+            (post) => {
+                if (post.getAttribute('data-bot-processed') === 'true') return false;
+                const checkAnchors = (element) => {
+                    if (!element) return false;
+                    const anchors = Array.from(element.querySelectorAll('a[href*="__cft__"]'));
+                    for (const a of anchors) {
+                        const href = a.getAttribute('href');
+                        if (!href) continue;
+                        if (href.includes('__tn__')) continue;
+                        let m = href.match(/__cft__\\[0\\]=([^&#]+)/) || href.match(/__cft__%5B0%5D=([^&#]+)/);
+                        if (m && m[1]) return true; 
+                    }
+                    return false;
+                };
+                if (checkAnchors(post)) { post.style.outline = "5px solid red"; return true; }
+                if (post.parentElement && checkAnchors(post.parentElement)) { post.style.outline = "5px solid red"; return true; }
+                if (post.parentElement && post.parentElement.parentElement && checkAnchors(post.parentElement.parentElement)) { post.style.outline = "5px solid red"; return true; }
+                return false;
+            }
+        """)
+
+    def mark_post_as_processed(self, post_handle):
+        try:
+            post_handle.evaluate("""(post) => {
+                post.setAttribute('data-bot-processed', 'true');
+                post.style.outline = "5px solid gray"; 
+                post.style.opacity = "0.7";
+            }""")
+            # print("🏁 Đã đánh dấu bài viết: DONE.")
+        except: pass
+--- END FILE: core\browser.py ---
+
+--- START FILE: core\nst.py ---
+import requests
+import os
+import json
+import urllib.parse # Cần cái này để mã hóa User-Agent có dấu cách
+from dotenv import load_dotenv
+
+load_dotenv()
+
+API_KEY = os.getenv("API_KEY")
+HEADLESS = os.getenv("HEADLESS", "false").lower() == "true"
+
+def connect_profile(profile_id: str):
+    # Cấu hình chuẩn theo JS mẫu: Dùng fingerprint để fake User-Agent
+    # KHÔNG dùng 'args' để tránh bị hiện UI
+    config = {
+        "headless": HEADLESS,
+        "autoClose": True,
+        "fingerprint": {
+            # User-Agent xịn để qua mặt Facebook
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "hardwareConcurrency": 8,
+            "deviceMemory": 8
+        }
+    }
+
+    # Mã hóa config thành chuỗi an toàn cho URL (vì User-Agent có dấu cách)
+    encoded_config = urllib.parse.quote(json.dumps(config))
+
+    url = f"http://127.0.0.1:8848/api/v2/connect/{profile_id}?x-api-key={API_KEY}&config={encoded_config}"
+
+    print(f"🚀 Mở profile {profile_id} (headless={HEADLESS})")
+
+    # Thử kết nối
+    try:
+        resp = requests.get(url, timeout=20)
+        data = resp.json()
+
+        if data.get("err"):
+            raise Exception(f"❌ NST Error: {data.get('err')}")
+
+        ws = data["data"]["webSocketDebuggerUrl"]
+        print(f"🔌 WebSocket: {ws}")
+        return ws
+        
+    except Exception as e:
+        print(f"❌ Lỗi kết nối: {e}")
+        raise e
+--- END FILE: core\nst.py ---
+
+--- START FILE: core\runner.py ---
+import os
+import time  # [Cần thêm thư viện này để đếm giờ]
+from multiprocessing import Process
+from typing import Optional
+
+from dotenv import load_dotenv
+
+from core.browser import FBController
+from core.nst import connect_profile
+from core.scraper import SimpleBot
+from core.utils import clean_profile_list
+
+
+class AppRunner:
+    def __init__(self, run_minutes: Optional[int] = None, rest_minutes: Optional[int] = None):
+        load_dotenv()
+        self.target_url = os.getenv("TARGET_URL", "https://facebook.com")
+        self.profiles = clean_profile_list(os.getenv("PROFILE_IDS", ""))
+
+        # Ưu tiên giá trị truyền từ API; fallback ENV; cuối cùng là default.
+        self.RUN_MINUTES = self._coerce_positive_int(
+            run_minutes,
+            self._coerce_positive_int(os.getenv("RUN_MINUTES"), 30),
+            default=30,
+        )
+        # REST_MINUTES mặc định 120p (tương đương 2h như cấu hình cũ)
+        self.REST_MINUTES = self._coerce_positive_int(
+            rest_minutes,
+            self._coerce_positive_int(os.getenv("REST_MINUTES"), 120),
+            default=120,
+        )
+
+    @staticmethod
+    def _coerce_positive_int(value, fallback=None, default=0):
+        """
+        Trả về số nguyên dương; nếu không hợp lệ dùng fallback, cuối cùng dùng default.
+        """
+        for candidate in (value, fallback, default):
+            try:
+                num = int(candidate)
+                if num > 0:
+                    return num
+            except (TypeError, ValueError):
+                continue
+        return default
+
+    def worker(self, profile_id):
+        """Hàm xử lý cho từng profile (Process con)"""
+        try:
+            # 1. Kết nối NST
+            ws = connect_profile(profile_id)
+
+            # 2. Khởi tạo trình duyệt
+            fb = FBController(ws)
+            fb.profile_id = profile_id
+            fb.connect()
+
+            # 3. Chạy bot tương tác
+            bot = SimpleBot(fb)
+            
+            # Đổi thời gian chạy sang giây
+            duration_seconds = self.RUN_MINUTES * 60
+            
+            # Bot sẽ tự thoát vòng lặp sau khi đủ thời gian
+            bot.run(self.target_url, duration=duration_seconds) 
+
+            print(f"✅ [{profile_id}] Đã chạy đủ {self.RUN_MINUTES} phút. Đang tắt trình duyệt...")
+            
+            # [Quan trọng] Đóng trình duyệt sạch sẽ để giải phóng RAM
+            try:
+                if fb.browser: fb.browser.close()
+                if fb.play: fb.play.stop()
+            except: pass
+            
+        except Exception as e:
+            print(f"❌ Lỗi ở profile {profile_id}: {e}")
+
+    def run(self):
+        """Hàm điều phối chính (Vòng lặp vĩnh cửu)"""
+        
+        # Đổi thời gian nghỉ sang giây
+        rest_seconds = self.REST_MINUTES * 60
+        
+        print(f"∞ Kích hoạt chế độ nuôi tuần hoàn: Chạy {self.RUN_MINUTES}p -> Nghỉ {self.REST_MINUTES}p")
+
+        while True:
+            print("="*60)
+            print(f"▶️ [START] Bắt đầu phiên chạy mới lúc {time.strftime('%H:%M:%S')}")
+            print("="*60)
+
+            # 1. Khởi chạy dàn profile
+            processes = []
+            for pid in self.profiles:
+                p = Process(target=self.worker, args=(pid,))
+                p.start()
+                processes.append(p)
+
+            # 2. Chờ tất cả các profile chạy xong (Hết 30 phút tụi nó sẽ tự dừng)
+            for p in processes:
+                p.join()
+
+            # 3. Tính toán thời gian thức dậy
+            wake_up_time = time.time() + rest_seconds
+            wake_up_str = time.strftime('%H:%M:%S', time.localtime(wake_up_time))
+
+            print("\n" + "="*60)
+            print(f"💤 [SLEEP] Xong phiên này. Bot sẽ ngủ {self.REST_MINUTES} phút.")
+            print(f"⏰ Dự kiến chạy lại vào lúc: {wake_up_str}")
+            print("="*60 + "\n")
+            
+            # 4. Bot đi ngủ
+            time.sleep(rest_seconds)
+--- END FILE: core\runner.py ---
+
+--- START FILE: core\scraper.py ---
+import time
+import random
+import os
+
+class SimpleBot:
+    def __init__(self, fb):
+        self.fb = fb 
+
+    def run(self, url, duration=None):
+        print(f"🚀 Đang truy cập: {url}")
+        self.fb.goto(url) 
+        
+        start_time = time.time()
+        
+        # [THAY ĐỔI] Không cần đếm số lần cuộn để like random nữa
+        # press_count = 0 
+        
+        while True:
+            try:
+                # 1. Kiểm tra thời gian chạy
+                if duration and (time.time() - start_time > duration):
+                    print("⏳ Hết giờ chạy.")
+                    break
+
+                # ============================================================
+                # CHIẾN THUẬT: SCAN & SCROLL
+                # ============================================================
+                
+                # Bot tự động cuộn, nếu thấy Ads thì dừng lại trả về element
+                detected_ad = self.fb.scan_while_scrolling()
+                
+                # ============================================================
+                # TRƯỜNG HỢP: BẮT ĐƯỢC ADS
+                # ============================================================
+                if detected_ad:
+                    print("\n>>> 🎯 BẮT ĐƯỢC ADS KHI ĐANG TRƯỢT!")
+                    
+                    # Kiểm tra xem Ads có chứa từ khóa mục tiêu không
+                    is_valid_ad = self.fb.process_ad_content(detected_ad)
+                    
+                    if is_valid_ad:
+                        print("✅ Ads này NGON (đúng từ khóa) -> Tiến hành LIKE & SHARE!")
+                        
+                        # --- [SỬA ĐỔI] BƯỚC 1: LIKE TRƯỚC ---
+                        self.fb.like_current_post(detected_ad)
+                        time.sleep(random.uniform(1.0, 2.0)) # Nghỉ nhịp nhẹ cho giống người
+
+                        # --- [SỬA ĐỔI] BƯỚC 2: SHARE SAU ---
+                        self.fb.share_center_ad(detected_ad)
+                        time.sleep(2)
+                    else:
+                        print("❌ Ads này không chứa từ khóa -> Bỏ qua không Like/Share.")
+                    
+                    # Đánh dấu đã xử lý để không quét lại
+                    self.fb.mark_post_as_processed(detected_ad)
+                    
+                    # Xử lý xong thì cuộn mạnh để qua bài
+                    print("👋 Xong bài này -> Cuộn tiếp...")
+                   
+                    time.sleep(1.5)
+                    
+                    continue
+
+                # ============================================================
+                # [ĐÃ TẮT] LOGIC LIKE RANDOM BÀI THƯỜNG
+                # ============================================================
+                # Em đã comment phần này để bot tập trung Like Ads chuẩn chỉ hơn.
+                # Nếu Sếp muốn bot like dạo cho "trust" acc thì mở lại đoạn dưới nhé.
+                
+                """
+                press_count += 1
+                if press_count >= random.randint(5, 10):
+                    # Logic cũ: Like bài thường
+                    pass 
+                """
+
+                # Random mouse move nhẹ cho đỡ bị check bot
+                if random.random() < 0.1:
+                    try:
+                        vp = self.fb.page.viewport_size
+                        if vp: self.fb.page.mouse.move(random.randint(0, vp['width']), random.randint(0, vp['height']))
+                    except: pass
+            
+            except Exception as e:
+                print(f"❌ Lỗi vòng lặp: {e}")
+                time.sleep(2)
+--- END FILE: core\scraper.py ---
+
+--- START FILE: core\utils.py ---
+
+
+import re
+
+def extract_uid_from_url(url):
+    """
+    Chuyển đổi link profile thành UID hoặc Username
+    Ví dụ: 
+    - https://www.facebook.com/profile.php?id=10001234 -> 10001234
+    - https://www.facebook.com/zuck?comment_id=... -> zuck
+    """
+    if not url: return None
+    
+    # Trường hợp 1: profile.php?id=12345
+    match_id = re.search(r'profile\.php\?id=(\d+)', url)
+    if match_id:
+        return match_id.group(1)
+        
+    # Trường hợp 2: facebook.com/username
+    # Loại bỏ các tham số rác sau dấu ? hoặc &
+    clean_url = url.split('?')[0].split('&')[0]
+    parts = clean_url.rstrip('/').split('/')
+    
+    # Lấy phần cuối cùng (username)
+    if parts:
+        user_part = parts[-1]
+        if user_part not in ['facebook.com', 'www.facebook.com', '']:
+            return user_part
+            
+    return None
+
+def clean_profile_list(raw: str):
+    return [p.strip() for p in raw.split(",") if p.strip()]
+--- END FILE: core\utils.py ---
+
+--- START FILE: data\post_ids\031ca13d-e8fa-400c-a603-df57a2806788.json ---
+[
+  "122150960222694490",
+  "101620679431321",
+  "1171101481878307",
+  "122152251362694490",
+  "120235170330520148",
+  "1506669197252501",
+  "122282148692021742",
+  "122152251422694490",
+  "445523486001318",
+  "122103851445151875",
+  "819804580808502"
+]
+--- END FILE: data\post_ids\031ca13d-e8fa-400c-a603-df57a2806788.json ---
+
+--- START FILE: data\post_ids\621e1f5d-0c42-481e-9ddd-7abaafce68ed.json ---
+[]
+--- END FILE: data\post_ids\621e1f5d-0c42-481e-9ddd-7abaafce68ed.json ---
+

@@ -1,0 +1,18 @@
+env/
+venv/
+ENV/
+VENV/
+
+# Nếu dùng Python thì thêm luôn mấy thứ rác quen thuộc
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.python-version
+
+# Nếu dùng tools tạo logs
+logs/
+*.log
+
+pack_project.py
+FULL_PROJECT_CONTENT.txt

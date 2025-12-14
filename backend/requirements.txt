@@ -1,0 +1,6 @@
+requests
+playwright
+python-dotenv
+pyperclip
+fastapi
+uvicorn

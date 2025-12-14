@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hệ thống Quét Facebook</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="header-content">
+        <h1>🔍 Hệ thống Quét Facebook</h1>
+        <p class="subtitle">Theo dõi và quét bài viết tự động</p>
+      </div>
+    </header>
+
+    <div class="layout">
+      <div class="left-panel">
+        <div class="panel-header">
+          <h3>⚙️ Điều khiển</h3>
+        </div>
+        <div class="panel-body">
+        <div class="field">
+          <button id="backendRunBtn" class="btn-primary">
+            <span class="btn-icon">🚀</span>
+            <span>Chạy backend (FastAPI)</span>
+          </button>
+        </div>
+          <div class="field">
+            <button id="startBtn" class="btn-primary">
+              <span class="btn-icon">▶️</span>
+              <span>Bắt đầu quét</span>
+            </button>
+          </div>
+          <div class="field">
+            <button id="stopBtn" class="btn-danger stop">
+              <span class="btn-icon">⏹️</span>
+              <span>Dừng quét</span>
+            </button>
+          </div>
+          <div class="field">
+            <label for="interval">
+              <span class="label-icon">⏱️</span>
+              Thời gian lặp lại (phút)
+            </label>
+            <input id="interval" type="number" min="1" value="1" placeholder="Nhập số phút" />
+          </div>
+          <div class="field">
+            <label for="runMinutes">
+              <span class="label-icon">⏳</span>
+              Thời gian chạy mỗi phiên (phút)
+            </label>
+            <input id="runMinutes" type="number" min="1" value="30" placeholder="VD: 30" />
+          </div>
+          <div class="field">
+            <label for="postCount">
+              <span class="label-icon">📝</span>
+              SỐ BÀI VIẾT theo dõi
+            </label>
+            <input id="postCount" type="number" min="0" value="0" placeholder="Nhập số bài viết" />
+          </div>
+          <div class="field">
+            <button id="exportExcelBtn" class="btn-success">
+              <span class="btn-icon">📊</span>
+              <span>Xuất file Excel</span>
+            </button>
+          </div>
+        <div class="status-line">
+          <span id="statusDot" class="status-dot"></span>
+          <div class="status-text-group">
+            <div class="status-label">Trạng thái backend</div>
+            <div id="backendStatus" class="status-text">Chưa khởi động</div>
+          </div>
+        </div>
+        </div>
+      </div>
+
+      <div class="right-panel">
+        <div class="panel-header">
+          <h3>📋 Danh sách quét</h3>
+          <span id="rowCount" class="badge">0</span>
+        </div>
+        <div class="panel-body">
+          <div class="table-container">
+            <table id="listTable">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Type</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div id="emptyState" class="empty">
+            <div class="empty-icon">📭</div>
+            <p>Chưa có dữ liệu</p>
+            <p class="empty-hint">Nhấn "Bắt đầu quét" để bắt đầu</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
