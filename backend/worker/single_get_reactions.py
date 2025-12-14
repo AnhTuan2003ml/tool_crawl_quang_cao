@@ -5,7 +5,9 @@ from urllib.parse import urlencode
 
 # ====== LƯU Ý ======
 # Cookies và payload được lấy từ cookies.json và payload.txt thông qua profile_id
+# cookies.json có cấu trúc: {"profile_id": {"cookie": "...", "access_token": "..."}}
 # Sử dụng get_payload.get_payload_by_profile_id(profile_id) để lấy payload
+# Sử dụng get_payload.get_cookies_by_profile_id(profile_id) để lấy cookie
 
 # ====== TẠO FEEDBACK TARGET ID TỪ FID ======
 def create_feedback_target_id(fid):
@@ -18,14 +20,8 @@ def create_feedback_target_id(fid):
 # ================================
 #   GỬI REQUEST GRAPHQL VỚI CURSOR
 # ================================
-def send_request(feedback_target_id, payload_dict, profile_id, cursor=None):
+def send_request(feedback_target_id, payload_dict, profile_id, cookies, cursor=None):
     """Gửi request GraphQL với feedbackTargetID và cursor (nếu có)"""
-    from get_payload import get_cookies_by_profile_id
-    
-    # Lấy cookies từ profile_id
-    cookies = get_cookies_by_profile_id(profile_id)
-    if not cookies:
-        raise ValueError(f"Không thể lấy cookies từ profile_id: {profile_id}")
     
     # Payload dưới dạng dictionary (từ điển)
     variables = {
@@ -88,13 +84,14 @@ def send_request(feedback_target_id, payload_dict, profile_id, cursor=None):
 # ================================
 #   HÀM HOÀN CHỈNH: LẤY TẤT CẢ USERS TỪ FID
 # ================================
-def get_all_users_by_fid(fid, payload_dict, profile_id):
+def get_all_users_by_fid(fid, payload_dict, profile_id, cookies):
     """
     Hàm hoàn chỉnh để lấy tất cả users (id và name) từ FID
     
     Args:
         fid (str): Facebook ID của post/photo
         payload_dict (dict): Dictionary chứa payload parameters
+        profile_id (str): Profile ID
         cookies (str): Cookie string để sử dụng trong request
         
     Returns:
@@ -119,8 +116,8 @@ def get_all_users_by_fid(fid, payload_dict, profile_id):
         if cursor:
             print(f"   Cursor: {cursor[:50]}...")
         
-        # Gửi request với feedbackTargetID, payload, profile_id và cursor
-        response = send_request(feedback_target_id, payload_dict, profile_id, cursor)
+        # Gửi request với feedbackTargetID, payload, profile_id, cookies và cursor
+        response = send_request(feedback_target_id, payload_dict, profile_id, cookies, cursor)
         
         print(f"   STATUS: {response.status_code}")
         
@@ -247,13 +244,9 @@ def get_all_users_by_fid(fid, payload_dict, profile_id):
             "feedback_target_id": feedback_target_id
         }
         
-        extracted_file = "users_extracted.json"
-        with open(extracted_file, "w", encoding="utf-8") as f:
-            json.dump(extracted_data, f, ensure_ascii=False, indent=2)
-        
-        print(f"\n💾 Đã lưu vào file: {extracted_file}")
+        print(f"\n✅ Đã lấy {len(all_users)} users")
     else:
-        print("\n⚠️ Không có users để lưu")
+        print("\n⚠️ Không có users")
     
     print("="*50)
     
@@ -263,13 +256,14 @@ def get_all_users_by_fid(fid, payload_dict, profile_id):
 # ================================
 #   HÀM ĐƠN GIẢN: LẤY USERS TỪ CURSOR
 # ================================
-def get_users_by_cursor(fid, payload_dict, profile_id, cursor=None):
+def get_users_by_cursor(fid, payload_dict, profile_id, cookies, cursor=None):
     """
     Hàm đơn giản: truyền cursor vào, trả về users (id, name) và end_cursor
     
     Args:
         fid (str): Facebook ID của post/photo
         payload_dict (dict): Dictionary chứa payload parameters
+        profile_id (str): Profile ID
         cookies (str): Cookie string để sử dụng trong request
         cursor (str, optional): Cursor để lấy trang tiếp theo. None nếu là trang đầu tiên
         
@@ -284,7 +278,7 @@ def get_users_by_cursor(fid, payload_dict, profile_id, cursor=None):
     feedback_target_id = create_feedback_target_id(fid)
     
     # Gửi request
-    response = send_request(feedback_target_id, payload_dict, profile_id, cursor)
+    response = send_request(feedback_target_id, payload_dict, profile_id, cookies, cursor)
     
     if response.status_code != 200:
         print(f"❌ Lỗi: Status code {response.status_code}")
@@ -337,41 +331,33 @@ def call_graphql(fid=None, profile_id=None):
     if profile_id is None:
         profile_id = "031ca13d-e8fa-400c-a603-df57a2806788"  # Profile ID mặc định
     
-    from get_payload import get_payload_by_profile_id
+    from get_payload import get_payload_by_profile_id, get_cookies_by_profile_id
     
     payload_dict = get_payload_by_profile_id(profile_id)
+    cookies = get_cookies_by_profile_id(profile_id)
     
-    if payload_dict:
-        all_users = get_all_users_by_fid(fid, payload_dict, profile_id)
+    if payload_dict and cookies:
+        all_users = get_all_users_by_fid(fid, payload_dict, profile_id, cookies)
     else:
-        print("❌ Không thể tạo payload dictionary")
+        print("❌ Không thể tạo payload dictionary hoặc lấy cookies")
         all_users = []
     
-    # Lưu vào file
+    # Hiển thị kết quả
     if all_users:
-        extracted_data = {
-            "users": all_users,
-            "total_users": len(all_users),
-            "fid": fid
-        }
-        
-        extracted_file = "users_extracted.json"
-        with open(extracted_file, "w", encoding="utf-8") as f:
-            json.dump(extracted_data, f, ensure_ascii=False, indent=2)
-        
-        print(f"\n💾 Đã lưu vào file: {extracted_file}")
+        print(f"\n✅ Đã lấy {len(all_users)} users")
     else:
         print("\n⚠️ Không lấy được users nào")
 
 
 if __name__ == "__main__":
     # Ví dụ sử dụng hàm hoàn chỉnh với vòng lặp tự động
-    from get_payload import get_payload_by_profile_id
+    from get_payload import get_payload_by_profile_id, get_cookies_by_profile_id
     
     profile_id = "031ca13d-e8fa-400c-a603-df57a2806788"
     payload_dict = get_payload_by_profile_id(profile_id)
+    cookies = get_cookies_by_profile_id(profile_id)
     
-    if payload_dict:
+    if payload_dict and cookies:
         fid = "2664708703928050"  # Thay đổi FID ở đây
-        users = get_all_users_by_fid(fid, payload_dict, profile_id)
+        users = get_all_users_by_fid(fid, payload_dict, profile_id, cookies)
     

@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from single_get_reactions import get_all_users_by_fid
 from single_get_comment import get_all_comments_by_post_id
-from get_payload import get_payload_by_profile_id
+from get_payload import get_payload_by_profile_id, get_cookies_by_profile_id
 
 # ====== ĐƯỜNG DẪN ======
 POST_IDS_DIR = "backend/data/post_ids"
@@ -17,21 +17,20 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 DEFAULT_PROFILE_ID = "031ca13d-e8fa-400c-a603-df57a2806788"
 
 
-def process_post_id(post_id, file_name, profile_id=None):
+def process_post_id(post_id, file_name, profile_id, payload_dict, cookies):
     """
     Xử lý một post_id: lấy reactions và comments
     
     Args:
         post_id (str): Facebook ID của post
         file_name (str): Tên file JSON chứa post_id này
-        profile_id (str, optional): Profile ID để lấy cookies và payload. Nếu None, dùng DEFAULT_PROFILE_ID
+        profile_id (str): Profile ID
+        payload_dict (dict): Payload dictionary đã được load sẵn
+        cookies (str): Cookie string đã được load sẵn
         
     Returns:
         dict: Kết quả với reactions và comments
     """
-    if profile_id is None:
-        profile_id = DEFAULT_PROFILE_ID
-    
     print("\n" + "="*70)
     print(f"📌 Xử lý Post ID: {post_id}")
     print(f"📁 Từ file: {file_name}")
@@ -50,26 +49,16 @@ def process_post_id(post_id, file_name, profile_id=None):
     }
     
     try:
-        # Lấy payload từ profile_id
-        print(f"\n🔄 Đang lấy payload từ profile_id: {profile_id}")
-        payload_dict = get_payload_by_profile_id(profile_id)
-        
-        if not payload_dict:
-            print(f"❌ Không thể lấy payload từ profile_id: {profile_id}")
-            result["status"] = "error"
-            result["error"] = "Không thể lấy payload"
-            return result
-        
         # 1. Lấy reactions
         print(f"\n🔵 Bắt đầu lấy REACTIONS cho post_id: {post_id}")
-        reactions = get_all_users_by_fid(post_id, payload_dict, profile_id)
+        reactions = get_all_users_by_fid(post_id, payload_dict, profile_id, cookies)
         result["reactions"] = reactions
         result["reactions_count"] = len(reactions)
         print(f"✅ Đã lấy được {len(reactions)} reactions")
         
         # 2. Lấy comments
         print(f"\n🟢 Bắt đầu lấy COMMENTS cho post_id: {post_id}")
-        comments = get_all_comments_by_post_id(post_id, payload_dict, profile_id)
+        comments = get_all_comments_by_post_id(post_id, payload_dict, profile_id, cookies)
         result["comments"] = comments
         result["comments_count"] = len(comments)
         print(f"✅ Đã lấy được {len(comments)} comments")
@@ -141,13 +130,27 @@ def process_post_ids_file(file_path):
         
         print(f"📋 Tìm thấy {len(post_ids)} post_ids trong file")
         
+        # Load payload và cookies một lần cho tất cả post_ids
+        print(f"\n🔄 Đang lấy payload và cookies từ profile_id: {profile_id}")
+        payload_dict = get_payload_by_profile_id(profile_id)
+        if not payload_dict:
+            print(f"❌ Không thể lấy payload từ profile_id: {profile_id}")
+            return []
+        
+        cookies = get_cookies_by_profile_id(profile_id)
+        if not cookies:
+            print(f"❌ Không thể lấy cookies từ profile_id: {profile_id}")
+            return []
+        
+        print(f"✅ Đã load payload và cookies thành công (sẽ dùng chung cho tất cả {len(post_ids)} post_ids)")
+        
         results = []
         for i, post_id in enumerate(post_ids, 1):
             print(f"\n{'='*70}")
             print(f"📌 [{i}/{len(post_ids)}] Xử lý Post ID: {post_id}")
             print(f"{'='*70}")
             
-            result = process_post_id(post_id, file_name, profile_id)
+            result = process_post_id(post_id, file_name, profile_id, payload_dict, cookies)
             results.append(result)
             
             # Lưu kết quả riêng cho mỗi post_id

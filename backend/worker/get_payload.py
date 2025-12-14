@@ -10,6 +10,7 @@ PAYLOAD_TXT_FILE = "backend/config/payload.txt"
 def get_cookies_by_profile_id(profile_id):
     """
     Lấy cookies từ cookies.json dựa trên profile_id
+    Hỗ trợ cả format cũ (string) và format mới (object với cookie và access_token)
     
     Args:
         profile_id (str): Profile ID (ví dụ: "031ca13d-e8fa-400c-a603-df57a2806788")
@@ -22,11 +23,64 @@ def get_cookies_by_profile_id(profile_id):
             cookies_data = json.load(f)
         
         if profile_id in cookies_data:
-            cookie = cookies_data[profile_id].strip()
+            profile_data = cookies_data[profile_id]
+            
+            # Hỗ trợ format mới (object)
+            if isinstance(profile_data, dict):
+                cookie = profile_data.get("cookie", "").strip()
+            # Hỗ trợ format cũ (string)
+            elif isinstance(profile_data, str):
+                cookie = profile_data.strip()
+            else:
+                print(f"❌ Format không hợp lệ cho profile_id '{profile_id}'")
+                return None
+            
             # Loại bỏ ký tự xuống dòng và khoảng trắng thừa
             cookie = " ".join(cookie.split())
             print(f"✅ Đã lấy cookie từ profile_id: {profile_id}")
             return cookie
+        else:
+            print(f"❌ Không tìm thấy profile_id '{profile_id}' trong {COOKIES_JSON_FILE}")
+            print(f"   Các profile_id có sẵn: {list(cookies_data.keys())}")
+            return None
+    except FileNotFoundError:
+        print(f"❌ Không tìm thấy file {COOKIES_JSON_FILE}!")
+        return None
+    except Exception as e:
+        print(f"❌ Lỗi khi đọc {COOKIES_JSON_FILE}: {e}")
+        return None
+
+
+def get_access_token_by_profile_id(profile_id):
+    """
+    Lấy access_token từ cookies.json dựa trên profile_id
+    
+    Args:
+        profile_id (str): Profile ID (ví dụ: "031ca13d-e8fa-400c-a603-df57a2806788")
+    
+    Returns:
+        str: Access token hoặc None nếu không tìm thấy
+    """
+    try:
+        with open(COOKIES_JSON_FILE, "r", encoding="utf-8") as f:
+            cookies_data = json.load(f)
+        
+        if profile_id in cookies_data:
+            profile_data = cookies_data[profile_id]
+            
+            # Chỉ hỗ trợ format mới (object)
+            if isinstance(profile_data, dict):
+                access_token = profile_data.get("access_token", "").strip()
+                if access_token:
+                    print(f"✅ Đã lấy access_token từ profile_id: {profile_id}")
+                    return access_token
+                else:
+                    print(f"⚠️ Không tìm thấy access_token cho profile_id: {profile_id}")
+                    return None
+            # Format cũ (string) không có access_token
+            else:
+                print(f"⚠️ Profile_id '{profile_id}' đang dùng format cũ, không có access_token")
+                return None
         else:
             print(f"❌ Không tìm thấy profile_id '{profile_id}' trong {COOKIES_JSON_FILE}")
             print(f"   Các profile_id có sẵn: {list(cookies_data.keys())}")

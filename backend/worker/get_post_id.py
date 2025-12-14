@@ -5,7 +5,9 @@ from urllib.parse import urlencode, urlparse, parse_qs
 
 # ====== LƯU Ý ======
 # Cookies và payload được lấy từ cookies.json và payload.txt thông qua profile_id
+# cookies.json có cấu trúc: {"profile_id": {"cookie": "...", "access_token": "..."}}
 # Sử dụng get_payload.get_payload_by_profile_id(profile_id) để lấy payload
+# Sử dụng get_payload.get_cookies_by_profile_id(profile_id) để lấy cookie
 
 
 # ================================

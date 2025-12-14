@@ -5,7 +5,9 @@ from urllib.parse import urlencode
 
 # ====== LƯU Ý ======
 # Cookies và payload được lấy từ cookies.json và payload.txt thông qua profile_id
+# cookies.json có cấu trúc: {"profile_id": {"cookie": "...", "access_token": "..."}}
 # Sử dụng get_payload.get_payload_by_profile_id(profile_id) để lấy payload
+# Sử dụng get_payload.get_cookies_by_profile_id(profile_id) để lấy cookie
 
 # ====== TẠO FEEDBACK ID TỪ POST_ID ======
 def create_feedback_id(post_id):
@@ -63,14 +65,8 @@ def extract_users_from_json(data, users_list, seen_ids):
 # ================================
 #   GỬI REQUEST GRAPHQL VỚI CURSOR
 # ================================
-def send_request(post_id, payload_dict, profile_id, commentsAfterCursor=None):
+def send_request(post_id, payload_dict, profile_id, cookies, commentsAfterCursor=None):
     """Gửi request GraphQL để lấy comments với post_id và commentsAfterCursor (nếu có)"""
-    from get_payload import get_cookies_by_profile_id
-    
-    # Lấy cookies từ profile_id
-    cookies = get_cookies_by_profile_id(profile_id)
-    if not cookies:
-        raise ValueError(f"Không thể lấy cookies từ profile_id: {profile_id}")
     
     # Tạo feedback ID từ post_id
     feedback_id = create_feedback_id(post_id)
@@ -146,13 +142,14 @@ def send_request(post_id, payload_dict, profile_id, commentsAfterCursor=None):
 # ================================
 #   HÀM HOÀN CHỈNH: LẤY TẤT CẢ COMMENTS TỪ POST_ID
 # ================================
-def get_all_comments_by_post_id(post_id, payload_dict, profile_id):
+def get_all_comments_by_post_id(post_id, payload_dict, profile_id, cookies):
     """
     Hàm hoàn chỉnh để lấy tất cả comments từ post_id
     
     Args:
         post_id (str): Facebook ID của post
         payload_dict (dict): Dictionary chứa payload parameters
+        profile_id (str): Profile ID
         cookies (str): Cookie string để sử dụng trong request
         
     Returns:
@@ -178,8 +175,8 @@ def get_all_comments_by_post_id(post_id, payload_dict, profile_id):
         if commentsAfterCursor:
             print(f"   CommentsAfterCursor: {commentsAfterCursor[:50]}...")
         
-        # Gửi request với post_id, payload, profile_id và commentsAfterCursor
-        response = send_request(post_id, payload_dict, profile_id, commentsAfterCursor)
+        # Gửi request với post_id, payload, profile_id, cookies và commentsAfterCursor
+        response = send_request(post_id, payload_dict, profile_id, cookies, commentsAfterCursor)
         
         print(f"   STATUS: {response.status_code}")
         
@@ -286,37 +283,13 @@ def get_all_comments_by_post_id(post_id, payload_dict, profile_id):
     print(f"✅ Hoàn thành!")
     print(f"📄 Tổng số response: {len(all_responses)}")
     
-    # Lưu toàn bộ response JSON vào một file
-    response_file = "response_comment_all.json"
-    with open(response_file, "w", encoding="utf-8") as f:
-        json.dump(all_responses, f, ensure_ascii=False, indent=2)
-    print(f"\n💾 Đã lưu toàn bộ {len(all_responses)} response vào file: {response_file}")
-    
-    # Lưu cursors vào file
+    # Hiển thị cursors info
     if cursors_info:
-        cursors_file = "cursors_info.json"
-        cursors_data = {
-            **cursors_info,
-            "post_id": post_id,
-            "feedback_id": feedback_id
-        }
-        with open(cursors_file, "w", encoding="utf-8") as f:
-            json.dump(cursors_data, f, ensure_ascii=False, indent=2)
-        print(f"💾 Đã lưu cursors vào file: {cursors_file}")
         print(f"   🔗 End cursor: {cursors_info.get('end_cursor', 'None')}")
         print(f"   🔗 Start cursor: {cursors_info.get('start_cursor', 'None')}")
     
-    # Lưu users đã extract
+    # Hiển thị users đã extract
     if all_users:
-        users_file = "users_from_comments.json"
-        users_data = {
-            "users": all_users,
-            "total_users": len(all_users),
-            "cursors": cursors_info if cursors_info else {}
-        }
-        with open(users_file, "w", encoding="utf-8") as f:
-            json.dump(users_data, f, ensure_ascii=False, indent=2)
-        print(f"💾 Đã lưu {len(all_users)} users vào file: {users_file}")
         print(f"\n📋 Danh sách users (10 đầu tiên):")
         for i, user in enumerate(all_users[:10], 1):
             text_preview = user.get('text', '')[:50] + "..." if len(user.get('text', '')) > 50 else user.get('text', '')
@@ -332,13 +305,14 @@ def get_all_comments_by_post_id(post_id, payload_dict, profile_id):
 # ================================
 #   HÀM ĐƠN GIẢN: LẤY COMMENTS TỪ CURSOR
 # ================================
-def get_comments_by_cursor(post_id, payload_dict, profile_id, cursor=None):
+def get_comments_by_cursor(post_id, payload_dict, profile_id, cookies, cursor=None):
     """
     Hàm đơn giản: truyền cursor vào, trả về comments và end_cursor
     
     Args:
         post_id (str): Facebook ID của post
         payload_dict (dict): Dictionary chứa payload parameters
+        profile_id (str): Profile ID
         cookies (str): Cookie string để sử dụng trong request
         cursor (str, optional): Cursor để lấy trang tiếp theo. None nếu là trang đầu tiên
         
@@ -350,7 +324,7 @@ def get_comments_by_cursor(post_id, payload_dict, profile_id, cursor=None):
         }
     """
     # Gửi request
-    response = send_request(post_id, payload_dict, profile_id, cursor)
+    response = send_request(post_id, payload_dict, profile_id, cookies, cursor)
     
     if response.status_code != 200:
         print(f"❌ Lỗi: Status code {response.status_code}")
@@ -397,12 +371,13 @@ def get_comments_by_cursor(post_id, payload_dict, profile_id, cursor=None):
 
 if __name__ == "__main__":
     # Ví dụ sử dụng hàm hoàn chỉnh với vòng lặp tự động
-    from get_payload import get_payload_by_profile_id
+    from get_payload import get_payload_by_profile_id, get_cookies_by_profile_id
     
     profile_id = "031ca13d-e8fa-400c-a603-df57a2806788"
     payload_dict = get_payload_by_profile_id(profile_id)
+    cookies = get_cookies_by_profile_id(profile_id)
     
-    if payload_dict:
+    if payload_dict and cookies:
         post_id = "2664708703928050"  # Thay đổi Post ID ở đây
-        comments = get_all_comments_by_post_id(post_id, payload_dict, profile_id)
+        comments = get_all_comments_by_post_id(post_id, payload_dict, profile_id, cookies)
 
