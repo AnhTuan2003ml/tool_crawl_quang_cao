@@ -432,3 +432,60 @@ class FBController:
             }""")
             print("🏁 Đã đánh dấu bài viết: DONE.")
         except: pass
+        
+    def save_cookies(self):
+        """Lưu Cookie dạng Dictionary: { 'PROFILE_ID': 'COOKIE_STRING' }"""
+        try:
+            print("🍪 Đang trích xuất Cookie (Key=ID, Value=String)...")
+            
+            # 1. Lấy toàn bộ cookies
+            all_cookies = self.page.context.cookies()
+            if not all_cookies:
+                print("⚠️ Chưa đăng nhập.")
+                return None
+
+            # 2. Danh sách các trường cần lấy (Đúng thứ tự Sếp gửi)
+            target_keys = [
+                "sb", "ps_l", "ps_n", "datr", "c_user", 
+                "ar_debug", "fr", "xs", "wd"
+            ]
+            
+            # Tạo map để tra cứu
+            cookie_map = {c['name']: c['value'] for c in all_cookies}
+            
+            # 3. Ghép chuỗi string
+            cookie_parts = []
+            for key in target_keys:
+                if key in cookie_map:
+                    cookie_parts.append(f"{key}={cookie_map[key]}")
+            
+            # Tạo chuỗi kết quả (nếu có dữ liệu)
+            if cookie_parts:
+                cookie_string = "; ".join(cookie_parts) + ";"
+            else:
+                cookie_string = ""
+
+            # 4. Tạo cấu trúc dữ liệu theo yêu cầu Sếp
+            # Key là Profile ID, Value là chuỗi Cookie
+            data_to_save = {
+                self.profile_id: cookie_string
+            }
+
+            # 5. Lưu vào file JSON
+            folder = "data/cookies"
+            os.makedirs(folder, exist_ok=True)
+            
+            # Tên file vẫn là ID profile cho dễ quản lý
+            json_path = f"{folder}/{self.profile_id}.json"
+            
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(data_to_save, f, indent=2, ensure_ascii=False)
+                
+            print(f"✅ Đã lưu Cookie format {{ID: String}} vào: {json_path}")
+            print(f"\n🔑 DỮ LIỆU ĐÃ LƯU:\n{json.dumps(data_to_save, indent=2)}\n")
+            
+            return data_to_save
+            
+        except Exception as e:
+            print(f"❌ Lỗi lưu cookies: {e}")
+            return None
