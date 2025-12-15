@@ -13,20 +13,48 @@ import os
 JS_EXPAND_SCRIPT = """
 (node) => {
     if (!node) return 0;
+
     const keywords = ["Xem thêm", "See more"];
     let clickedCount = 0;
-    const buttons = node.querySelectorAll('[role="button"]');
-    buttons.forEach(btn => {
-        const text = btn.innerText ? btn.innerText.trim() : "";
-        if (keywords.includes(text)) {
-            if (btn.offsetWidth > 0 && btn.offsetHeight > 0) {
-                btn.scrollIntoView({block: "center", inline: "nearest"});
-                btn.click();
-                clickedCount++;
-                btn.style.border = "2px solid red";
-            }
+
+    // 🔒 Chỉ tìm trong nội dung bài viết
+    const scopes = [
+        '[data-ad-preview="message"]',
+        '[data-ad-rendering-role="story_message"]',
+        '.userContent'
+    ];
+
+    let target = null;
+    for (const sel of scopes) {
+        const found = node.querySelector(sel);
+        if (found) {
+            target = found;
+            break;
         }
-    });
+    }
+
+    if (!target) return 0;
+
+    const buttons = Array.from(
+        target.querySelectorAll('[role="button"]')
+    );
+
+    for (const btn of buttons) {
+        const text = btn.innerText ? btn.innerText.trim() : "";
+        if (!keywords.includes(text)) continue;
+
+        const rect = btn.getBoundingClientRect();
+
+        // ❗ Chỉ click nếu nút đang nằm trong viewport
+        if (rect.top < 0 || rect.bottom > window.innerHeight) continue;
+
+        if (btn.offsetWidth > 0 && btn.offsetHeight > 0) {
+            btn.click();
+            btn.style.border = "2px solid red";
+            clickedCount++;
+        }
+    }
+
     return clickedCount;
 }
 """
@@ -241,7 +269,7 @@ class FBController:
                 return False
 
             share_btn.scroll_into_view_if_needed()
-            self.page.wait_for_timeout(500)
+            self.page.wait_for_timeout(300)
             share_btn.click()
 
             # ===== ƯU TIÊN RESPONSE =====
@@ -250,7 +278,7 @@ class FBController:
                     self.save_post_id(self.captured_response_id, post_type)
                     self.page.keyboard.press("Escape")
                     return True
-                self.page.wait_for_timeout(200)
+                self.page.wait_for_timeout(150)
 
             # ===== FALLBACK VIEW-SOURCE =====
             if self.captured_payload_url:
@@ -308,52 +336,68 @@ class FBController:
 
 
     def scan_while_scrolling(self):
-        try:
-            viewport = self.page.viewport_size
-            if viewport: height = viewport['height']
-            else: height = 800 
-            total_distance = int(height * 0.6) 
-            steps = random.randint(3, 6)
-            step_size = total_distance / steps
-            total_distance1 = int(height * 0.1) 
-            step_size1 = total_distance1 / steps
-            print(f"⬇️ Đang lướt {total_distance}px (vừa lướt vừa soi)...")
-
-            for i in range(steps):
-                self.page.mouse.wheel(0, step_size)
-                time.sleep(random.uniform(0.03, 0.08)) 
-                
-                if i > 0 and i % 4 == 0:
-                    post = self.get_center_post()
-                    if not post:
-                        continue
-
-                    # [QUAN TRỌNG] Kiểm tra bài này làm chưa?
-                    if self.check_post_is_processed(post):
-                        for i in range(steps):
-                            self.page.mouse.wheel(0, step_size1)
-                            time.sleep(random.uniform(0.03, 0.08)) 
-                        # print("🚫 Bài đã xử lý -> Bỏ qua")
-                        continue
-
-                    # Phân loại Ads (Green) hay Thường (Yellow)
-                    is_ad = self.check_current_post_is_ad(post)
-
-                    if is_ad:
-                        print("🟥 ADS detected (Mới)")
-                        return post, "green"
-                    else:
-                        print("🟨 Bài thường detected (Mới)")
-                        return post, "yellow"
-
-            
-            return None, None  # Trả về None nếu không thấy gì
-        except Exception as e:
-            print(f"⚠️ Lỗi cuộn: {e} -> Dùng PageDown đỡ.")
-            try: self.page.keyboard.press("PageDown"); time.sleep(2)
-            except: pass
-            return None, None
+        print("⬇️ Scan thông minh: Đang tìm bài viết mới...")
         
+        max_retries = 50 
+        current_try = 0
+
+        while current_try < max_retries:
+            current_try += 1
+            
+            # 1. Lấy bài đang ở tâm viewport
+            post = self.get_center_post()
+
+            if post:
+                # --- TRƯỜNG HỢP 1: BÀI CŨ (ĐÃ LÀM) ---
+                if self.check_post_is_processed(post):
+                    try:
+                        # Lấy chiều cao bài viết để biết cần cuộn bao nhiêu
+                        box = post.bounding_box()
+                        if box:
+                            # Cuộn qua chiều cao bài + 50px đệm
+                            total_scroll_distance = box['height'] + 50
+                        else:
+                            total_scroll_distance = 600 # Fallback nếu ko đo được
+
+                        # --- [LOGIC SẾP YÊU CẦU] ---
+                        # Chia nhỏ thành 15-25 bước để lướt mượt
+                        steps = random.randint(15, 25)
+                        step_px = total_scroll_distance / steps
+                        
+                        # print(f"⏩ Bài cũ -> Lướt {int(total_scroll_distance)}px trong {steps} bước...")
+
+                        for _ in range(steps):
+                            self.page.mouse.wheel(0, step_px)
+                            # Nghỉ ngẫu nhiên 0.03 - 0.08s
+                            time.sleep(random.uniform(0.03, 0.08))
+                        
+                        continue # Lướt xong thì vòng lại check bài mới ngay
+                        
+                    except Exception as e:
+                        print(f"⚠️ Lỗi cuộn mượt: {e}")
+                        self.page.mouse.wheel(0, 400)
+                        time.sleep(0.5)
+                        continue
+
+                # --- TRƯỜNG HỢP 2: BÀI MỚI (CHƯA LÀM) -> TRẢ VỀ NGAY ---
+                is_ad = self.check_current_post_is_ad(post)
+
+                if is_ad:
+                    print("🟥 ADS detected (Mới)")
+                    return post, "green"
+                else:
+                    print("🟨 Bài thường detected (Mới)")
+                    return post, "yellow"
+
+            # --- TRƯỜNG HỢP 3: CHƯA THẤY BÀI (Khoảng trắng) ---
+            # Cuộn nhẹ để dò tìm
+            self.page.mouse.wheel(0, 150)
+            time.sleep(random.uniform(0.1, 0.2))
+
+        print("⚠️ Hết lượt scan (không thấy bài mới).")
+        return None, None
+
+
        
 
     def like_current_post(self, post_handle):
@@ -382,33 +426,65 @@ class FBController:
 
     
 
+
     def get_center_post(self):
         try:
             return self.page.evaluate_handle("""
                 () => {
                     const x = window.innerWidth / 2;
                     const y = window.innerHeight * 0.45;
-
                     const el = document.elementFromPoint(x, y);
                     if (!el) return null;
 
-                    let cur = el.closest('div.x78zum5.xdt5ytf');
+                    // =========================
+                    // 1. CHECK CONTEXT: SEARCH PAGE?
+                    // =========================
+                    const isSearchPage = !!document.querySelector(
+                        'h1, span'
+                    ) && [...document.querySelectorAll('h1, span')]
+                        .some(e => e.innerText?.trim() === 'Kết quả tìm kiếm');
+
+                    // =========================
+                    // 2. CHỌN CONTAINER PHÙ HỢP
+                    // =========================
+                    const POST_SELECTOR = isSearchPage
+                        ? 'div.x78zum5.xdt5ytf'   // search page
+                        : 'div.x1lliihq';         // home / feed
+
+                    let cur = el.closest(POST_SELECTOR);
+
                     while (cur) {
+
+                        // ❌ LOẠI REELS
+                        if (
+                            cur.innerText &&
+                            cur.innerText.trim().toLowerCase().startsWith('reels')
+                        ) {
+                            return null;
+                        }
+
+                        // ✅ PHẢI CÓ LIKE BUTTON → mới là post thật
                         const hasLike = cur.querySelector(
                             'div[aria-label="Thích"], div[aria-label="Like"],' +
                             'div[aria-label="Gỡ Thích"], div[aria-label="Remove Like"]'
                         );
+
                         if (hasLike) {
                             cur.style.outline = "4px solid #00ff00";
+                            cur.setAttribute('data-center-post', 'true'); // 🔒 MARK
                             return cur;
                         }
-                        cur = cur.parentElement?.closest('div.x78zum5.xdt5ytf');
+
+                        cur = cur.parentElement?.closest(POST_SELECTOR);
                     }
+
                     return null;
                 }
             """)
         except:
             return None
+
+
 
 
     def check_current_post_is_ad(self, post_handle):

@@ -24,26 +24,19 @@ class SimpleBot:
                 # ============================================================
                 
                 # Bot cuộn và trả về bài viết (nếu có) cùng loại (green/yellow)
-                detected_post, post_type = self.fb.scan_while_scrolling()
-                
-                # ============================================================
-                # XỬ LÝ BÀI VIẾT TÌM THẤY
-                # ============================================================
-                detected_post, post_type = self.fb.scan_while_scrolling()
+                post, post_type = self.fb.scan_while_scrolling()
 
-                if detected_post:
-                    self.fb.process_post(detected_post, post_type)
+                if post:
+                    self.fb.process_post(post, post_type)
 
-                    # 💤 Nghỉ sau khi xử lý bài
-                    delay = random.uniform(5.0, 10.0)
+                    delay = random.uniform(5.0, 8.0)
                     print(f"😴 Nghỉ sau khi xử lý bài {delay:.1f}s")
                     time.sleep(delay)
-
                 else:
-                    # 💤 Nghỉ khi scroll không gặp bài
-                    delay = random.uniform(5.0, 10.0)
+                    delay = random.uniform(3.0, 5.0)
                     print(f"😴 Không có bài – nghỉ {delay:.1f}s")
                     time.sleep(delay)
+
 
 
                 # Random mouse move nhẹ cho đỡ bị check bot
