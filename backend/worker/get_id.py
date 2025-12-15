@@ -29,7 +29,7 @@ def get_post_id(video_url, profile_id, cookies=None):
         owning_profile_dict: {"__typename": "...", "name": "...", "id": "..."} hoặc None
     """
     # Sử dụng HTML source để lấy thông tin (với cookies)
-    post_id, owning_profile = get_post_id_from_html(video_url, profile_id, cookies)
+    post_id, owning_profile, post_text = get_post_id_from_html(video_url, profile_id, cookies)
     
     # Decode Unicode escape sequences trong owning_profile name nếu có
     if owning_profile and "name" in owning_profile:
@@ -45,7 +45,7 @@ def get_post_id(video_url, profile_id, cookies=None):
                 except:
                     pass
     
-    return post_id, owning_profile
+    return post_id, owning_profile, post_text
 
 
 def get_post_id_from_html(url, profile_id, cookies=None):
@@ -160,13 +160,12 @@ def get_post_id_from_html(url, profile_id, cookies=None):
                         else:
                             print(f"   🔍 Không tìm thấy chuỗi 'post_id' trong HTML")
         
-        # Tìm owning_profile đầu tiên trong HTML
+        # ===== TÌM OWNING_PROFILE ĐẦU TIÊN TRONG HTML =====
         # Pattern: "owning_profile":{"__typename":"User","name":"...","id":"..."}
         # Có thể có các field khác như "short_name" giữa các field
         owning_profile = None
         
         # Tìm owning_profile với nhiều pattern khác nhau
-        owning_profile = None
         
         # Pattern 1: "owning_profile":{ (chuẩn)
         pattern = r'"owning_profile"\s*:\s*\{'
@@ -288,8 +287,51 @@ def get_post_id_from_html(url, profile_id, cookies=None):
                         owning_profile['name'] = name
                     except:
                         pass
-        
-        return post_id, owning_profile
+
+        # ===== LẤY NỘI DUNG BÀI POST =====
+        post_text = None
+
+        # Ưu tiên lấy nội dung trong block story_message (nội dung bài post)
+        content_html = None
+
+        story_match = re.search(
+            r'data-ad-rendering-role="story_message"[^>]*>(.*?)</div></div></div>',
+            html_content,
+            re.DOTALL,
+        )
+        if story_match:
+            content_html = story_match.group(1)
+            print("✅ Tìm thấy block story_message để trích nội dung bài post")
+        else:
+            # Fallback: dùng một phần đầu HTML
+            content_html = html_content[:500_000]
+            print("⚠️ Không tìm thấy block story_message, dùng fallback (500KB đầu HTML)")
+
+        # Thay <img ... alt="..."> bằng chính alt (để giữ emoji/text)
+        def _img_alt_to_text(m):
+            alt_text = m.group(1) or ""
+            return f" {alt_text} "
+
+        content_html = re.sub(
+            r'<img[^>]*alt="([^"]*)"[^>]*>',
+            _img_alt_to_text,
+            content_html,
+            flags=re.IGNORECASE,
+        )
+
+        # Bỏ toàn bộ tag HTML còn lại
+        text_raw = re.sub(r"<[^>]*>", " ", content_html)
+        # Chuẩn hóa khoảng trắng
+        text_clean = re.sub(r"\s+", " ", text_raw).strip()
+
+        if text_clean:
+            post_text = text_clean
+            preview = post_text[:400] + "..." if len(post_text) > 400 else post_text
+            print(f"✅ Post text (preview): {preview}")
+        else:
+            print("⚠️ Không trích được nội dung bài post từ HTML")
+
+        return post_id, owning_profile, post_text
             
     except Exception as e:
         print(f"❌ Lỗi khi lấy HTML source: {e}")
@@ -465,11 +507,12 @@ def get_id_from_url(url, profile_id):
         # Tất cả các URL khác đều là post
         result["url_type"] = "post"
         
-        # Lấy post_id và owning_profile từ HTML source (với cookies)
-        post_id, owning_profile = get_post_id(url, profile_id, cookies)
+        # Lấy post_id, owning_profile và post_text từ HTML source (với cookies)
+        post_id, owning_profile, post_text = get_post_id(url, profile_id, cookies)
         
         result["post_id"] = post_id
         result["owning_profile"] = owning_profile
+        result["post_text"] = post_text
         
         # In kết quả cuối cùng
         if post_id:
@@ -486,6 +529,10 @@ def get_id_from_url(url, profile_id):
                 print(f"owning_profile.name: {owning_profile_name}")
             if owning_profile_id:
                 print(f"owning_profile.id: {owning_profile_id}")
+
+        if post_text:
+            preview = post_text[:200] + "..." if len(post_text) > 200 else post_text
+            print(f"post_text: {preview}")
         
         return result
 
@@ -499,6 +546,6 @@ if __name__ == "__main__":
     # result = get_id_from_url(group_url, profile_id)
     
     # Test với video/post URL
-    url = "https://www.facebook.com/share/v/1L6RLbSExt/"
+    url = "https://www.facebook.com/122152251362694490"
     result = get_id_from_url(url, profile_id)
     print(result)
