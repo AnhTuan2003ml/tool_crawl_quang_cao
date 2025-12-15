@@ -1,10 +1,12 @@
 import requests
 import re
 import json
+from pathlib import Path
 
-# ====== ĐƯỜNG DẪN ======
-COOKIES_JSON_FILE = "backend/config/cookies.json"
-PAYLOAD_TXT_FILE = "backend/config/payload.txt"
+# ====== ĐƯỜNG DẪN THEO PROJECT ROOT ======
+BASE_DIR = Path(__file__).resolve().parents[2]  # Thư mục gốc project
+COOKIES_JSON_FILE = BASE_DIR / "backend" / "config" / "cookies.json"
+PAYLOAD_TXT_FILE = BASE_DIR / "backend" / "config" / "payload.txt"
 
 
 def get_cookies_by_profile_id(profile_id):

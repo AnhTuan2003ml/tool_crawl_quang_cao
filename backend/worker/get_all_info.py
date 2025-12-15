@@ -5,9 +5,10 @@ from single_get_reactions import get_all_users_by_fid
 from single_get_comment import get_all_comments_by_post_id
 from get_payload import get_payload_by_profile_id, get_cookies_by_profile_id
 
-# ====== ĐƯỜNG DẪN ======
-POST_IDS_DIR = "backend/data/post_ids"
-OUTPUT_DIR = "backend/data/results"
+# ====== ĐƯỜNG DẪN THEO PROJECT ROOT ======
+BASE_DIR = Path(__file__).resolve().parents[2]  # Thư mục gốc project
+POST_IDS_DIR = BASE_DIR / "backend" / "data" / "post_ids"
+OUTPUT_DIR = BASE_DIR / "backend" / "data" / "results"
 
 # Tạo thư mục output nếu chưa có
 os.makedirs(OUTPUT_DIR, exist_ok=True)
