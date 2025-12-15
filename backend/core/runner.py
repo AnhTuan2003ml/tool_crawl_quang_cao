@@ -1,21 +1,48 @@
 import os
-import time # [Cần thêm thư viện này để đếm giờ]
+import time  # [Cần thêm thư viện này để đếm giờ]
 from multiprocessing import Process
+from typing import Optional
+
 from dotenv import load_dotenv
-from core.utils import clean_profile_list
-from core.nst import connect_profile
+
 from core.browser import FBController
+from core.nst import connect_profile
 from core.scraper import SimpleBot
+from core.utils import clean_profile_list
+
 
 class AppRunner:
-    def __init__(self):
+    def __init__(self, run_minutes: Optional[int] = None, rest_minutes: Optional[int] = None):
         load_dotenv()
         self.target_url = os.getenv("TARGET_URL", "https://facebook.com")
         self.profiles = clean_profile_list(os.getenv("PROFILE_IDS", ""))
-        
-        # [CẤU HÌNH THỜI GIAN TẠI ĐÂY]
-        self.RUN_MINUTES = 30       # Thời gian chạy mỗi phiên (phút)
-        self.REST_HOURS = 2         # Thời gian nghỉ giữa các phiên (tiếng)
+
+        # Ưu tiên giá trị truyền từ API; fallback ENV; cuối cùng là default.
+        self.RUN_MINUTES = self._coerce_positive_int(
+            run_minutes,
+            self._coerce_positive_int(os.getenv("RUN_MINUTES"), 30),
+            default=30,
+        )
+        # REST_MINUTES mặc định 120p (tương đương 2h như cấu hình cũ)
+        self.REST_MINUTES = self._coerce_positive_int(
+            rest_minutes,
+            self._coerce_positive_int(os.getenv("REST_MINUTES"), 120),
+            default=120,
+        )
+
+    @staticmethod
+    def _coerce_positive_int(value, fallback=None, default=0):
+        """
+        Trả về số nguyên dương; nếu không hợp lệ dùng fallback, cuối cùng dùng default.
+        """
+        for candidate in (value, fallback, default):
+            try:
+                num = int(candidate)
+                if num > 0:
+                    return num
+            except (TypeError, ValueError):
+                continue
+        return default
 
     def worker(self, profile_id):
         """Hàm xử lý cho từng profile (Process con)"""
@@ -52,9 +79,9 @@ class AppRunner:
         """Hàm điều phối chính (Vòng lặp vĩnh cửu)"""
         
         # Đổi thời gian nghỉ sang giây
-        rest_seconds = self.REST_HOURS * 60 * 60
+        rest_seconds = self.REST_MINUTES * 60
         
-        print(f"∞ Kích hoạt chế độ nuôi tuần hoàn: Chạy {self.RUN_MINUTES}p -> Nghỉ {self.REST_HOURS}h")
+        print(f"∞ Kích hoạt chế độ nuôi tuần hoàn: Chạy {self.RUN_MINUTES}p -> Nghỉ {self.REST_MINUTES}p")
 
         while True:
             print("="*60)
@@ -77,7 +104,7 @@ class AppRunner:
             wake_up_str = time.strftime('%H:%M:%S', time.localtime(wake_up_time))
 
             print("\n" + "="*60)
-            print(f"💤 [SLEEP] Xong phiên này. Bot sẽ ngủ {self.REST_HOURS} tiếng.")
+            print(f"💤 [SLEEP] Xong phiên này. Bot sẽ ngủ {self.REST_MINUTES} phút.")
             print(f"⏰ Dự kiến chạy lại vào lúc: {wake_up_str}")
             print("="*60 + "\n")
             
