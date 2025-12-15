@@ -62,11 +62,24 @@
             <input id="postCount" type="number" min="0" value="0" placeholder="Nhập số bài viết" />
           </div>
           <div class="field">
+            <button id="feedAccountBtn" class="btn-primary">
+              <span class="btn-icon">🌱</span>
+              <span>Nuôi acc</span>
+            </button>
+          </div>
+          <div class="field">
+            <button id="addGroupDataBtn" class="btn-primary">
+              <span class="btn-icon">➕</span>
+              <span>Thêm data nhóm</span>
+            </button>
+          </div>
+          <div class="field">
             <button id="exportExcelBtn" class="btn-success">
               <span class="btn-icon">📊</span>
               <span>Xuất file Excel</span>
             </button>
           </div>
+          
         <div class="status-line">
           <span id="statusDot" class="status-dot"></span>
           <div class="status-text-group">
@@ -79,17 +92,46 @@
 
       <div class="right-panel">
         <div class="panel-header">
-          <h3>📋 Danh sách quét</h3>
+          <div class="panel-tabs">
+            <button id="tabScanList" type="button" class="tab-button active">📋 Danh sách quét</button>
+            <button id="tabPostManager" type="button" class="tab-button">📝 Quản lý post</button>
+          </div>
           <span id="rowCount" class="badge">0</span>
         </div>
-        <div class="panel-body">
+
+        <!-- View: Danh sách quét -->
+        <div id="scanView">
+          <div class="filter-container">
+            <div class="filter-label">🔍 Lọc theo màu:</div>
+            <div class="filter-buttons">
+              <button class="filter-btn filter-all active" data-filter="all">
+                <span>Tất cả</span>
+              </button>
+              <button class="filter-btn filter-green" data-filter="type-green">
+                <span class="filter-dot filter-dot-green"></span>
+                <span>Xanh (type1)</span>
+              </button>
+              <button class="filter-btn filter-yellow" data-filter="type-yellow">
+                <span class="filter-dot filter-dot-yellow"></span>
+                <span>Vàng (type2)</span>
+              </button>
+              <button class="filter-btn filter-red" data-filter="type-red">
+                <span class="filter-dot filter-dot-red"></span>
+                <span>Đỏ (type3)</span>
+              </button>
+            </div>
+          </div>
           <div class="table-container">
             <table id="listTable">
               <thead>
                 <tr>
-                  <th>ID</th>
-                  <th>Type</th>
+                  <th>ID Bài Post</th>
+                  <th>ID User</th>
+                  <th>Name</th>
+                  <th>React</th>
+                  <th>Comment</th>
                   <th>Time</th>
+                  <th>Type</th>
                 </tr>
               </thead>
               <tbody></tbody>
@@ -100,6 +142,58 @@
             <p>Chưa có dữ liệu</p>
             <p class="empty-hint">Nhấn "Bắt đầu quét" để bắt đầu</p>
           </div>
+        </div>
+
+        <!-- View: Quản lý post -->
+        <div id="postView" style="display:none;">
+          <div class="table-container">
+            <table id="postTable">
+              <thead>
+                <tr>
+                  <th>ID Post</th>
+                  <th>Nội dung</th>
+                  <th>Type</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div id="postEmptyState" class="empty">
+            <div class="empty-icon">📭</div>
+            <p>Chưa có dữ liệu post</p>
+            <p class="empty-hint">Kiểm tra lại file JSON trong thư mục post_ids</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help button với tooltip -->
+  <button id="helpBtn" class="help-button" title="Xem giải thích màu sắc">
+    <span>?</span>
+  </button>
+  <div id="helpTooltip" class="help-tooltip">
+    <div class="tooltip-header">
+      <h4>📋 Giải thích màu sắc</h4>
+      <button class="tooltip-close">&times;</button>
+    </div>
+    <div class="tooltip-body">
+      <div class="tooltip-item">
+        <span class="tooltip-dot tooltip-green"></span>
+        <div>
+          <strong>Xanh (type1):</strong> data ưu tiên , data đối thủ 
+        </div>
+      </div>
+      <div class="tooltip-item">
+        <span class="tooltip-dot tooltip-yellow"></span>
+        <div>
+          <strong>Vàng (type2):</strong> data ưu tiên , data đối thủ 
+        </div>
+      </div>
+      <div class="tooltip-item">
+        <span class="tooltip-dot tooltip-red"></span>
+        <div>
+          <strong>Đỏ (type3):</strong>data khách tìm kiếm trên facebook
         </div>
       </div>
     </div>
