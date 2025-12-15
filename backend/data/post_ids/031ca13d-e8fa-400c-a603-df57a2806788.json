@@ -28,5 +28,15 @@
       "name": "Americus & Gosani",
       "id": "100069353979673"
     }
+  },
+  {
+    "id": "1273299934841514",
+    "flag": "đỏ",
+    "text": "Nội dung mô phỏng cho post 1273299934841514",
+    "owning_profile": {
+      "__typename": "User",
+      "name": "Google Ads",
+      "id": "100064845576688"
+    }
   }
 ]

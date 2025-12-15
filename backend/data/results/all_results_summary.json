@@ -3011,10 +3011,6 @@
             "name": "Thành Nguyễn"
           },
           {
-            "id": "100032552467707",
-            "name": "Quách Bảo Hân"
-          },
-          {
             "id": "100032751334007",
             "name": "Kiều Minh Hoạt"
           },
@@ -4643,12 +4639,6 @@
             "created_time_vn": "2025-11-21 21:53:36"
           },
           {
-            "id": "100012165750794",
-            "name": "Nguyen The Anh",
-            "text": "hóng",
-            "created_time_vn": "2025-12-15 10:44:05"
-          },
-          {
             "id": "100027609980867",
             "name": "Xuân Quân",
             "text": "Có tuyển cn lao động ko",
@@ -4713,6 +4703,12 @@
             "name": "Phong Trinh",
             "text": "Còn ko ah",
             "created_time_vn": "2025-11-06 07:23:41"
+          },
+          {
+            "id": "100012165750794",
+            "name": "Nguyen The Anh",
+            "text": "hóng",
+            "created_time_vn": "2025-12-15 10:44:05"
           },
           {
             "id": "100005475302341",
@@ -4811,15 +4807,1897 @@
             "created_time_vn": "2025-11-18 17:57:55"
           }
         ],
-        "reactions_count": 1119,
+        "reactions_count": 1118,
         "comments_count": 53,
-        "reactions_count_before_filter": 1119,
+        "reactions_count_before_filter": 1118,
         "comments_count_before_filter": 53,
+        "status": "success"
+      },
+      {
+        "post_id": "101620679431321",
+        "flag": "đỏ",
+        "text": "Nội dung mô phỏng cho post 101620679431321",
+        "owning_profile": {
+          "__typename": "User",
+          "name": "TH True Mart tuyển dụng",
+          "id": "100087385844583"
+        },
+        "source_file": "031ca13d-e8fa-400c-a603-df57a2806788.json",
+        "profile_id": "031ca13d-e8fa-400c-a603-df57a2806788",
+        "reactions": [],
+        "comments": [],
+        "reactions_count": 0,
+        "comments_count": 0,
+        "reactions_count_before_filter": 0,
+        "comments_count_before_filter": 0,
+        "status": "success"
+      },
+      {
+        "post_id": "1171101481878307",
+        "flag": "vàng",
+        "text": "Nội dung mô phỏng cho post 1171101481878307",
+        "owning_profile": {
+          "__typename": "User",
+          "name": "Americus & Gosani",
+          "id": "100069353979673"
+        },
+        "source_file": "031ca13d-e8fa-400c-a603-df57a2806788.json",
+        "profile_id": "031ca13d-e8fa-400c-a603-df57a2806788",
+        "reactions": [],
+        "comments": [],
+        "reactions_count": 0,
+        "comments_count": 0,
+        "reactions_count_before_filter": 0,
+        "comments_count_before_filter": 0,
+        "status": "success"
+      },
+      {
+        "post_id": "1273299934841514",
+        "flag": "đỏ",
+        "text": "Nội dung mô phỏng cho post 1273299934841514",
+        "owning_profile": {
+          "__typename": "User",
+          "name": "Google Ads",
+          "id": "100064845576688"
+        },
+        "source_file": "031ca13d-e8fa-400c-a603-df57a2806788.json",
+        "profile_id": "031ca13d-e8fa-400c-a603-df57a2806788",
+        "reactions": [],
+        "comments": [
+          {
+            "id": "100083335447943",
+            "name": "Xưởng Sản Xuất Nhựa Giá Tận Gốc",
+            "text": "mình đang sữ dụng, thấy hiệu quả, giá hợp lý",
+            "created_time_vn": "2025-11-26 19:37:14"
+          },
+          {
+            "id": "100090041555304",
+            "name": "Hà Nội Land",
+            "text": "Qúa tuyệt vời",
+            "created_time_vn": "2025-11-18 16:25:18"
+          },
+          {
+            "id": "100063775987362",
+            "name": "Tuan Anh",
+            "text": "Lệnh chất lượng, hỗ trợ nhiệt tình, uy tín 10/10 ❤️",
+            "created_time_vn": "2025-11-06 08:51:35"
+          },
+          {
+            "id": "100029780175583",
+            "name": "Do Anh Tuan",
+            "text": "Nền tảng như cc xác minh thành công lên chiến dịch là deal",
+            "created_time_vn": "2025-10-24 21:09:53"
+          },
+          {
+            "id": "100056119253246",
+            "name": "Huong Sen",
+            "text": "Ngày đầu tháng gửi bạn lời chúc: bình yên, hạnh phúc và đủ đầy.",
+            "created_time_vn": "2025-12-01 06:39:29"
+          },
+          {
+            "id": "100083139822462",
+            "name": "Hóa Phẩm - Hóa Chất Beecok",
+            "text": "Công nhận Google AI giúp ích nhiều cho việc quản lý quảng cáo thật, đỡ tốn thời gian mà lại hiệu quả nữa. Chúc bạn ngày càng phát triển nhé!",
+            "created_time_vn": "2025-11-11 00:08:21"
+          },
+          {
+            "id": "100022739147203",
+            "name": "Huong Kim Le",
+            "text": "Google AI thật sự là công cụ quảng cáo rất hiệu quả! Giúp quản lý kinh doanh online dễ dàng hơn. 🙋",
+            "created_time_vn": "2025-11-21 08:49:03"
+          },
+          {
+            "id": "100082898025107",
+            "name": "Nguyễn Hồng Gọn",
+            "text": "Ttql nha người đẹp 🎀✅",
+            "created_time_vn": "2025-12-08 14:41:04"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "trông có vẻ xịn xò nhe 😆**",
+            "created_time_vn": "2025-11-18 15:03:00"
+          },
+          {
+            "id": "100078424484232",
+            "name": "Nguyễn Ngân",
+            "text": "ngày mới vui vẻ nhé Google Ads",
+            "created_time_vn": "2025-10-14 13:02:03"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "😘tươi tươi ko cần tưới nhe 💕",
+            "created_time_vn": "2025-11-17 19:14:49"
+          },
+          {
+            "id": "100082898025107",
+            "name": "Nguyễn Hồng Gọn",
+            "text": "Buổi tối vui vẻ nha Google Ads",
+            "created_time_vn": "2025-11-28 20:32:00"
+          },
+          {
+            "id": "100048812236578",
+            "name": "Nhân Vshorts",
+            "text": "❤ Kết nối hiệu quả với khách hàng tiềm năng là rất quan trọng.\n⭐ Tương tác thường xuyên giúp chúng ta xây dựng mối quan hệ vững chắc.\n💡 Luôn lắng nghe để thấu hiểu và nắm bắt mọi cơ hội phát triển.\n✅ Hãy bắt đầu duy trì liên lạc ngay hôm nay để đạt được thành công! \ncmt chạy bởi tool nuôi nick vshorts LH 0978142991",
+            "created_time_vn": "2025-12-09 08:04:45"
+          },
+          {
+            "id": "61573151604058",
+            "name": "تران ثين تشيوان",
+            "text": "Đành làm liều yêu hờ đi tất cả.",
+            "created_time_vn": "2025-12-06 14:35:13"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "nàng thơ là đây kaka",
+            "created_time_vn": "2025-12-10 15:31:39"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "Mê canh lời lun ui nhoaaa😘-😘",
+            "created_time_vn": "2025-11-18 17:48:37"
+          },
+          {
+            "id": "100093455242770",
+            "name": "Mix video channal",
+            "text": "ah, unbelievably dedication 😍😷 🤣 lol, i relate so hard it hurts.! 😁😦😨",
+            "created_time_vn": "2025-12-07 08:16:56"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "yeah 👍chuẩn không cần chỉnh lun",
+            "created_time_vn": "2025-12-04 15:24:10"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "❤️^^nhất rồi nhe cvvv ah",
+            "created_time_vn": "2025-11-25 15:44:16"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "nhất lun rồi nhe timh yeu",
+            "created_time_vn": "2025-12-02 13:50:01"
+          },
+          {
+            "id": "100067163581142",
+            "name": "Ngân Xuyến",
+            "text": "Tương tác để thấy nhau mỗi ngày nhé 🍁",
+            "created_time_vn": "2025-11-05 03:39:04"
+          },
+          {
+            "id": "61576319129126",
+            "name": "Thục Đoan Ngân",
+            "text": "Phúc Đức tại mẫu ? Nói sai thì trời nó có mắt,,, ko đi đường lại bị xe cán cho ..",
+            "created_time_vn": "2025-10-15 23:39:41"
+          },
+          {
+            "id": "100076520708895",
+            "name": "Link Ngon Mỗi Ngày",
+            "text": "Hôm bữa đi làm, đồng nghiệp bảo:\n“Sao áo quần thơm dữ vậy, bí kíp gì thế?”\nMình chỉ cười: “Có gì đâu, MaxKleen lo hết rồi!” 🌸\n\n🧺 Nước Giặt Xả MaxKleen 3.8kg\n✨ Giặt sạch vết bẩn cứng đầu, giữ màu vải tươi mới\n🌸 Hương thơm lâu, mềm vải, an toàn cho da\n💰 Dung tích lớn, giá hời – sắm ngay kẻo lỡ!\nLink nước giặt: https://s.shopee.vn/8pcqh7AHT3\nLink mã giảm giá: https://s.shopee.vn/7Ko2uObfAY",
+            "created_time_vn": "2025-10-02 20:16:49"
+          },
+          {
+            "id": "61567894921648",
+            "name": "Heo Quay Giao Hiền",
+            "text": "Hy vọng Google Ads luôn vui vẻ, đủ năng lượng để làm điều mình thích 🌻💛",
+            "created_time_vn": "2025-11-02 12:41:59"
+          },
+          {
+            "id": "100044326724856",
+            "name": "Aesthetic",
+            "text": "Fazzykizz CRIB  😉😇 😂 ito ang energy na kailangan ko: me vs responsibilities. 😅😶🙁",
+            "created_time_vn": "2025-11-15 13:30:02"
+          },
+          {
+            "id": "100081852616274",
+            "name": "Smarthome Quy Nhơn",
+            "text": "Làm sao để kết nối liên tục không phiền?",
+            "created_time_vn": "2025-12-03 18:16:59"
+          },
+          {
+            "id": "100084229270156",
+            "name": "HomeTech Lighting VN",
+            "text": "Duy trì kết nối có khó không mọi người?",
+            "created_time_vn": "2025-12-03 18:12:33"
+          },
+          {
+            "id": "100048317856828",
+            "name": "Nguyễn Quang Hùng",
+            "text": "thạ tym mong google ads chú ý tới tôi nhiều hơn trong tương lai tới",
+            "created_time_vn": "2025-12-12 21:46:22"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "kkk xuất sắc thế ty ồ likee🫰",
+            "created_time_vn": "2025-11-30 16:33:23"
+          },
+          {
+            "id": "100082898025107",
+            "name": "Nguyễn Hồng Gọn",
+            "text": "Thấy Google Ads đăng bài là thả ❤ ngay nè!🥰🥰🥰",
+            "created_time_vn": "2025-11-28 10:25:10"
+          },
+          {
+            "id": "100082898025107",
+            "name": "Nguyễn Hồng Gọn",
+            "text": "AI này có thực sự hiệu quả không ta?",
+            "created_time_vn": "2025-11-27 19:45:41"
+          },
+          {
+            "id": "61584783687201",
+            "name": "Xem Vận Mệnh Cuộc Đời",
+            "text": "Mọi người ghé trang mình xem tử vi, phong thủy miễn phí nhé!",
+            "created_time_vn": "2025-12-14 21:00:09"
+          },
+          {
+            "id": "100044326724856",
+            "name": "Aesthetic",
+            "text": "🙄🤒 😂 yung feeling kapag totoong mvp.. 🤨🤲",
+            "created_time_vn": "2025-12-14 16:26:17"
+          },
+          {
+            "id": "61576167173794",
+            "name": "Mỹ Linh",
+            "text": "Sống tử tế mà làm người cho chồng nó thọ , ko lại mồ côi sớm... con đĩ nhà thổ ..  con Loan lô đề cờ bạc lừa đảo chị em ruột ... cheers đi cho trật đất con cho Loan nhé",
+            "created_time_vn": "2025-10-15 23:36:27"
+          },
+          {
+            "id": "100050332876527",
+            "name": "Hot Peach",
+            "text": "🤡 🤯 me trying to just like me procrastinating again. but failing. 🙂",
+            "created_time_vn": "2025-12-09 20:54:26"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "chắc tui chớt quá blem😜",
+            "created_time_vn": "2025-11-17 21:39:45"
+          },
+          {
+            "id": "61576291259765",
+            "name": "Tuyết Băng Linh",
+            "text": "Tỉnh đi mà làm người .. lấy phúc cho 2 thằng con nó hưởng ? Ko lại đi chạn vương thì nhục lắm",
+            "created_time_vn": "2025-10-15 23:37:39"
+          },
+          {
+            "id": "100012280808799",
+            "name": "Bảo Châu",
+            "text": "lam bat dong san quang cao sao thay tao ma kho qua",
+            "created_time_vn": "2025-11-26 09:58:02"
+          },
+          {
+            "id": "61576196276597",
+            "name": "Trúc Mai",
+            "text": "Ôi đời nhục thế .. con thì chạn vương , nhục nhã nhỉ ,",
+            "created_time_vn": "2025-10-15 22:25:26"
+          },
+          {
+            "id": "100009358907050",
+            "name": "Bim Bim",
+            "text": "Công ngày : 398.000đ/11h\nCông đêm : 470.000đ/11h\nChủ nhật ngày : 687.000đ/11h\nChủ nhật đêm : 840.000đ/11h\nlh 0975579293",
+            "created_time_vn": "2025-11-08 09:10:04"
+          },
+          {
+            "id": "61575821927513",
+            "name": "Linh San Lan",
+            "text": "Lừa đảo lô đề ... che đc mắt thg Chồng thôi",
+            "created_time_vn": "2025-10-15 22:25:25"
+          },
+          {
+            "id": "100082898025107",
+            "name": "Nguyễn Hồng Gọn",
+            "text": "AI quản lý quảng cáo nghe hay nè. Có ai dùng chưa?",
+            "created_time_vn": "2025-11-27 19:29:06"
+          },
+          {
+            "id": "61555131120322",
+            "name": "Cát Tường",
+            "text": "Mày chuyên lừa đảo chị em mày thaays nhục ko ?Ăn chạc của chị em ruột thi đời mày xuống dốc ko phanh",
+            "created_time_vn": "2025-10-16 00:17:31"
+          },
+          {
+            "id": "61576317922402",
+            "name": "Ngọc Hương Thư",
+            "text": "Hẹn 1 thg Trả 50 tr t nhà .. lừa cháu ko trả ... cãi bay cãi biến",
+            "created_time_vn": "2025-10-15 23:36:45"
+          },
+          {
+            "id": "61583506074526",
+            "name": "Hoàng Long - Dai-ichi Life GA Nam Từ Liêm 2",
+            "text": "Đi viện tốn gì?\nKhám ban đầu: vài trăm nghìn – vài triệu\nTiền giường nội trú: 100k – 2 triệu/ngày\nThuốc & vật tư: vài trăm nghìn – vài triệu/ngày\nPhẫu thuật: 5 – 100+ triệu\nXét nghiệm lại trong viện: thêm vài triệu\nChi phí ngoài hóa đơn (ăn uống, người chăm…): 100k – 500k/ngày\n👉 Tổng 3–5 ngày nằm viện:\n• Có BHYT: 1–5 triệu\n• Không BHYT: 5–20 triệu\n• Mổ/ bệnh nặng: có thể lên đến hàng chục triệu – hơn 100 triệu.\nBảo hiểm sức khỏe giúp mình giảm gánh nặng rất nhiều khi ốm đau bất ngờ.",
+            "created_time_vn": "2025-11-14 11:41:31"
+          },
+          {
+            "id": "100094073614045",
+            "name": "Smart Money with AI & Crypto",
+            "text": "Google Ads đang train AI để hiểu tâm lý người Việt: \"Mua 1 tặng 1\", \"Sale off 50%\", \"Chỉ còn 3 ngày cuối\" 😂 Thuật toán đã học được cách làm chúng ta \"auto click\" rồi đây! #GoogleAI #AutoClick #VietnamShopping #MarketingGeniuses",
+            "created_time_vn": "2025-10-31 09:36:09"
+          },
+          {
+            "id": "61553242834878",
+            "name": "Nguyệt Ánh",
+            "text": "Con mất dậy .. sống lừa đảo con cháu ? Mày lấy phúc ở đâu cho chồng con mày hưởng ? Ko cẩn thận chết non cả nhà mày",
+            "created_time_vn": "2025-10-15 23:57:47"
+          },
+          {
+            "id": "100091643160429",
+            "name": "Ads Manager - Kết Nối Khách Hàng Bứt Phá Doanh Thu",
+            "text": "𝗦𝗵𝗼𝗽 𝗯𝗮̣𝗻 𝗺𝘂𝗼̂́𝗻 𝗯𝘂̛́𝘁 𝘁𝗼̂́𝗰? 𝗧𝗼̂́𝗶 𝘂̛𝘂 𝗙𝗮𝗰𝗲𝗯𝗼𝗼𝗸 𝗹𝗮̀ 𝗯𝘂̛𝗼̛́𝗰 đ𝗮̂̀𝘂 𝘁𝗶𝗲̂𝗻 đ𝗲̂̉ 𝘁𝗶𝗲̂́𝗽 𝗰𝗮̣̂𝗻 đ𝘂́𝗻𝗴 𝘁𝗲̣̂𝗽 𝗸𝗵𝗮́𝗰𝗵 𝗹𝗮̣ 𝗰𝗼́ 𝗻𝗵𝘂 𝗰𝗮̂̀𝘂 𝗺𝘂𝗮 𝗵𝗮̀𝗻𝗴,. 𝗕𝗲̂𝗻 𝗲𝗺 𝗰𝗵𝘂𝘆𝗲̂𝗻 𝗰𝘂𝗻𝗴 𝗰𝗮̂́𝗽 𝗚𝗶𝗮̉𝗶 𝗽𝗵𝗮́𝗽 𝘁𝗶𝗲̂́𝗽 𝗰𝗮̣̂𝗻 𝗸𝗵𝗮́𝗰𝗵 đ𝘂́𝗻𝗴 𝗻𝗵𝘂 𝗰𝗮̂̀𝘂 đ𝗮𝗻𝗴 𝗰𝗮̂̀𝗻 𝘀𝗮̉𝗻 𝗽𝗵𝗮̂̉𝗺 Mxh 360 - Giải Pháp Toàn Diện",
+            "created_time_vn": "2025-11-17 17:55:52"
+          },
+          {
+            "id": "61581338795254",
+            "name": "F88 135 Mai Thị Hồng Hạnh",
+            "text": "✪ CẦN LÀ CÓ - ĐẾN LÀ DUYỆT✪\n✪ F88 - TÀI CHÍNH BÌNH DÂN ✪\n​☎☎☎ 𝐇𝐨𝐭𝐥𝐢𝐧𝐞: 0297.730.0388\n☎ ZALO: 0764653891\n👉 Đăng ký ngay tại đây: http://vay.f88.vn/1_KGG0349",
+            "created_time_vn": "2025-10-20 08:42:08"
+          },
+          {
+            "id": "100041473875947",
+            "name": "Nguyễn Bảo Ngọc Ly",
+            "text": "⭕️ NẠP 100K  TẶNG 68K \n⭕️ NẠP 300K TẶNG 128K\n⭕️ NẠP 500 TẶNG  168K",
+            "created_time_vn": "2025-11-18 15:36:50"
+          },
+          {
+            "id": "100092250423609",
+            "name": "Kem Xinhh",
+            "text": "Tương tác nha ty",
+            "created_time_vn": "2025-10-03 03:19:20"
+          },
+          {
+            "id": "100080685466820",
+            "name": "Lan Đài Trương",
+            "text": "good",
+            "created_time_vn": "2025-10-04 06:56:18"
+          },
+          {
+            "id": "100081042624704",
+            "name": "Hà Hương",
+            "text": "xin chào",
+            "created_time_vn": "2025-10-16 08:38:44"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "thả tim 🩷tha tt mỗi ngày nhoa ty",
+            "created_time_vn": "2025-11-24 11:43:40"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "đúng gu chất ngất lun 💕CHUẨN 100-->like💋💪",
+            "created_time_vn": "2025-11-18 11:39:31"
+          },
+          {
+            "id": "100039997129171",
+            "name": "Nguyễn Nam",
+            "text": "conmen và like cho nhau nhé",
+            "created_time_vn": "2025-10-18 17:34:13"
+          },
+          {
+            "id": "100039997129171",
+            "name": "Nguyễn Nam",
+            "text": "Google Ads ơi comments và thả ♥️ cho nhau nha🍒🍒🍒🍒🍒🍒🍒😍😍😍😍",
+            "created_time_vn": "2025-10-12 10:58:27"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "Đầu tuan đầy lộc nhe cv",
+            "created_time_vn": "2025-12-11 18:52:48"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "thả tim 🫰🫰 cho ty",
+            "created_time_vn": "2025-11-29 21:23:42"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "ngon ngon nhe blem thiệt nhoa",
+            "created_time_vn": "2025-11-24 16:03:50"
+          },
+          {
+            "id": "100039997129171",
+            "name": "Nguyễn Nam",
+            "text": "📣📣📣📣tt nhe 😍😍😍😍",
+            "created_time_vn": "2025-10-22 05:25:21"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "Ui là chèn blemmm wa ty oi😂",
+            "created_time_vn": "2025-12-10 20:40:48"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "nhìn bén quá cv uiii",
+            "created_time_vn": "2025-12-04 14:05:32"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "thả like thả tim cho tinh yêu nà",
+            "created_time_vn": "2025-11-26 21:08:20"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "DUYỆT nhe  so blem nhìn là ghiền thật oh nhe👍",
+            "created_time_vn": "2025-12-04 12:45:49"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "thả ngàn LIKEE cho be ui lun",
+            "created_time_vn": "2025-11-23 19:33:27"
+          },
+          {
+            "id": "100029099261636",
+            "name": "Phạm Huy",
+            "text": "Hướng dẫn cụ thể ở đây nhé https://byvn.net/cimR",
+            "created_time_vn": "2025-11-08 10:35:00"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "lung linh thế là cùng 💋BLEM",
+            "created_time_vn": "2025-11-29 18:36:50"
+          },
+          {
+            "id": "100010146123696",
+            "name": "Hồng Phạm",
+            "text": "Làm sao để không làm phiền khách nhỉ?",
+            "created_time_vn": "2025-11-23 20:45:01"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "thấy là ban tim🫰🫰",
+            "created_time_vn": "2025-11-24 17:31:53"
+          },
+          {
+            "id": "100080685466820",
+            "name": "Lan Đài Trương",
+            "text": "xinn chàoo",
+            "created_time_vn": "2025-10-03 23:28:24"
+          },
+          {
+            "id": "100092250423609",
+            "name": "Kem Xinhh",
+            "text": "chúc chủ tus một ngày lộc lá nhé",
+            "created_time_vn": "2025-10-06 09:42:09"
+          },
+          {
+            "id": "100026873142348",
+            "name": "Zency Nguyễn",
+            "text": "Cùng nhau tương tác nha",
+            "created_time_vn": "2025-10-25 23:00:38"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "••••Duyệt nhe so cưng",
+            "created_time_vn": "2025-12-03 16:44:59"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "Đỉnh we nhe mê😜blemm",
+            "created_time_vn": "2025-11-29 14:23:59"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "😝xĩu mất thôi thí cưng lam blem^^",
+            "created_time_vn": "2025-11-23 19:40:30"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "ui uiiii💚💚",
+            "created_time_vn": "2025-11-27 12:59:56"
+          },
+          {
+            "id": "100010146123696",
+            "name": "Hồng Phạm",
+            "text": "Khó nhất là làm sao để họ nhớ mình!",
+            "created_time_vn": "2025-11-27 16:34:50"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "BÉN nhe yêu 👄👄",
+            "created_time_vn": "2025-11-22 15:35:42"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "bén ngót z ta ơi ha😵‍💫",
+            "created_time_vn": "2025-11-22 17:32:59"
+          },
+          {
+            "id": "100010146123696",
+            "name": "Hồng Phạm",
+            "text": "Kết nối thế nào để không làm phiền?",
+            "created_time_vn": "2025-11-27 19:42:58"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "quá trài mê ui😚😚",
+            "created_time_vn": "2025-11-29 14:33:20"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "chịu chịu 100 tim lun",
+            "created_time_vn": "2025-12-10 10:03:22"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "cưng dữ lam nh0a cv",
+            "created_time_vn": "2025-12-07 21:17:33"
+          },
+          {
+            "id": "100094148296219",
+            "name": "Tâm Thuy",
+            "text": "Nội dung 3",
+            "created_time_vn": "2025-10-02 19:20:56"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "nhìn muốn xĩu xiu ui nhoa",
+            "created_time_vn": "2025-12-07 19:11:57"
+          },
+          {
+            "id": "100035433741802",
+            "name": "Xưởng Khô Cá Lóc",
+            "text": "bán hàng ngại chi tt, cùng nhau tt nha",
+            "created_time_vn": "2025-12-08 19:47:36"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "bén đ..ứt cái tayy 🤨🤨",
+            "created_time_vn": "2025-11-29 20:06:13"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "chắc tui chớt quáahhhhh😂",
+            "created_time_vn": "2025-11-22 19:03:20"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "sao nhìn đã quá à blemmm gê 💋",
+            "created_time_vn": "2025-12-08 10:10:54"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "iu quáaaaaaaa ah nhe",
+            "created_time_vn": "2025-12-11 19:01:07"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "...siêu iuuu😘😘",
+            "created_time_vn": "2025-12-10 16:44:16"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "🫰🫰 1000 tim lun",
+            "created_time_vn": "2025-12-04 12:49:29"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "qe tưoi lun ty oi \niiii😄😉",
+            "created_time_vn": "2025-11-26 15:16:07"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "💯🧡moaa🧡.🧡",
+            "created_time_vn": "2025-11-27 14:19:16"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "thấy gét gi đâu oh chèn ui",
+            "created_time_vn": "2025-11-30 14:53:41"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "😘iu chớt mất thôiiiii🤤🤤.",
+            "created_time_vn": "2025-12-05 18:25:23"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "mê ko tưởng lun^^love u❤️",
+            "created_time_vn": "2025-12-08 18:02:26"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "😊💜SO BLEM yêu 😉",
+            "created_time_vn": "2025-12-01 21:21:00"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "✂️ cắ t tim t💔",
+            "created_time_vn": "2025-12-02 16:16:24"
+          },
+          {
+            "id": "100010146123696",
+            "name": "Hồng Phạm",
+            "text": "Giữ kết nối sao cho hiệu quả nhất nhỉ?",
+            "created_time_vn": "2025-11-24 16:34:12"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "THÍNH Đ..ỘC NHE 😊nhìn mê lun oh trài oiiiii😻😻😻",
+            "created_time_vn": "2025-12-11 15:13:44"
+          },
+          {
+            "id": "61567894921648",
+            "name": "Heo Quay Giao Hiền",
+            "text": "Chúc Google Ads luôn khoẻ mạnh, bình an và gặp nhiều niềm vui mỗi ngày nha 🌿😊",
+            "created_time_vn": "2025-11-02 13:10:20"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "🤌+😘say đắm lun TYyyyy😚🤟",
+            "created_time_vn": "2025-11-30 22:03:10"
+          },
+          {
+            "id": "61577203947079",
+            "name": "Thi Huong",
+            "text": "hello b nha",
+            "created_time_vn": "2025-10-14 12:45:36"
+          },
+          {
+            "id": "100089212563525",
+            "name": "Jeneth Higoy",
+            "text": "Rất muốn biết thêm về cách tối ưu hóa quảng cáo trên YouTube! 🤔",
+            "created_time_vn": "2025-10-10 16:37:33"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "MOAaaaaaa💋♥️💋",
+            "created_time_vn": "2025-12-06 11:49:07"
+          },
+          {
+            "id": "61574976895874",
+            "name": "Thành\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nNgọt.",
+            "text": "Học hỏi được thêm rất nhiều điều mới! 🔬",
+            "created_time_vn": "2025-10-22 01:58:11"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "NGẦU gê  oi🆘",
+            "created_time_vn": "2025-11-29 15:55:16"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "+++++timmmm 💕",
+            "created_time_vn": "2025-12-08 15:31:14"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "☺️yeu nhoaaa☺️😜",
+            "created_time_vn": "2025-11-30 12:12:52"
+          },
+          {
+            "id": "100010146123696",
+            "name": "Hồng Phạm",
+            "text": "Mấy tips nào giữ KH tiềm năng hiệu quả nhất vậy?",
+            "created_time_vn": "2025-11-27 12:56:47"
+          },
+          {
+            "id": "100004667145783",
+            "name": "Lê Thi",
+            "text": "Sản phẩm ổn áp cực kỳ 💫",
+            "created_time_vn": "2025-10-30 20:20:19"
+          },
+          {
+            "id": "100010146123696",
+            "name": "Hồng Phạm",
+            "text": "Quan trọng thật, có tips gì hay ko mn?",
+            "created_time_vn": "2025-11-24 21:29:22"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "👍ui🤌love😘",
+            "created_time_vn": "2025-12-13 09:23:59"
+          },
+          {
+            "id": "61576216808616",
+            "name": "Lê Tịnh Dương",
+            "text": "685. Gói 2k = 1000 tim TikTok ❤️ Zalo: 0353131260",
+            "created_time_vn": "2025-11-17 21:39:50"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "bbén ngót z ta hiiii 😊",
+            "created_time_vn": "2025-11-23 18:05:53"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "vỡ ❣️timmmmm lun rùi",
+            "created_time_vn": "2025-12-03 15:21:10"
+          },
+          {
+            "id": "100010146123696",
+            "name": "Hồng Phạm",
+            "text": "Vậy cái nào hiệu quả nhất nhỉ?",
+            "created_time_vn": "2025-11-23 20:28:05"
+          },
+          {
+            "id": "100039997129171",
+            "name": "Nguyễn Nam",
+            "text": "📣📣 chúc ❤️❤️❤️ name  nhé🌻🌻🌻",
+            "created_time_vn": "2025-10-08 14:38:35"
+          },
+          {
+            "id": "100057258111443",
+            "name": "Jennifer Đặng",
+            "text": "Quyên ơi, xinh đẹp thế này bảo sao tim em cứ lạc trôi hoài! 😉",
+            "created_time_vn": "2025-10-05 13:16:12"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "+++love🤌+++",
+            "created_time_vn": "2025-12-02 12:41:22"
+          },
+          {
+            "id": "100004667145783",
+            "name": "Lê Thi",
+            "text": "Sản phẩm dùng thấy mê thật 💫",
+            "created_time_vn": "2025-10-25 19:15:32"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "đã quá rui nhaaa",
+            "created_time_vn": "2025-12-06 19:21:09"
+          },
+          {
+            "id": "100003193478226",
+            "name": "Nurul Alifah Abdullah",
+            "text": "Instant Hand Sanitizer oh, fantastically ability 😝👐 😎 that moment when the meme is too real. 😂😚🤡",
+            "created_time_vn": "2025-11-28 18:17:03"
+          },
+          {
+            "id": "61577171410963",
+            "name": "Lum Tung",
+            "text": "Nội dung comment 1",
+            "created_time_vn": "2025-10-02 12:56:58"
+          },
+          {
+            "id": "61577171410963",
+            "name": "Lum Tung",
+            "text": "Nội dung 3",
+            "created_time_vn": "2025-10-02 12:56:40"
+          },
+          {
+            "id": "100085106522012",
+            "name": "Đỗ Quốc Bùi",
+            "text": "Quảng cáo livestream – Công cụ bứt phá doanh số\nBạn tốn tiền quảng cáo nhưng livestream vẫn vắng khách?\nTiền Hải Agency giúp shop tiếp cận đúng khách hàng, tăng tương tác và chốt đơn hiệu quả.\n\n- Cam kết mắt xem thật, tài khoản Agency ổn định, không lo thốc tiền.\n- Hỗ trợ kích page quảng cáo livestream nếu cần.\n- Mỗi ngày đều có báo cáo chi tiết, giúp shop theo dõi sát hiệu quả chạy quảng cáo.\nLiên hệ ngay để được tư vấn miễn phí: 0888.848.655 (Zalo Mr Hội) / 0333.848.655.",
+            "created_time_vn": "2025-12-02 10:56:26"
+          },
+          {
+            "id": "100065085677680",
+            "name": "Bui Thien",
+            "text": "xinn chàoo",
+            "created_time_vn": "2025-10-04 13:11:02"
+          },
+          {
+            "id": "100011603650708",
+            "name": "Thơ Nguyễn",
+            "text": "ThoNguyenBeauty xin chào ❤️ Tương tác cùng mình nha",
+            "created_time_vn": "2025-10-23 15:20:27"
+          },
+          {
+            "id": "100053090900253",
+            "name": "Ben Nguyen",
+            "text": "Quảng cáo hay quá! 🤔 Tìm hiểu ngay thôi!",
+            "created_time_vn": "2025-11-10 13:38:19"
+          },
+          {
+            "id": "100035170861322",
+            "name": "วา'เลน ไทน์ ฯ.",
+            "text": "Wow, that sounds incredibly helpful! Definitely need to look into this. Thanks for sharing!",
+            "created_time_vn": "2025-10-29 21:19:31"
+          },
+          {
+            "id": "100066302663939",
+            "name": "Nguyễn Khánh Linh",
+            "text": "dí dỏm, hài hước",
+            "created_time_vn": "2025-11-26 15:25:37"
+          },
+          {
+            "id": "100085897737942",
+            "name": "Son Tran The",
+            "text": "Đáp án C + 782 + Sinh nhật KidsPlaza Hải Phòng + Long Văn Lê Thị Quyên Hằng Phạm",
+            "created_time_vn": "2025-11-08 08:26:32"
+          },
+          {
+            "id": "61573913737629",
+            "name": "Huynh Tan Huy",
+            "text": "ngày mới vui vẻ 😑 .B",
+            "created_time_vn": "2025-10-29 08:32:19"
+          },
+          {
+            "id": "100093881454095",
+            "name": "Lê Quang Nhân",
+            "text": "Chúc bạn năm mới đủ tốc độ để chạy thoát khỏi mọi deadline (hạn chót), đủ sức mạnh để cõng mọi gánh nặng lo âu. Tóm lại, phải \"Mã Đáo Thành Công\" nhưng nhớ giữ phanh Hoàng Trang Linh Hải Yến Trần Ngọc Hải Quỳnh",
+            "created_time_vn": "2025-12-05 11:12:29"
+          },
+          {
+            "id": "100010146123696",
+            "name": "Hồng Phạm",
+            "text": "Giữ tương tác mà không spam mới khó chứ.",
+            "created_time_vn": "2025-11-21 08:15:42"
+          },
+          {
+            "id": "100090184350702",
+            "name": "Khanh Chi Van",
+            "text": "Chúc bạn năm mới đủ tốc độ để chạy thoát khỏi mọi deadline (hạn chót), đủ sức mạnh để cõng mọi gánh nặng lo âu. Tóm lại, phải \"Mã Đáo Thành Công\" nhưng nhớ giữ phanh Pura Arena Nguyễn Trung Hiếu Mee Ben",
+            "created_time_vn": "2025-12-05 09:22:38"
+          },
+          {
+            "id": "61579381330268",
+            "name": "Nguyễn Phương Thảo",
+            "text": "Qúa tuyệt vời",
+            "created_time_vn": "2025-12-10 13:47:39"
+          },
+          {
+            "id": "100068789210183",
+            "name": "Bích Loan Hồ",
+            "text": "Rồi xong, AI mà cũng đi bán nước giặt xả là tui xin thua! 😂 Mà thôi, cứ để AI nó \"tri ân khách hàng hiệu thuốc\" đi, mình cứ tập trung \"phát triển kinh doanh\" đã! 😜",
+            "created_time_vn": "2025-10-03 18:49:42"
+          },
+          {
+            "id": "61577758443660",
+            "name": "Huy Anh",
+            "text": "ĐÂY LÀ BÀI ĐĂNG TỰ ĐỘNG\n\nBÁN ACC CLONE FACEBOOK - FULL 2FA - NGÂM TRÂU 8 THÁNG 🔥\n✅ Hỗ trợ spam tay + tool, bảo hành acc die/ checkpoint trong 7 ngày đầu 1 đổi 1\n✅ Cân mọi giao dịch trung gian \n✅ Full bạn bè, avt, ảnh bìa - acc trâu chuyên spam\n✅ Giá cực rẻ, như giá clone trắng\n⚠️ Anh em lưu ý: Chọn nguồn clone cực kỳ quan trọng - bên em chỉ cung cấp acc đã ngâm spam trên 8 tháng, chịu spam tốt - tránh tình trạng mua acc trên các web mới log 30p đã die, spam vài cmt đã die/checkpoint. Vì các acc trên web hầu hết là ních mới hoặc mới chỉ ngâm vài ngày đến vài tuần còn rất yếu\n\n🎯 Acc bên em có gì?\n• Full 2FA - qua spam trâu trên 8 tháng\nđã qua gỡ checkpoint nhiều lần\n• Sẵn bạn bè \n• Avt + ảnh bìa - độ trust cao\n• Hỗ trợ quy trình spam bên em (Tool + trick spam sống lâu)\n• Cam kết bảo hành 7 ngày - lỗi đổi acc mới 1:1\n\n📩 Inbox Fb ngay hoặc Z.A.L.O 0787076429  để test acc - dùng thử quy trình spam hiệu quả!\n🛡️ Uy tín tạo nên thương hiệu - bán acc là phải có bảo hành!",
+            "created_time_vn": "2025-12-05 11:24:09"
+          },
+          {
+            "id": "100072857650328",
+            "name": "Hoa Anh Mai",
+            "text": "ZALO TÚI  https://zalo.me/g/inwvfs117\nZALO QUẦN ÁO QCCC https://zalo.me/g/nouukf919",
+            "created_time_vn": "2025-10-02 12:10:58"
+          },
+          {
+            "id": "61550882822847",
+            "name": "Thị Lệ Quyên",
+            "text": "Đáp án C + 420 + Sinh nhật KidsPlaza Hải Phòng + Nguyệt Moon Trần Kenny Hoài Nam",
+            "created_time_vn": "2025-11-08 07:36:21"
+          },
+          {
+            "id": "61577835693056",
+            "name": "Linh Hạ",
+            "text": "ib....",
+            "created_time_vn": "2025-11-25 15:46:04"
+          },
+          {
+            "id": "100004837362784",
+            "name": "Thái Hòa",
+            "text": "ZKV Luxury xịn quá, sale 15%, mọi người bấm ngay: https://byvn.net/mUWE",
+            "created_time_vn": "2025-10-02 18:50:28"
+          },
+          {
+            "id": "100010146123696",
+            "name": "Hồng Phạm",
+            "text": "Nên chạy YouTube Ads không mọi người?",
+            "created_time_vn": "2025-11-23 16:31:09"
+          },
+          {
+            "id": "61550716772041",
+            "name": "Thái Bảo Võ",
+            "text": "Ibox giúp mình nhé",
+            "created_time_vn": "2025-10-02 10:39:15"
+          },
+          {
+            "id": "100070020588557",
+            "name": "Linh Quỳnh",
+            "text": "Nội dung 2",
+            "created_time_vn": "2025-10-18 05:53:49"
+          },
+          {
+            "id": "100070399322134",
+            "name": "Mai Thảo",
+            "text": "mới được nhận bút xinh lắm mà mực đen",
+            "created_time_vn": "2025-10-22 00:20:21"
+          },
+          {
+            "id": "100080916420394",
+            "name": "Lê Thanh Diệu Loan",
+            "text": "Map du lịch của mình cần review LOCAL có Hình ảnh tại nhiều thành phố. Team làm rất chuẩn IP. Dịch vụ còn bao gồm Phục hồi Maps và Xử lý 1 sao xấu. DV tăng review TOP 1 là đây! Zalo: 𝟬 𝟯 𝟴 𝟯 𝟳 𝟵 𝟰 𝟰 𝟰 𝟰.",
+            "created_time_vn": "2025-11-28 09:25:10"
+          },
+          {
+            "id": "100094124551519",
+            "name": "Bùi Kim Ngân",
+            "text": "Tương tác vui vẻ",
+            "created_time_vn": "2025-10-02 17:41:38"
+          },
+          {
+            "id": "100070039696667",
+            "name": "Hoa Đoàn",
+            "text": "mới được nhận bút xinh lắm mà mực đen",
+            "created_time_vn": "2025-10-22 00:24:02"
+          },
+          {
+            "id": "100069895732949",
+            "name": "Đặng Ngọc",
+            "text": "mới được nhận bút xinh lắm mà mực đen",
+            "created_time_vn": "2025-10-21 22:11:10"
+          },
+          {
+            "id": "100069850804586",
+            "name": "Trâm Phương",
+            "text": "mới được nhận bút xinh lắm mà mực đen",
+            "created_time_vn": "2025-10-19 19:08:43"
+          },
+          {
+            "id": "100083201255228",
+            "name": "Anh Mai",
+            "text": "Hi2Chị ơi, em Quỳnh có mẫu xinh lắm, nội địa hàng chuẩn,chị xem thử nha Góc Tạp Hoá Nhà BƠ 🥑𝖫𝖺𝗇𝗀 𝖳𝗁𝖺𝗇𝗀 𝖳𝗋𝗎𝗇𝗀 𝖰𝗎ố𝖼 Nhặt Hàng ( Sale - Hot Trend )🥑",
+            "created_time_vn": "2025-10-04 12:02:51"
+          },
+          {
+            "id": "100065085677680",
+            "name": "Bui Thien",
+            "text": "good",
+            "created_time_vn": "2025-10-03 14:57:35"
+          },
+          {
+            "id": "100054700774785",
+            "name": "Nguyễn Tuấn",
+            "text": "Hay đó bạn ơi! Còn nền tảng nào khác nữa không ạ? 🤔",
+            "created_time_vn": "2025-10-05 09:21:23"
+          },
+          {
+            "id": "100010146123696",
+            "name": "Hồng Phạm",
+            "text": "YouTube Ads có hiệu quả hơn nền tảng khác không nhỉ?",
+            "created_time_vn": "2025-11-23 15:08:17"
+          },
+          {
+            "id": "100093067592511",
+            "name": "Hoàng Ngạn Minh",
+            "text": "Năm mới chúc bạn luôn có Mãnh Lực tài chính, Mã Lực tình yêu. Tiền vào như suối, tiêu xài không cần đắn đo, và nhớ đừng bao giờ \"cưỡi ngựa xem hoa\" với các cơ hội tốt KHÔNG TÊN Lê Phi Long Pháo Hoa Mỹ Đức",
+            "created_time_vn": "2025-12-06 09:39:17"
+          },
+          {
+            "id": "61576232606008",
+            "name": "Tiphany Ruri",
+            "text": "ĐÂY LÀ BÀI ĐĂNG TỰ ĐỘNG\n\nBÁN ACC CLONE FACEBOOK - FULL 2FA - NGÂM TRÂU 8 THÁNG 🔥\n✅ Hỗ trợ spam tay + tool, bảo hành acc die/ checkpoint trong 7 ngày đầu 1 đổi 1\n✅ Cân mọi giao dịch trung gian \n✅ Full bạn bè, avt, ảnh bìa - acc trâu chuyên spam\n✅ Giá cực rẻ, như giá clone trắng\n⚠️ Anh em lưu ý: Chọn nguồn clone cực kỳ quan trọng - bên em chỉ cung cấp acc đã ngâm spam trên 8 tháng, chịu spam tốt - tránh tình trạng mua acc trên các web mới log 30p đã die, spam vài cmt đã die/checkpoint. Vì các acc trên web hầu hết là ních mới hoặc mới chỉ ngâm vài ngày đến vài tuần còn rất yếu\n\n🎯 Acc bên em có gì?\n• Full 2FA - qua spam trâu trên 8 tháng\nđã qua gỡ checkpoint nhiều lần\n• Sẵn bạn bè \n• Avt + ảnh bìa - độ trust cao\n• Hỗ trợ quy trình spam bên em (Tool + trick spam sống lâu)\n• Cam kết bảo hành 7 ngày - lỗi đổi acc mới 1:1\n\n📩 Inbox Fb ngay hoặc Z.A.L.O 0787076429  để test acc - dùng thử quy trình spam hiệu quả!\n🛡️ Uy tín tạo nên thương hiệu - bán acc là phải có bảo hành!",
+            "created_time_vn": "2025-12-04 11:56:07"
+          },
+          {
+            "id": "61564179112005",
+            "name": "Tô Trường",
+            "text": "Chúc bạn năm nay có sức khỏe khỏe như ngựa, tinh thần sung mãn như chiến mã, nhưng nhớ giữ mồm giữ miệng, đừng \"nói như ngựa hí\" nhé Trần Tài Lê Hưng Máy In Nguyễn Dương",
+            "created_time_vn": "2025-12-05 10:52:55"
+          },
+          {
+            "id": "100071371495160",
+            "name": "Bablu Shah",
+            "text": "Really nice",
+            "created_time_vn": "2025-10-01 22:02:35"
+          },
+          {
+            "id": "61578697734762",
+            "name": "Goda Harmony",
+            "text": "ĐÂY LÀ BÀI ĐĂNG TỰ ĐỘNG\n\nBÁN ACC CLONE FACEBOOK - FULL 2FA - NGÂM TRÂU 8 THÁNG 🔥\n✅ Hỗ trợ spam tay + tool, bảo hành acc die/ checkpoint trong 7 ngày đầu 1 đổi 1\n✅ Cân mọi giao dịch trung gian \n✅ Full bạn bè, avt, ảnh bìa - acc trâu chuyên spam\n✅ Giá cực rẻ, như giá clone trắng\n⚠️ Anh em lưu ý: Chọn nguồn clone cực kỳ quan trọng - bên em chỉ cung cấp acc đã ngâm spam trên 8 tháng, chịu spam tốt - tránh tình trạng mua acc trên các web mới log 30p đã die, spam vài cmt đã die/checkpoint. Vì các acc trên web hầu hết là ních mới hoặc mới chỉ ngâm vài ngày đến vài tuần còn rất yếu\n\n🎯 Acc bên em có gì?\n• Full 2FA - qua spam trâu trên 8 tháng\nđã qua gỡ checkpoint nhiều lần\n• Sẵn bạn bè \n• Avt + ảnh bìa - độ trust cao\n• Hỗ trợ quy trình spam bên em (Tool + trick spam sống lâu)\n• Cam kết bảo hành 7 ngày - lỗi đổi acc mới 1:1\n\n📩 Inbox Fb ngay hoặc Z.A.L.O 0787076429  để test acc - dùng thử quy trình spam hiệu quả!\n🛡️ Uy tín tạo nên thương hiệu - bán acc là phải có bảo hành!",
+            "created_time_vn": "2025-12-05 17:48:12"
+          },
+          {
+            "id": "100010146123696",
+            "name": "Hồng Phạm",
+            "text": "Có mẹo gì để tối ưu YouTube Ads đa nền tảng?",
+            "created_time_vn": "2025-11-23 17:15:52"
+          },
+          {
+            "id": "100071210919331",
+            "name": "Dangvu Hoanganh",
+            "text": "https://forms.gle/3EvtTk6VzAbppzq88",
+            "created_time_vn": "2025-11-07 22:16:06"
+          },
+          {
+            "id": "100063644996673",
+            "name": "Nguyễn Huyền",
+            "text": "mới được nhận bút xinh lắm mà mực đen",
+            "created_time_vn": "2025-10-21 21:19:30"
+          },
+          {
+            "id": "100072377756389",
+            "name": "Phan Thái Mỹ Thanh",
+            "text": "",
+            "created_time_vn": "2025-10-25 16:01:37"
+          },
+          {
+            "id": "61574315413246",
+            "name": "Bùi Tuấn Kiệt",
+            "text": "ĐÂY LÀ BÀI ĐĂNG TỰ ĐỘNG\n\nBÁN ACC CLONE FACEBOOK - FULL 2FA - NGÂM TRÂU 8 THÁNG 🔥\n✅ Hỗ trợ spam tay + tool, bảo hành acc die/ checkpoint trong 7 ngày đầu 1 đổi 1\n✅ Cân mọi giao dịch trung gian \n✅ Full bạn bè, avt, ảnh bìa - acc trâu chuyên spam\n✅ Giá cực rẻ, như giá clone trắng\n⚠️ Anh em lưu ý: Chọn nguồn clone cực kỳ quan trọng - bên em chỉ cung cấp acc đã ngâm spam trên 8 tháng, chịu spam tốt - tránh tình trạng mua acc trên các web mới log 30p đã die, spam vài cmt đã die/checkpoint. Vì các acc trên web hầu hết là ních mới hoặc mới chỉ ngâm vài ngày đến vài tuần còn rất yếu\n\n🎯 Acc bên em có gì?\n• Full 2FA - qua spam trâu trên 8 tháng\nđã qua gỡ checkpoint nhiều lần\n• Sẵn bạn bè \n• Avt + ảnh bìa - độ trust cao\n• Hỗ trợ quy trình spam bên em (Tool + trick spam sống lâu)\n• Cam kết bảo hành 7 ngày - lỗi đổi acc mới 1:1\n\n📩 Inbox Fb ngay hoặc Z.A.L.O 0787076429  để test acc - dùng thử quy trình spam hiệu quả!\n🛡️ Uy tín tạo nên thương hiệu - bán acc là phải có bảo hành!",
+            "created_time_vn": "2025-11-29 11:58:44"
+          },
+          {
+            "id": "100059626030069",
+            "name": "Nguyễn Yên",
+            "text": "",
+            "created_time_vn": "2025-10-27 16:26:40"
+          },
+          {
+            "id": "100069212790260",
+            "name": "Nguyễn Thành Nam",
+            "text": "",
+            "created_time_vn": "2025-10-24 11:12:00"
+          },
+          {
+            "id": "100068965561825",
+            "name": "Kada Mati-কাদামাটি",
+            "text": "😻👍  😝😧",
+            "created_time_vn": "2025-11-21 03:46:55"
+          },
+          {
+            "id": "100029595614516",
+            "name": "Mộc Cát",
+            "text": "",
+            "created_time_vn": "2025-10-17 15:49:27"
+          },
+          {
+            "id": "61578653246351",
+            "name": "Phan Tường Vân",
+            "text": "ĐÂY LÀ BÀI ĐĂNG TỰ ĐỘNG\n\nBÁN ACC CLONE FACEBOOK - FULL 2FA - NGÂM TRÂU 8 THÁNG 🔥\n✅ Hỗ trợ spam tay + tool, bảo hành acc die/ checkpoint trong 7 ngày đầu 1 đổi 1\n✅ Cân mọi giao dịch trung gian \n✅ Full bạn bè, avt, ảnh bìa - acc trâu chuyên spam\n✅ Giá cực rẻ, như giá clone trắng\n⚠️ Anh em lưu ý: Chọn nguồn clone cực kỳ quan trọng - bên em chỉ cung cấp acc đã ngâm spam trên 8 tháng, chịu spam tốt - tránh tình trạng mua acc trên các web mới log 30p đã die, spam vài cmt đã die/checkpoint. Vì các acc trên web hầu hết là ních mới hoặc mới chỉ ngâm vài ngày đến vài tuần còn rất yếu\n\n🎯 Acc bên em có gì?\n• Full 2FA - qua spam trâu trên 8 tháng\nđã qua gỡ checkpoint nhiều lần\n• Sẵn bạn bè \n• Avt + ảnh bìa - độ trust cao\n• Hỗ trợ quy trình spam bên em (Tool + trick spam sống lâu)\n• Cam kết bảo hành 7 ngày - lỗi đổi acc mới 1:1\n\n📩 Inbox Fb ngay hoặc Z.A.L.O 0787076429  để test acc - dùng thử quy trình spam hiệu quả!\n🛡️ Uy tín tạo nên thương hiệu - bán acc là phải có bảo hành!",
+            "created_time_vn": "2025-11-29 12:46:22"
+          },
+          {
+            "id": "100019035406502",
+            "name": "Nhấn Mí Vĩnh Long",
+            "text": "<3 <3 <3",
+            "created_time_vn": "2025-11-06 12:50:54"
+          },
+          {
+            "id": "61574649492788",
+            "name": "Takeshi Konya",
+            "text": "ĐÂY LÀ BÀI ĐĂNG TỰ ĐỘNG\n\nBÁN ACC CLONE FACEBOOK - FULL 2FA - NGÂM TRÂU 8 THÁNG 🔥\n✅ Hỗ trợ spam tay + tool, bảo hành acc die/ checkpoint trong 7 ngày đầu 1 đổi 1\n✅ Cân mọi giao dịch trung gian \n✅ Full bạn bè, avt, ảnh bìa - acc trâu chuyên spam\n✅ Giá cực rẻ, như giá clone trắng\n⚠️ Anh em lưu ý: Chọn nguồn clone cực kỳ quan trọng - bên em chỉ cung cấp acc đã ngâm spam trên 8 tháng, chịu spam tốt - tránh tình trạng mua acc trên các web mới log 30p đã die, spam vài cmt đã die/checkpoint. Vì các acc trên web hầu hết là ních mới hoặc mới chỉ ngâm vài ngày đến vài tuần còn rất yếu\n\n🎯 Acc bên em có gì?\n• Full 2FA - qua spam trâu trên 8 tháng\nđã qua gỡ checkpoint nhiều lần\n• Sẵn bạn bè \n• Avt + ảnh bìa - độ trust cao\n• Hỗ trợ quy trình spam bên em (Tool + trick spam sống lâu)\n• Cam kết bảo hành 7 ngày - lỗi đổi acc mới 1:1\n\n📩 Inbox Fb ngay hoặc Z.A.L.O 0787076429  để test acc - dùng thử quy trình spam hiệu quả!\n🛡️ Uy tín tạo nên thương hiệu - bán acc là phải có bảo hành!",
+            "created_time_vn": "2025-12-03 10:35:11"
+          },
+          {
+            "id": "100000337479326",
+            "name": "Jonly Nguyễn",
+            "text": "",
+            "created_time_vn": "2025-12-04 16:22:51"
+          },
+          {
+            "id": "100040820550946",
+            "name": "Nguyễn Gia Bảo",
+            "text": "❤️",
+            "created_time_vn": "2025-10-23 18:21:00"
+          },
+          {
+            "id": "100030531736828",
+            "name": "Xe Máy Bảo Vy",
+            "text": "",
+            "created_time_vn": "2025-11-06 16:28:46"
+          },
+          {
+            "id": "100005615563103",
+            "name": "Tú Tú",
+            "text": "🖤",
+            "created_time_vn": "2025-10-25 09:40:37"
+          },
+          {
+            "id": "100006815075990",
+            "name": "Diem Chau",
+            "text": "",
+            "created_time_vn": "2025-10-29 13:01:44"
+          },
+          {
+            "id": "61574110607256",
+            "name": "Gabriel Shop ACE",
+            "text": "<3",
+            "created_time_vn": "2025-11-28 15:25:37"
+          },
+          {
+            "id": "100003163276094",
+            "name": "Lê Như Trúc",
+            "text": "💗💗💗",
+            "created_time_vn": "2025-10-10 19:59:53"
+          },
+          {
+            "id": "61553137958836",
+            "name": "Đồng Tâm",
+            "text": "",
+            "created_time_vn": "2025-10-29 14:38:45"
+          },
+          {
+            "id": "100095448218689",
+            "name": "Uyên Thị",
+            "text": "",
+            "created_time_vn": "2025-10-26 19:05:58"
+          },
+          {
+            "id": "100008087553689",
+            "name": "Vang Hoa Hong",
+            "text": "❤️",
+            "created_time_vn": "2025-10-28 19:35:04"
+          },
+          {
+            "id": "61558225924451",
+            "name": "H.Kỳ Hân",
+            "text": "🌸🌸🌸🌸🌸🌸",
+            "created_time_vn": "2025-11-10 08:02:45"
+          },
+          {
+            "id": "100087275617731",
+            "name": "Xăm Phun Ngân CaLee",
+            "text": "<3 <3 <3",
+            "created_time_vn": "2025-11-04 17:11:05"
+          },
+          {
+            "id": "61558225924451",
+            "name": "H.Kỳ Hân",
+            "text": "🌹🌹🌹🌹🌹🌹",
+            "created_time_vn": "2025-10-12 09:55:59"
+          },
+          {
+            "id": "61558225924451",
+            "name": "H.Kỳ Hân",
+            "text": "🌸🌸🌸🌸🌸",
+            "created_time_vn": "2025-10-11 09:35:17"
+          },
+          {
+            "id": "100010146123696",
+            "name": "Hồng Phạm",
+            "text": "Làm sao kết nối khách tiềm năng hiệu quả?",
+            "created_time_vn": "2025-11-27 19:25:49"
+          },
+          {
+            "id": "100088444084365",
+            "name": "Võ Quang Bảo",
+            "text": "🌱",
+            "created_time_vn": "2025-10-03 12:57:58"
+          },
+          {
+            "id": "100072487330925",
+            "name": "Dinh Dieu My",
+            "text": "",
+            "created_time_vn": "2025-10-27 13:19:29"
+          },
+          {
+            "id": "100024555773581",
+            "name": "Trại Chim Miền Bắc",
+            "text": "",
+            "created_time_vn": "2025-10-18 12:36:55"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": ">>>>😘....",
+            "created_time_vn": "2025-12-04 20:23:17"
+          },
+          {
+            "id": "100007257905909",
+            "name": "Phú Hoàng Thị",
+            "text": "",
+            "created_time_vn": "2025-10-04 22:42:03"
+          },
+          {
+            "id": "100004009415173",
+            "name": "Ngân CaLee",
+            "text": "<3 <3 <3",
+            "created_time_vn": "2025-10-27 11:10:34"
+          },
+          {
+            "id": "100064186325870",
+            "name": "Bs Dương Văn Quân - Viện Ung Bướu Tuyến Giáp",
+            "text": "🤩",
+            "created_time_vn": "2025-11-06 15:34:06"
+          },
+          {
+            "id": "100013487506335",
+            "name": "Nguyễn Thị Tuyết",
+            "text": "💖",
+            "created_time_vn": "2025-10-09 20:41:06"
+          },
+          {
+            "id": "100002466069570",
+            "name": "Nguyễn Trang",
+            "text": "",
+            "created_time_vn": "2025-10-29 17:14:41"
+          },
+          {
+            "id": "100010083885119",
+            "name": "Hoà Ruby Vua Nám",
+            "text": "",
+            "created_time_vn": "2025-10-31 17:58:45"
+          },
+          {
+            "id": "100073167124572",
+            "name": "Nguyệt Minh Loan",
+            "text": "",
+            "created_time_vn": "2025-10-18 09:14:28"
+          },
+          {
+            "id": "100004876143227",
+            "name": "Nguyễn Vân Anh",
+            "text": "🍀🍀🍀",
+            "created_time_vn": "2025-10-26 17:53:10"
+          },
+          {
+            "id": "100035542175597",
+            "name": "Nguyễn Hồng",
+            "text": "☘",
+            "created_time_vn": "2025-11-07 07:29:33"
+          },
+          {
+            "id": "100027348696807",
+            "name": "Lê Anh",
+            "text": "❤️",
+            "created_time_vn": "2025-10-26 07:25:13"
+          },
+          {
+            "id": "100039997129171",
+            "name": "Nguyễn Nam",
+            "text": "❤️💥💥💥❤️❤️❤️💥💥💥❤️💓💓💓❤️❤️💥🤝🤝❤️❤️❤️",
+            "created_time_vn": "2025-11-03 15:24:23"
+          },
+          {
+            "id": "100087054717049",
+            "name": "Na Phượng Hậu",
+            "text": "💖💖 \n10:56:25 - 17/10/2025",
+            "created_time_vn": "2025-10-17 10:56:26"
+          },
+          {
+            "id": "100028449421951",
+            "name": "Lan Anh",
+            "text": ".",
+            "created_time_vn": "2025-10-29 12:01:40"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "...💋...",
+            "created_time_vn": "2025-11-18 12:47:28"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "❣️__💛_❣️^^",
+            "created_time_vn": "2025-11-18 16:30:49"
+          },
+          {
+            "id": "100019074513407",
+            "name": "Trang Sĩ Xilít",
+            "text": "🧡",
+            "created_time_vn": "2025-10-07 18:25:42"
+          },
+          {
+            "id": "100039997129171",
+            "name": "Nguyễn Nam",
+            "text": "💝 😍😍",
+            "created_time_vn": "2025-10-09 13:52:41"
+          },
+          {
+            "id": "100039997129171",
+            "name": "Nguyễn Nam",
+            "text": "❤️❤️❤️❤️",
+            "created_time_vn": "2025-10-17 13:30:27"
+          },
+          {
+            "id": "100039997129171",
+            "name": "Nguyễn Nam",
+            "text": "🌷📣📣📣🌷🌷❤️",
+            "created_time_vn": "2025-10-15 12:42:28"
+          },
+          {
+            "id": "100039997129171",
+            "name": "Nguyễn Nam",
+            "text": "❤️❤️🌷🌷",
+            "created_time_vn": "2025-10-10 13:03:15"
+          },
+          {
+            "id": "100039997129171",
+            "name": "Nguyễn Nam",
+            "text": "🌴🌴🌱🌱🌟",
+            "created_time_vn": "2025-10-09 07:31:50"
+          },
+          {
+            "id": "100039997129171",
+            "name": "Nguyễn Nam",
+            "text": "🥇🥇💯💯",
+            "created_time_vn": "2025-10-17 13:30:02"
+          },
+          {
+            "id": "61558225924451",
+            "name": "H.Kỳ Hân",
+            "text": "🌷🌷🌷🌷🌷",
+            "created_time_vn": "2025-10-04 08:43:14"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "‼️---💜--‼️",
+            "created_time_vn": "2025-11-24 13:09:08"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": ".😜😜+😉",
+            "created_time_vn": "2025-11-27 09:31:18"
+          },
+          {
+            "id": "100026047372699",
+            "name": "Đỗ Ngân",
+            "text": "<3",
+            "created_time_vn": "2025-12-01 17:52:17"
+          },
+          {
+            "id": "61562031986635",
+            "name": "Tô Gia Huấn",
+            "text": "😊",
+            "created_time_vn": "2025-10-13 13:35:04"
+          },
+          {
+            "id": "100006681911817",
+            "name": "Linh Phạm Hoài",
+            "text": "🙊",
+            "created_time_vn": "2025-10-07 15:52:47"
+          },
+          {
+            "id": "100006251196602",
+            "name": "Nguyễn Thị Nam",
+            "text": "💝💝💝",
+            "created_time_vn": "2025-10-08 14:28:20"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "'''...<💙",
+            "created_time_vn": "2025-12-10 19:23:25"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "😊•••••❣️",
+            "created_time_vn": "2025-11-24 10:19:17"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "👍+🤌+😘",
+            "created_time_vn": "2025-11-30 13:05:07"
+          },
+          {
+            "id": "100004299451261",
+            "name": "Trần Thị Ngọc Diệu",
+            "text": "👌",
+            "created_time_vn": "2025-10-07 09:46:29"
+          },
+          {
+            "id": "100010291742375",
+            "name": "Candy Trinh",
+            "text": "",
+            "created_time_vn": "2025-10-25 07:25:12"
+          },
+          {
+            "id": "100073112582996",
+            "name": "Phương Trinh Tiên",
+            "text": "",
+            "created_time_vn": "2025-10-17 09:40:47"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "👄👄👄",
+            "created_time_vn": "2025-11-24 10:22:09"
+          },
+          {
+            "id": "100003788861496",
+            "name": "Trâm Po Huỳnh",
+            "text": "❤️",
+            "created_time_vn": "2025-12-02 09:59:38"
+          },
+          {
+            "id": "100065085677680",
+            "name": "Bui Thien",
+            "text": "🥰🥰",
+            "created_time_vn": "2025-10-05 08:14:45"
+          },
+          {
+            "id": "100089954899142",
+            "name": "Kiều Linh",
+            "text": "🥰🥰",
+            "created_time_vn": "2025-10-03 15:04:03"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "🌸^^",
+            "created_time_vn": "2025-12-10 13:00:36"
+          },
+          {
+            "id": "100003659478400",
+            "name": "Hoàng Thị Thu Hoài",
+            "text": "❤️❤️❤️",
+            "created_time_vn": "2025-12-11 10:34:32"
+          },
+          {
+            "id": "100093036590635",
+            "name": "Lồng Đẹp Bảo Quân",
+            "text": "<3 <3",
+            "created_time_vn": "2025-10-14 15:00:55"
+          },
+          {
+            "id": "100014035036544",
+            "name": "Ngư Đậu Đậu",
+            "text": "",
+            "created_time_vn": "2025-10-05 17:03:09"
+          },
+          {
+            "id": "100076047635226",
+            "name": "Cầm Đồ Nguyễn GiaTrí",
+            "text": "Nhận cầm cố tất cả các loại tài sản:Laptop, điện thoại, ipad ,xe máy, oto,đồ hiệu..... giá cao.\nĐịa chỉ: CẦM ĐỒ VIETMONEY 186 Nguyễn Gia Trí P25 Q.Bình Thạnh TPHCM\nHotline: 19008009",
+            "created_time_vn": "2025-10-06 11:07:25"
+          },
+          {
+            "id": "100006251196602",
+            "name": "Nguyễn Thị Nam",
+            "text": "🌷📣📣📣🌷🌷❤️❤️❤️🌷🌷💥💥💥🌷🌷",
+            "created_time_vn": "2025-10-09 07:30:19"
+          },
+          {
+            "id": "100006251196602",
+            "name": "Nguyễn Thị Nam",
+            "text": "❤️❤️🌷🌷",
+            "created_time_vn": "2025-10-09 14:57:15"
+          },
+          {
+            "id": "100006251196602",
+            "name": "Nguyễn Thị Nam",
+            "text": "💝💝💯💯💯",
+            "created_time_vn": "2025-10-07 07:44:36"
+          },
+          {
+            "id": "100088074794820",
+            "name": "Thái Hiền",
+            "text": ":)",
+            "created_time_vn": "2025-10-21 21:18:50"
+          },
+          {
+            "id": "61553969805309",
+            "name": "Thanh Hiêu Quách",
+            "text": "@goodluck386",
+            "created_time_vn": "2025-11-29 21:44:50"
+          },
+          {
+            "id": "100057805115156",
+            "name": "Ngọc Thanh",
+            "text": "🌪",
+            "created_time_vn": "2025-10-03 14:40:45"
+          },
+          {
+            "id": "100086849041464",
+            "name": "Khải Minh Sự",
+            "text": "⛈",
+            "created_time_vn": "2025-10-03 10:49:14"
+          },
+          {
+            "id": "61554024308850",
+            "name": "Đường Thanh Vy",
+            "text": "@goodluck386",
+            "created_time_vn": "2025-12-02 21:36:23"
+          },
+          {
+            "id": "100089378621191",
+            "name": "Partridge Jyoshna",
+            "text": "22:36:06",
+            "created_time_vn": "2025-10-01 23:50:10"
+          },
+          {
+            "id": "100086407351979",
+            "name": "Vinfast Móng Cái - 0981805047",
+            "text": "mình đang sữ dụng, thấy hiệu quả, giá hợp lý",
+            "created_time_vn": "2025-11-27 10:41:46"
+          },
+          {
+            "id": "100025193200496",
+            "name": "Thu Hiền",
+            "text": "CMT tự động Hello  Google Ads . 𝐛𝐞̂𝐧 𝐇𝐢𝐞̂̀𝐧 𝐜𝐡𝐮𝐲𝐞̂𝐧 quần áo, giày dép, túi sách hàng hotgirl chuẩn mẫu loại 1, ord taobao, ship nước ngoài",
+            "created_time_vn": "2025-10-30 13:43:33"
+          },
+          {
+            "id": "61554740793003",
+            "name": "Giàu Huy",
+            "text": "❤️❤️❤️❤️❤️Google Ads",
+            "created_time_vn": "2025-10-20 20:47:37"
+          },
+          {
+            "id": "61554018565289",
+            "name": "Phượng Oʀder China",
+            "text": "Em ghé qua Google Ads để xin chút tương tác 🫶 Mẹ Bắp Order uy tín, order nhanh gọn nha 🌸",
+            "created_time_vn": "2025-10-01 21:13:12"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "đúng gu chất ngất lun nèhhhh🌟",
+            "created_time_vn": "2025-11-29 13:05:44"
+          },
+          {
+            "id": "61580808680533",
+            "name": "Alice Collins",
+            "text": "🙂",
+            "created_time_vn": "2025-10-03 21:19:00"
+          },
+          {
+            "id": "100086343225983",
+            "name": "Nguyễn Hơn",
+            "text": "Đáp án C + 972 + Sinh nhật KidsPlaza Hải Phòng + Nguyen Thị Hải Binh Trần Huy Hoàng Hồng Tuyết",
+            "created_time_vn": "2025-11-08 10:03:32"
+          },
+          {
+            "id": "100080281520203",
+            "name": "Linh Phạm Thùy",
+            "text": "Đáp án C + 497 + Sinh nhật KidsPlaza Hải Phòng + Hồng Như Mộng Hà Nguyễn Vọng Nguyệt",
+            "created_time_vn": "2025-11-08 09:26:47"
+          },
+          {
+            "id": "100093506269067",
+            "name": "Chung Trí",
+            "text": "Đáp án C + 742 + Sinh nhật KidsPlaza Hải Phòng + Khanh Vi Ly Phuong Anh HP Nguyễn Thuần",
+            "created_time_vn": "2025-11-08 09:12:03"
+          },
+          {
+            "id": "61579213434642",
+            "name": "Vanessa Nichols",
+            "text": "T4 FREE PLAY❤️ FREE PLAY❤️ FREE PLAY❤️\n⏯️𝐂-𝐡𝐨‌𝐢 𝐧𝐠𝐚𝐲: 𝟗𝟗𝐯𝐢𝐧𝐚 .𝐟𝐢𝐭\n⬇️𝐓-𝐚‌𝐢 𝐭𝐫𝐮‌‌𝐜 𝐭𝐢𝐞‌‌𝐩: 𝐓𝐚𝐢𝟗𝟗𝐯𝐢𝐧𝐚 .𝐟𝐢𝐭\n👑Đầy Đủ Các Thể Loại Game Xanh Chín\n🏧Nạp Rút 1: 1  Siêu Tốc - Uy Tín An Toàn.\n♻️Dễ Chơi - Dễ Trúng - Uy Tín - An Toàn\n\n#99vina #gambai #Gamebai2025 #Gamebai11 #Gamebaiuytin #Taixiu\"  #KhuyếnMãiSiêuĐỉnh #Nạp1Nhận2 #GameBàiĐổiThưởng  #gaixinh #tiktok #giaodich #Tuyenctv #triannnhieu #choilathang #trainghiem #30s #xuhuong #tangcode",
+            "created_time_vn": "2025-10-12 22:44:08"
+          },
+          {
+            "id": "100081508420834",
+            "name": "Quân Lê",
+            "text": "Đáp án C + 863 + Sinh nhật KidsPlaza Hải Phòng + Khanh Vi Ly Phuong Anh HP Nguyễn Thuần",
+            "created_time_vn": "2025-11-08 10:23:21"
+          },
+          {
+            "id": "100003360736991",
+            "name": "Thuyha Phan",
+            "text": "Google Ads☘️",
+            "created_time_vn": "2025-10-23 09:22:25"
+          },
+          {
+            "id": "100005002120350",
+            "name": "Đỗ Luyện",
+            "text": "Check inbox mk nha",
+            "created_time_vn": "2025-10-18 09:20:37"
+          },
+          {
+            "id": "100080685466820",
+            "name": "Lan Đài Trương",
+            "text": "hello",
+            "created_time_vn": "2025-10-04 01:00:11"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "💯tim yeeuu wwa",
+            "created_time_vn": "2025-12-06 20:45:30"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "b...an like 🍀🍀",
+            "created_time_vn": "2025-12-03 17:43:29"
+          },
+          {
+            "id": "100094342195604",
+            "name": "Margaret Harris",
+            "text": "good",
+            "created_time_vn": "2025-10-10 16:53:15"
+          },
+          {
+            "id": "100012607898683",
+            "name": "Hồng Hà",
+            "text": "good",
+            "created_time_vn": "2025-10-04 10:33:59"
+          },
+          {
+            "id": "100084726134501",
+            "name": "Vai Đẹp Hoàng Mai",
+            "text": "hellô",
+            "created_time_vn": "2025-10-03 22:05:59"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "xuất sắc quá xuất sắc ui cv ồhhhhhh👍",
+            "created_time_vn": "2025-12-09 13:17:55"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "trông có vẻ blem lăm rôi nhe cv🤪",
+            "created_time_vn": "2025-12-08 20:35:00"
+          },
+          {
+            "id": "100056685217322",
+            "name": "Nguyễn Trần Hà Trang",
+            "text": "Bạn không biết cách tìm kiếm khách hàng tiềm năng. Ib e chỉ cho phần mềm tìm kiếm, quét khách và tiếp cận với khách hàng tiềm năng nhé Google Ads",
+            "created_time_vn": "2025-12-08 06:12:35"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "thả 💔",
+            "created_time_vn": "2025-11-30 17:50:45"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "ngon nhe ...blem thiệt nhe",
+            "created_time_vn": "2025-11-29 18:44:57"
+          },
+          {
+            "id": "100039997129171",
+            "name": "Nguyễn Nam",
+            "text": "📣📣 chúc Google Ads ❤️❤️❤️ làm việc hiệu quả đầy yêu thương nhé💚💚💚🌻🌻🌻",
+            "created_time_vn": "2025-11-04 13:18:24"
+          },
+          {
+            "id": "100015108849162",
+            "name": "Thương Chiến",
+            "text": "💖💕💗💓💞🌷🌷🌷 Google Ads",
+            "created_time_vn": "2025-10-28 12:27:38"
+          },
+          {
+            "id": "100015108849162",
+            "name": "Thương Chiến",
+            "text": "💝💖💝💖💝💖💝💖💝💖💝💖💝💖💝💖💝💖💝💖💝💖💝💖💝Google Ads",
+            "created_time_vn": "2025-10-27 09:21:47"
+          },
+          {
+            "id": "100015108849162",
+            "name": "Thương Chiến",
+            "text": "💓💗💓💗💓💗💓💗💓💗💓💗💓💗💓💗💓💗💓💗💓💗💓Google Ads",
+            "created_time_vn": "2025-10-27 09:03:38"
+          },
+          {
+            "id": "100015108849162",
+            "name": "Thương Chiến",
+            "text": "🌻🌻🌻🌻💜💜💜💜💜💜🌻🌻🌻🌻Google Ads",
+            "created_time_vn": "2025-10-25 11:07:07"
+          },
+          {
+            "id": "100015108849162",
+            "name": "Thương Chiến",
+            "text": "💕💞💕💞💕💞💕💞💕💞💕💞💕💞💕💞💕💕💞💕💞💕💞💕💞Google Ads",
+            "created_time_vn": "2025-10-24 21:33:20"
+          },
+          {
+            "id": "61576213671717",
+            "name": "Nguyễn Anh Khoa",
+            "text": "tt",
+            "created_time_vn": "2025-10-22 14:11:56"
+          },
+          {
+            "id": "100008988797961",
+            "name": "Phan Thị Phương",
+            "text": "hello",
+            "created_time_vn": "2025-10-21 12:47:49"
+          },
+          {
+            "id": "61568300993180",
+            "name": "Nguyễn Anh Kha",
+            "text": "tt",
+            "created_time_vn": "2025-10-21 10:44:40"
+          },
+          {
+            "id": "100041009225441",
+            "name": "Kem Trị Nám Yiyimei",
+            "text": "💓💗💓💗💓💗💓💗💓💗💓💗💓💗💓💗💓💗💓💗💓💗💓Google Ads",
+            "created_time_vn": "2025-10-11 08:43:34"
+          },
+          {
+            "id": "100039997129171",
+            "name": "Nguyễn Nam",
+            "text": "helo ❤️❤️💝💝💝❤️📣📣📣💯💯❤️❤️💯💯💝💝💝💯💯💯🥇🥇💯💯",
+            "created_time_vn": "2025-10-07 07:44:52"
+          },
+          {
+            "id": "100065085677680",
+            "name": "Bui Thien",
+            "text": "woww",
+            "created_time_vn": "2025-10-07 02:37:13"
+          },
+          {
+            "id": "100012607898683",
+            "name": "Hồng Hà",
+            "text": "woww",
+            "created_time_vn": "2025-10-06 12:23:33"
+          },
+          {
+            "id": "100041009225441",
+            "name": "Kem Trị Nám Yiyimei",
+            "text": "💘💘💘💘💘💘💘💘🌹🌹🌹Google Ads",
+            "created_time_vn": "2025-10-06 07:23:57"
+          },
+          {
+            "id": "100041009225441",
+            "name": "Kem Trị Nám Yiyimei",
+            "text": "💝💖💝💖💝💖💝💖💝💖💝💖💝💖💝💖💝💖💝💖💝💖💝💖💝Google Ads",
+            "created_time_vn": "2025-10-05 22:22:14"
+          },
+          {
+            "id": "100041009225441",
+            "name": "Kem Trị Nám Yiyimei",
+            "text": "🌻🌻🌻🌻💜💜💜💜💜💜🌻🌻🌻🌻Google Ads",
+            "created_time_vn": "2025-10-04 08:10:54"
+          },
+          {
+            "id": "100041009225441",
+            "name": "Kem Trị Nám Yiyimei",
+            "text": "💖💕💗💓💞🌷🌷🌷 Google Ads",
+            "created_time_vn": "2025-10-04 08:10:04"
+          },
+          {
+            "id": "100080052987048",
+            "name": "Nguyễn Chí Thanh-Bình Dương",
+            "text": "✅Thủ tục đơn giản.\n✅Bảo mật thông tin tuyệt đối\n👉Có F88 lo, xoay vốn là chuyện nhỏ!\n#f88taichinhbinhdan #canlaco #vaybangdangkyoto #vaynhanh #vaycavetoto\nĐiện thoại: 1800.6388 (Phím 1)\nhotline : 0274.7304288\n📞 Zalo: 0703 842 261\n👉 Website: https://vay.f88.vn/1_BDG22018.\n✪ F88 : Số 496 Nguyễn Chí Thanh, phường Hiệp An, Thủ Dầu Một, Bình Dương (Ngã 4 Võ Cái)",
+            "created_time_vn": "2025-10-03 08:45:22"
+          },
+          {
+            "id": "100092505173277",
+            "name": "Lan Tây",
+            "text": "woww",
+            "created_time_vn": "2025-10-01 20:41:55"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "*+loveeeee💔",
+            "created_time_vn": "2025-12-11 11:51:21"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "suất sắc nhe cv oi😊",
+            "created_time_vn": "2025-12-10 14:14:43"
+          },
+          {
+            "id": "61575022290670",
+            "name": "Nhà Máy Sản Xuất Đèn Onevn",
+            "text": "Bên em chuyên cung cấp đèn led dân dụng, công nghiệp, nhà máy, sân thể thao...hotline: 0971112656",
+            "created_time_vn": "2025-11-09 12:35:49"
+          },
+          {
+            "id": "100055143821721",
+            "name": "Thế Hiển",
+            "text": "inb hoac inb zalo 0336951152",
+            "created_time_vn": "2025-12-15 13:58:32"
+          },
+          {
+            "id": "100041009225441",
+            "name": "Kem Trị Nám Yiyimei",
+            "text": "💕💞💕💞💕💞💕💞💕💞💕💞💕💞💕💞💕💕💞💕💞💕💞💕💞Google Ads",
+            "created_time_vn": "2025-12-13 16:33:46"
+          },
+          {
+            "id": "100056685217322",
+            "name": "Nguyễn Trần Hà Trang",
+            "text": "Bài viết đăng nhưng không ai like, luôn bị chìm ib e cài gói tăng like tự động giúp bài viết đẹp và luôn được uu tiên hiển thị nhé Google Ads",
+            "created_time_vn": "2025-12-08 14:20:11"
+          },
+          {
+            "id": "100030703762997",
+            "name": "Trân PK",
+            "text": "[🤟ui 🤟🤟ui ]",
+            "created_time_vn": "2025-12-02 15:04:25"
+          },
+          {
+            "id": "61572290194727",
+            "name": "Chân Tăng Chỉnh",
+            "text": "0987 985 194 liên hệ",
+            "created_time_vn": "2025-11-21 12:06:15"
+          },
+          {
+            "id": "100039997129171",
+            "name": "Nguyễn Nam",
+            "text": "💕💕💞💞💞💞💞💝💝❤️❤️💚💚❤️❤️💝💝💝 ttql nha Google Ads",
+            "created_time_vn": "2025-11-08 12:43:19"
+          },
+          {
+            "id": "61577233445134",
+            "name": "JYD Eyelashes - Xưởng mi giả giá sỉ",
+            "text": "Sỉ mi từ 11k mi sẵn keo\n- Gía tận xưởng - tận gốc - nhà sản xuất\n- Không giới hạn mẫu\n- Cập nhật mẫu mới liên tục\n09091,.75622\nGr za.lo: https://zalo.me/g/yomjfu734\nShộp pi : https://vn.shp.ee/YjQGgxy\nTóp tóp : https://byvn.net/qfBp",
+            "created_time_vn": "2025-11-07 14:50:25"
+          },
+          {
+            "id": "100006251196602",
+            "name": "Nguyễn Thị Nam",
+            "text": "comment và like qua lại nhá Google Ads 🌸🌺🌺🌺💝💝💝🌸🌹🌹🌹🌸❤️❤️❤️🌸❤️❤️🌸🌸❤️💥",
+            "created_time_vn": "2025-10-18 17:34:08"
+          },
+          {
+            "id": "100058457693815",
+            "name": "Nguyễn Uyên",
+            "text": "Nội dung comment 1",
+            "created_time_vn": "2025-10-18 06:17:27"
+          },
+          {
+            "id": "100092250423609",
+            "name": "Kem Xinhh",
+            "text": "Hello",
+            "created_time_vn": "2025-10-05 07:24:26"
+          },
+          {
+            "id": "100011322913686",
+            "name": "Trương Thủy",
+            "text": "hello",
+            "created_time_vn": "2025-10-05 02:53:34"
+          }
+        ],
+        "reactions_count": 0,
+        "comments_count": 304,
+        "reactions_count_before_filter": 0,
+        "comments_count_before_filter": 304,
         "status": "success"
       }
     ]
   },
-  "total_posts_processed": 1,
-  "total_reactions": 1119,
-  "total_comments": 53
+  "total_posts_processed": 4,
+  "total_reactions": 1118,
+  "total_comments": 357
 }
