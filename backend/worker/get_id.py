@@ -89,7 +89,7 @@ def get_post_id_from_html(url, profile_id, cookies=None):
         # Headers cho GET request (giống trình duyệt)
         get_headers = {
             "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "accept-encoding": "gzip, deflate, br",
+            "accept-encoding": "gzip, deflate",
             "accept-language": "en,vi;q=0.9,en-US;q=0.8",
             "referer": "https://www.facebook.com/",
             "sec-ch-ua": '"Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
@@ -539,7 +539,7 @@ def get_id_from_url(url, profile_id):
 
 if __name__ == "__main__":
     # Ví dụ sử dụng hàm get_id_from_url (tổng hợp)
-    profile_id = "031ca13d-e8fa-400c-a603-df57a2806788"
+    profile_id = "621e1f5d-0c42-481e-9ddd-7abaafce68ed"
     
     # Test với group URL
     # group_url = "https://www.facebook.com/groups/987870664956102/"

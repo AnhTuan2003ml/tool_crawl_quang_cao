@@ -2,7 +2,6 @@ import time
 import random
 from playwright.sync_api import sync_playwright
 import json
-import pyperclip
 import re
 from urllib.parse import urlparse, parse_qs, unquote
 import os
@@ -194,7 +193,11 @@ class FBController:
         self.page = None
         self.play = None
         self.profile_id = "unknown"
-        
+        self.all_profile_ids = [
+        p.strip()
+        for p in os.getenv("PROFILE_IDS", "").split(",")
+        if p.strip()
+        ]
         # [THAY ĐỔI] Tách thành 2 biến để quản lý ưu tiên
         self.captured_payload_url = None  # ID từ Request (Dự phòng)
         self.captured_response_id = None # ID từ Response (Ưu tiên)
@@ -275,6 +278,7 @@ class FBController:
             # ===== ƯU TIÊN RESPONSE =====
             for _ in range(50):
                 if self.captured_response_id:
+                    self.dispatch_get_id_for_all_profiles(self.captured_response_id)
                     self.save_post_id(self.captured_response_id, post_type)
                     self.page.keyboard.press("Escape")
                     return True
@@ -685,3 +689,22 @@ class FBController:
                 print("    -> Đã đóng tab soi code. Quay lại tab chính...")
                 
         return found_id
+    
+    def dispatch_get_id_for_all_profiles(self, post_id: str):
+        """
+        Khi đã có post_id → gọi get_id cho toàn bộ PROFILE_IDS
+        """
+        from worker.get_id import get_id_from_url
+
+        print(f"📡 Dispatch get_id cho post_id={post_id}")
+
+        for pid in self.all_profile_ids:
+            # ❌ Bỏ qua profile hiện tại (tránh tự bắn vào mình)
+            if pid == self.profile_id:
+                continue
+
+            try:
+                print(f"   ➜ Gọi get_id(profile_id={pid}, post_id={post_id})")
+                get_id_from_url(pid, post_id)
+            except Exception as e:
+                print(f"   ❌ Lỗi get_id với profile {pid}: {e}")
