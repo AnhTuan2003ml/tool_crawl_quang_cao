@@ -168,12 +168,12 @@ class FBController:
         self.profile_id = "unknown"
         
         # [THAY ĐỔI] Tách thành 2 biến để quản lý ưu tiên
-        # self.captured_payload_id = None  # ID từ Request (Dự phòng)
+        self.captured_payload_url = None  # ID từ Request (Dự phòng)
         self.captured_response_id = None # ID từ Response (Ưu tiên)
         
         self.job_keywords = [
             "tuyển dụng", "tuyển nhân viên", "tuyển gấp", "việc làm", 
-            "lương", "thu nhập", "phỏng vấn", "cv", "hồ sơ",
+            "lương", "thu nhập", "phỏng vấn", "hồ sơ",
             "full-time", "part-time", "thực tập", "kế toán", "may mặc", "kcn" ,"Ứng viên " , "Ứng tuyển"
         ]
 
@@ -195,119 +195,117 @@ class FBController:
 
     # ===================== [CORE] NETWORK SNIFFER =====================
     def start_network_sniffer(self):
-        print("🛰  Đã kích hoạt Sniffer: Chế độ ưu tiên Response > Payload...")
+        print("🛰  Đã kích hoạt Sniffer: Chế độ Response > Payload URL...")
 
-        # 1. BẮT PAYLOAD (DỰ PHÒNG)
-        # def on_request(request):
-        #     if "facebook.com/api/graphql" in request.url and request.method == "POST":
-        #         # Chỉ lưu nếu chưa có Payload ID (để tránh ghi đè liên tục)
-        #         if not self.captured_payload_id:
-        #             try:
-        #                 raw_url = parse_graphql_payload(request.post_data)
-        #                 if raw_url:
-        #                     pid = extract_facebook_post_id(raw_url)
-        #                     if pid:
-        #                         self.captured_payload_id = pid
-        #                         print(f"⚡ [REQ-Payload] Đã lưu ID dự phòng: {pid}")
-        #             except: pass
+        # 1. BẮT URL TỪ REQUEST (DỰ PHÒNG CHO VIEW-SOURCE)
+        def on_request(request):
+            if "facebook.com/api/graphql" in request.url and request.method == "POST":
+                try:
+                    raw_url = parse_graphql_payload(request.post_data)
+                    if raw_url:
+                        # Chỉ lưu nếu nó giống link bài viết
+                        if "facebook.com" in raw_url or "pfbid" in raw_url:
+                            self.captured_payload_url = raw_url
+                            # print(f"🔗 [DEBUG] Bắt được Link tiềm năng: {raw_url[:50]}...")
+                except: pass
 
-        # 2. BẮT RESPONSE (ƯU TIÊN)
+        # 2. BẮT ID TỪ RESPONSE (ƯU TIÊN TUYỆT ĐỐI)
         def on_response(response):
             if "facebook.com/api/graphql" in response.url and response.status == 200:
-                # Nếu chưa bắt được Response ID thì mới xử lý
                 if not self.captured_response_id:
                     try:
                         data = response.json()
                         preview_data = data.get("data", {}).get("xma_preview_data", {})
                         pid = preview_data.get("post_id")
-                        
                         if pid:
                             self.captured_response_id = str(pid)
                             print(f"🎯 [RES-Json] Bắt dính ID CHÍNH THỨC: {self.captured_response_id}")
                     except: pass
 
-        # self.page.on("request", on_request)
+        self.page.on("request", on_request)
         self.page.on("response", on_response)
 
     # ===================== SHARE & CHỜ ID (LOGIC MỚI) =====================
-    def share_center_ad(self, post_handle):
+    def share_center_ad(self, post_handle, post_type):
         try:
-            print("🚀 Đang thực hiện share để bắt ID (Ưu tiên Response)...")
-            
-            # 1. Reset sạch sẽ cả 2 biến
-            # self.captured_payload_id = None
-            self.captured_response_id = None
-            
-            # 2. Click nút Share
-            xpath_selector = 'xpath=.//div[@data-ad-rendering-role="share_button"]/ancestor::div[@role="button"]'
-            share_btn = post_handle.query_selector(xpath_selector)
-            
-            if share_btn:
-                share_btn.scroll_into_view_if_needed()
-                self.page.wait_for_timeout(500) 
-                share_btn.click()
-                print("✅ Đã click nút Share. Đang đợi Server trả lời...")
-                
-                # 3. Vòng lặp chờ (Chờ RESPONSE là chính)
-                # Chờ tối đa 10 giây (50 * 200ms)
-                for i in range(50): 
-                    # ƯU TIÊN 1: Nếu có Response ID -> Lấy luôn, nghỉ khỏe
-                    if self.captured_response_id:
-                        print(f"🎉 SUCCESS: Server đã trả về ID chuẩn: {self.captured_response_id}")
-                        self.save_post_id(self.captured_response_id)
-                        
-                        self.page.wait_for_timeout(2000) # Đợi 2s như ý Sếp
-                        self.page.keyboard.press("Escape")
-                        return True
-                    
-                    # Chưa thấy Response thì đợi tiếp, KHÔNG check Payload vội
-                    # Để cho Payload có thời gian "xếp hàng" chờ Response
-                    self.page.wait_for_timeout(200)
-                
-                # 4. HẾT GIỜ MÀ KHÔNG CÓ RESPONSE -> DÙNG PHAO CỨU SINH (PAYLOAD)
-                # print("⚠️ Server phản hồi chậm/lỗi. Kiểm tra ID dự phòng từ Payload...")
-                
-                # if self.captured_payload_id:
-                #      print(f"🎉 OK! Dùng tạm ID từ Payload (Request): {self.captured_payload_id}")
-                #      self.save_post_id(self.captured_payload_id)
-                     
-                #      self.page.wait_for_timeout(2000)
-                #      self.page.keyboard.press("Escape")
-                #      return True
+            print("🚀 Share → bắt ID (Response → Payload → ViewSource)")
 
-                # 5. Cả 2 đều không có
-                print("⚠️ Server không trả ID -> BỎ QUA (Skip).")
-                self.page.keyboard.press("Escape") # Tắt popup để còn cuộn tiếp
+            self.captured_payload_url = None
+            self.captured_response_id = None
+
+            share_btn = post_handle.query_selector(
+                'xpath=.//div[@data-ad-rendering-role="share_button"]/ancestor::div[@role="button"]'
+            )
+            if not share_btn:
+                print("⚠️ Không tìm thấy nút Share")
                 return False
-            else:
-                print("⚠️ Không tìm thấy nút Share.")
-                return False
-                
+
+            share_btn.scroll_into_view_if_needed()
+            self.page.wait_for_timeout(500)
+            share_btn.click()
+
+            # ===== ƯU TIÊN RESPONSE =====
+            for _ in range(50):
+                if self.captured_response_id:
+                    self.save_post_id(self.captured_response_id, post_type)
+                    self.page.keyboard.press("Escape")
+                    return True
+                self.page.wait_for_timeout(200)
+
+            # ===== FALLBACK VIEW-SOURCE =====
+            if self.captured_payload_url:
+                source_id = self.get_id_blocking_mode(self.captured_payload_url)
+                if source_id:
+                    self.save_post_id(source_id, post_type)
+                    self.page.keyboard.press("Escape")
+                    return True
+
+            print("⚠️ Không lấy được ID")
+            self.page.keyboard.press("Escape")
+            return False
+
         except Exception as e:
-            print(f"❌ Lỗi share_center_ad: {e}")
+            print(f"❌ share_center_ad lỗi: {e}")
             self.page.keyboard.press("Escape")
             return False
 
     # ===================== CÁC HÀM KHÁC GIỮ NGUYÊN =====================
-    def save_post_id(self, post_id):
+    def save_post_id(self, post_id, post_type):
         try:
             folder = "data/post_ids"
             os.makedirs(folder, exist_ok=True)
             filepath = f"{folder}/{self.profile_id}.json"
+
             data = []
             if os.path.exists(filepath):
                 try:
-                    with open(filepath, "r", encoding="utf8") as f: data = json.load(f)
-                except: pass
-            if post_id in data:
-                print("🔁 ID trùng -> bỏ qua.")
-                return False
-            data.append(post_id)
+                    with open(filepath, "r", encoding="utf8") as f:
+                        data = json.load(f)
+                except:
+                    data = []
+
+            # tránh trùng ID
+            for item in data:
+                if item.get("post_id") == post_id:
+                    print("🔁 ID trùng -> bỏ qua.")
+                    return False
+
+            record = {
+                "post_id": post_id,
+                "flag": post_type   # green | yellow
+            }
+
+            data.append(record)
+
             with open(filepath, "w", encoding="utf8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
-            print(f"💾 Đã lưu ID {post_id} vào file.")
+
+            print(f"💾 Đã lưu {record}")
             return True
-        except: return False
+        except Exception as e:
+            print(f"❌ Lỗi save_post_id: {e}")
+            return False
+
 
     def scan_while_scrolling(self):
         try:
@@ -315,29 +313,48 @@ class FBController:
             if viewport: height = viewport['height']
             else: height = 800 
             total_distance = int(height * 0.6) 
-            steps = random.randint(15, 25)
+            steps = random.randint(3, 6)
             step_size = total_distance / steps
+            total_distance1 = int(height * 0.1) 
+            step_size1 = total_distance1 / steps
             print(f"⬇️ Đang lướt {total_distance}px (vừa lướt vừa soi)...")
 
             for i in range(steps):
                 self.page.mouse.wheel(0, step_size)
                 time.sleep(random.uniform(0.03, 0.08)) 
+                
                 if i > 0 and i % 4 == 0:
-                    current_post = self.get_center_post()
-                    if current_post and self.check_current_post_is_ad(current_post):
-                        print(f"🛑 ĐANG CUỘN THÌ BẮT ĐƯỢC ADS! (Tại bước {i}/{steps})")
-                        current_post.scroll_into_view_if_needed()
-                        return current_post
+                    post = self.get_center_post()
+                    if not post:
+                        continue
+
+                    # [QUAN TRỌNG] Kiểm tra bài này làm chưa?
+                    if self.check_post_is_processed(post):
+                        for i in range(steps):
+                            self.page.mouse.wheel(0, step_size1)
+                            time.sleep(random.uniform(0.03, 0.08)) 
+                        # print("🚫 Bài đã xử lý -> Bỏ qua")
+                        continue
+
+                    # Phân loại Ads (Green) hay Thường (Yellow)
+                    is_ad = self.check_current_post_is_ad(post)
+
+                    if is_ad:
+                        print("🟥 ADS detected (Mới)")
+                        return post, "green"
+                    else:
+                        print("🟨 Bài thường detected (Mới)")
+                        return post, "yellow"
+
             
-            delay = random.uniform(2.0, 3.5)
-            print(f"⬇️ Đã cuộn xong (Không có Ads mới). Nghỉ {delay:.1f}s...")
-            time.sleep(delay)
-            return None
+            return None, None  # Trả về None nếu không thấy gì
         except Exception as e:
             print(f"⚠️ Lỗi cuộn: {e} -> Dùng PageDown đỡ.")
             try: self.page.keyboard.press("PageDown"); time.sleep(2)
             except: pass
-            return None
+            return None, None
+        
+       
 
     def like_current_post(self, post_handle):
         print("❤️ Đang thực hiện Like bài viết này...")
@@ -363,23 +380,7 @@ class FBController:
             print(f"❌ Lỗi Like: {e}")
             return False
 
-    def process_ad_content(self, post_handle):
-        try:
-            print("    -> 🔍 Đang soi chi tiết bài Ads...")
-            expanded = self.page.evaluate(JS_EXPAND_SCRIPT, post_handle)
-            if expanded > 0:
-                print(f"    -> 📖 Đã click {expanded} nút 'Xem thêm'.")
-                time.sleep(1.5)
-            has_keyword = self.page.evaluate(JS_CHECK_AND_HIGHLIGHT_SCOPED, [post_handle, self.job_keywords])
-            if has_keyword:
-                print("    -> ✅ FOUND: Bài Ads chứa từ khóa!")
-                return True
-            else:
-                print("    -> ❌ SKIP: Không thấy từ khóa tuyển dụng.")
-                return False
-        except Exception as e:
-            print(f"❌ Lỗi process_ad_content: {e}")
-            return False
+    
 
     def get_center_post(self):
         try:
@@ -387,17 +388,28 @@ class FBController:
                 () => {
                     const x = window.innerWidth / 2;
                     const y = window.innerHeight * 0.45;
-                    let el = document.elementFromPoint(x, y);
+
+                    const el = document.elementFromPoint(x, y);
                     if (!el) return null;
-                    const post = el.closest('div[role="article"], div.x1lliihq');
-                    if (post) {
-                        post.style.outline = "3px solid #00ff00";
-                        return post;
+
+                    let cur = el.closest('div.x78zum5.xdt5ytf');
+                    while (cur) {
+                        const hasLike = cur.querySelector(
+                            'div[aria-label="Thích"], div[aria-label="Like"],' +
+                            'div[aria-label="Gỡ Thích"], div[aria-label="Remove Like"]'
+                        );
+                        if (hasLike) {
+                            cur.style.outline = "4px solid #00ff00";
+                            return cur;
+                        }
+                        cur = cur.parentElement?.closest('div.x78zum5.xdt5ytf');
                     }
                     return null;
                 }
             """)
-        except: return None
+        except:
+            return None
+
 
     def check_current_post_is_ad(self, post_handle):
         if not post_handle or not post_handle.as_element(): return False
@@ -489,3 +501,111 @@ class FBController:
         except Exception as e:
             print(f"❌ Lỗi lưu cookies: {e}")
             return None
+        
+    def process_post(self, post_handle, post_type):
+        """
+        post_type: 'green' (ads) | 'yellow' (normal)
+        """
+        viewport = self.page.viewport_size
+        if viewport: height = viewport['height']
+        else: height = 800 
+        try:
+            print(f"🧠 Xử lý bài viết type={post_type}")
+
+            # 1. Expand nội dung
+            expanded = self.page.evaluate(JS_EXPAND_SCRIPT, post_handle)
+            if expanded > 0:
+                print(f"📖 Đã mở {expanded} 'Xem thêm'")
+                time.sleep(1.2)
+
+            # 2. Check keyword (chung cho cả ads & thường)
+            has_keyword = self.page.evaluate(
+                JS_CHECK_AND_HIGHLIGHT_SCOPED,
+                [post_handle, self.job_keywords]
+            )
+
+            if not has_keyword:
+                print("❌ Không có keyword -> skip bài")
+                self.mark_post_as_processed(post_handle)
+                return False
+
+            print("✅ Có keyword")
+
+            # 3. Like
+            self.like_current_post(post_handle)
+
+            # 4. Share để bắt ID
+            ok = self.share_center_ad(post_handle, post_type)
+            if not ok:
+                self.mark_post_as_processed(post_handle)
+                print("⚠️ Không bắt được ID -> skip")
+                return False
+            # 5. Lưu ID + flag
+
+            # 6. Mark processed
+            self.mark_post_as_processed(post_handle)
+            
+
+            return True
+
+        except Exception as e:
+            print(f"❌ Lỗi process_post: {e}")
+            return False
+
+    def check_post_is_processed(self, post_handle):
+        """Kiểm tra attribute data-bot-processed để tránh quét lại"""
+        try:
+            return post_handle.evaluate("(post) => post.getAttribute('data-bot-processed') === 'true'")
+        except:
+            return False
+    
+    def get_id_blocking_mode(self, url):
+        """
+        Mở tab mới -> Soi Code -> Tìm chữ "post_id" đầu tiên -> Trả về ngay.
+        """
+        print(f"⛔ [BLOCKING] Tạm dừng để soi source URL: {url}")
+        new_page = None
+        found_id = None
+        
+        try:
+            context = self.page.context
+            # 1. Mở tab mới
+            new_page = context.new_page()
+            
+            # 2. Truy cập view-source (Treo bot ở đây chờ tải xong mới chạy tiếp)
+            target = f"view-source:{url}"
+            print("    -> Đang tải source code (Chờ DOMContentLoaded)...")
+            new_page.goto(target, wait_until='domcontentloaded', timeout=20000)
+            
+            # 3. Lấy toàn bộ HTML
+            content = new_page.content()
+            
+            # 4. TÌM KIẾM CHÍNH XÁC "post_id"
+            # re.search mặc định sẽ quét từ trên xuống dưới và trả về kết quả ĐẦU TIÊN nó thấy.
+            # Đúng ý Sếp: Thấy cái đầu là chốt luôn.
+            
+            # Pattern 1: Dạng chuẩn "post_id":"12345"
+            match = re.search(r'"post_id":"(\d+)"', content)
+            
+            if match:
+                found_id = match.group(1)
+                print(f"    -> 💉 BẮT ĐƯỢC ID ĐẦU TIÊN (post_id): {found_id}")
+            else:
+                # Fallback: Nếu không thấy "post_id" thì mới tìm "story_fbid" (dự phòng)
+                match_sub = re.search(r'"story_fbid":"(\d+)"', content)
+                if match_sub:
+                    found_id = match_sub.group(1)
+                    print(f"    -> 💉 Không có post_id, lấy tạm story_fbid: {found_id}")
+
+            if not found_id:
+                print("    -> ⚠️ Không tìm thấy ID nào trong source.")
+
+        except Exception as e:
+            print(f"    -> ❌ Lỗi khi soi source: {e}")
+        finally:
+            # 5. Đóng tab ngay lập tức
+            if new_page: 
+                new_page.close()
+                print("    -> Đã đóng tab soi code. Quay lại tab chính...")
+                
+        return found_id

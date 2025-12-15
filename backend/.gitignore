@@ -1,6 +1,4 @@
-env/
 venv/
-ENV/
 VENV/
 
 # Nếu dùng Python thì thêm luôn mấy thứ rác quen thuộc
