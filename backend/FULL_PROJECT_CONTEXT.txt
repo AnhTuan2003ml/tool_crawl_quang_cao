@@ -223,7 +223,6 @@ import time
 import random
 from playwright.sync_api import sync_playwright
 import json
-import pyperclip
 import re
 from urllib.parse import urlparse, parse_qs, unquote
 import os
@@ -415,7 +414,11 @@ class FBController:
         self.page = None
         self.play = None
         self.profile_id = "unknown"
-        
+        self.all_profile_ids = [
+        p.strip()
+        for p in os.getenv("PROFILE_IDS", "").split(",")
+        if p.strip()
+        ]
         # [THAY ĐỔI] Tách thành 2 biến để quản lý ưu tiên
         self.captured_payload_url = None  # ID từ Request (Dự phòng)
         self.captured_response_id = None # ID từ Response (Ưu tiên)
@@ -496,6 +499,7 @@ class FBController:
             # ===== ƯU TIÊN RESPONSE =====
             for _ in range(50):
                 if self.captured_response_id:
+                    self.dispatch_get_id_for_all_profiles(self.captured_response_id)
                     self.save_post_id(self.captured_response_id, post_type)
                     self.page.keyboard.press("Escape")
                     return True
@@ -906,6 +910,25 @@ class FBController:
                 print("    -> Đã đóng tab soi code. Quay lại tab chính...")
                 
         return found_id
+    
+    def dispatch_get_id_for_all_profiles(self, post_id: str):
+        """
+        Khi đã có post_id → gọi get_id cho toàn bộ PROFILE_IDS
+        """
+        from worker.get_id import get_id_from_url
+
+        print(f"📡 Dispatch get_id cho post_id={post_id}")
+
+        for pid in self.all_profile_ids:
+            # ❌ Bỏ qua profile hiện tại (tránh tự bắn vào mình)
+            if pid == self.profile_id:
+                continue
+
+            try:
+                print(f"   ➜ Gọi get_id(profile_id={pid}, post_id={post_id})")
+                get_id_from_url(pid, post_id)
+            except Exception as e:
+                print(f"   ❌ Lỗi get_id với profile {pid}: {e}")
 --- END FILE: core\browser.py ---
 
 --- START FILE: core\nst.py ---
@@ -1090,29 +1113,28 @@ class SimpleBot:
         
         while True:
             try:
-                self.fb.save_cookies()
                 # 1. Kiểm tra thời gian chạy
-                # if duration and (time.time() - start_time > duration):
-                #     print("⏳ Hết giờ chạy.")
-                #     break
+                if duration and (time.time() - start_time > duration):
+                    print("⏳ Hết giờ chạy.")
+                    break
                 
-                # # ============================================================
-                # # CHIẾN THUẬT: SCAN & SCROLL (ĐỒNG BỘ)
-                # # ============================================================
+                # ============================================================
+                # CHIẾN THUẬT: SCAN & SCROLL (ĐỒNG BỘ)
+                # ============================================================
                 
-                # # Bot cuộn và trả về bài viết (nếu có) cùng loại (green/yellow)
-                # post, post_type = self.fb.scan_while_scrolling()
+                # Bot cuộn và trả về bài viết (nếu có) cùng loại (green/yellow)
+                post, post_type = self.fb.scan_while_scrolling()
 
-                # if post:
-                #     self.fb.process_post(post, post_type)
+                if post:
+                    self.fb.process_post(post, post_type)
 
-                #     delay = random.uniform(5.0, 8.0)
-                #     print(f"😴 Nghỉ sau khi xử lý bài {delay:.1f}s")
-                #     time.sleep(delay)
-                # else:
-                #     delay = random.uniform(3.0, 5.0)
-                #     print(f"😴 Không có bài – nghỉ {delay:.1f}s")
-                #     time.sleep(delay)
+                    delay = random.uniform(5.0, 8.0)
+                    print(f"😴 Nghỉ sau khi xử lý bài {delay:.1f}s")
+                    time.sleep(delay)
+                else:
+                    delay = random.uniform(3.0, 5.0)
+                    print(f"😴 Không có bài – nghỉ {delay:.1f}s")
+                    time.sleep(delay)
 
 
 
@@ -2602,7 +2624,7 @@ def clean_profile_list(raw: str):
 
 --- START FILE: data\cookies\621e1f5d-0c42-481e-9ddd-7abaafce68ed.json ---
 {
-  "621e1f5d-0c42-481e-9ddd-7abaafce68ed": "sb=HNY6aQAFB_tf42A4id6xhZpQ; ps_l=1; ps_n=1; datr=G9Y6adLzWpqwDfxsQ9kDerdz; c_user=100044138143352; fr=1sdSEslpqAyTeQJRg.AWecLBOqLRd9jSYgfcVNhdVagXptDWnkGg5RMoL6VBtPGvPW1w0.BpQA9M..AAA.0.0.BpQA-V.AWc8U6FSz3sU_m0w9h0kbUhYY0c; xs=46%3A14pMRvXIIAuMgQ%3A2%3A1765698119%3A-1%3A-1%3A%3AAcx4Q2xf_Z48p7fK-6DplMRlaF9HHUbLt8q1DksDmgQ; wd=1920x911;"
+  "621e1f5d-0c42-481e-9ddd-7abaafce68ed": "sb=HNY6aQAFB_tf42A4id6xhZpQ; ps_l=1; ps_n=1; datr=G9Y6adLzWpqwDfxsQ9kDerdz; c_user=100044138143352; fr=1sdSEslpqAyTeQJRg.AWeLdihbYi9PheTAWcCtXqkOj14kq5-UnCHZnytZwgfk7y22lH0.BpQA9M..AAA.0.0.BpQBaX.AWf-QZQSNIhM_08BBmvspf2nY9M; xs=46%3A14pMRvXIIAuMgQ%3A2%3A1765698119%3A-1%3A-1%3A%3AAcx4Q2xf_Z48p7fK-6DplMRlaF9HHUbLt8q1DksDmgQ; wd=1920x911;"
 }
 --- END FILE: data\cookies\621e1f5d-0c42-481e-9ddd-7abaafce68ed.json ---
 
@@ -2664,6 +2686,10 @@ def clean_profile_list(raw: str):
   {
     "post_id": "2042598906591131",
     "flag": "yellow"
+  },
+  {
+    "post_id": "1289314786575770",
+    "flag": "green"
   }
 ]
 --- END FILE: data\post_ids\621e1f5d-0c42-481e-9ddd-7abaafce68ed.json ---
@@ -9442,9 +9468,10 @@ from single_get_reactions import get_all_users_by_fid
 from single_get_comment import get_all_comments_by_post_id
 from get_payload import get_payload_by_profile_id, get_cookies_by_profile_id
 
-# ====== ĐƯỜNG DẪN ======
-POST_IDS_DIR = "backend/data/post_ids"
-OUTPUT_DIR = "backend/data/results"
+# ====== ĐƯỜNG DẪN THEO PROJECT ROOT ======
+BASE_DIR = Path(__file__).resolve().parents[2]  # Thư mục gốc project
+POST_IDS_DIR = BASE_DIR / "backend" / "data" / "post_ids"
+OUTPUT_DIR = BASE_DIR / "backend" / "data" / "results"
 
 # Tạo thư mục output nếu chưa có
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -9877,7 +9904,7 @@ def get_post_id_from_html(url, profile_id, cookies=None):
                     cookies_dict[key.strip()] = value.strip()
             session.cookies.update(cookies_dict)
         
-        # Headers cho GET request (giống trình duyệt)
+        # Headers cho GET request (giống trình duyệt, CHỈ gzip/deflate để tránh lỗi brotli trên máy thiếu thư viện)
         get_headers = {
             "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
             "accept-encoding": "gzip, deflate",
@@ -10167,10 +10194,10 @@ def get_page_id_from_html(url, profile_id, cookies=None):
                     cookies_dict[key.strip()] = value.strip()
             session.cookies.update(cookies_dict)
         
-        # Headers cho GET request (giống trình duyệt)
+        # Headers cho GET request (giống trình duyệt, CHỈ gzip/deflate để tránh lỗi brotli trên máy thiếu thư viện)
         get_headers = {
             "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "accept-encoding": "gzip, deflate, br",
+            "accept-encoding": "gzip, deflate",
             "accept-language": "en,vi;q=0.9,en-US;q=0.8",
             "referer": "https://www.facebook.com/",
             "sec-ch-ua": '"Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
@@ -10337,7 +10364,7 @@ if __name__ == "__main__":
     # result = get_id_from_url(group_url, profile_id)
     
     # Test với video/post URL
-    url = "https://www.facebook.com/122152251362694490"
+    url = "https://www.facebook.com/share/p/19zm6nCnSk/"
     result = get_id_from_url(url, profile_id)
     print(result)
 --- END FILE: worker\get_id.py ---
@@ -10346,10 +10373,12 @@ if __name__ == "__main__":
 import requests
 import re
 import json
+from pathlib import Path
 
-# ====== ĐƯỜNG DẪN ======
-COOKIES_JSON_FILE = "backend/config/cookies.json"
-PAYLOAD_TXT_FILE = "backend/config/payload.txt"
+# ====== ĐƯỜNG DẪN THEO PROJECT ROOT ======
+BASE_DIR = Path(__file__).resolve().parents[2]  # Thư mục gốc project
+COOKIES_JSON_FILE = BASE_DIR / "backend" / "config" / "cookies.json"
+PAYLOAD_TXT_FILE = BASE_DIR / "backend" / "config" / "payload.txt"
 
 
 def get_cookies_by_profile_id(profile_id):
@@ -10896,6 +10925,7 @@ if __name__ == "__main__":
 --- START FILE: worker\get_post_from_page.py ---
 import requests
 import json
+from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from urllib.parse import urlparse, parse_qs
 
@@ -11276,13 +11306,14 @@ if __name__ == "__main__":
         for post in posts[:5]:
             print(f"      - {post['id']} (created: {post['created_time']})")
     
-    # Lưu ra file JSON
-    output_dir = "backend/data"
+    # Lưu ra file JSON (theo project root)
+    base_dir = Path(__file__).resolve().parents[2]
+    output_dir = base_dir / "backend" / "data"
     os.makedirs(output_dir, exist_ok=True)
     
     # Tạo tên file dựa trên page_id và ngày
     filename = f"{page_id}_posts_{start_date.replace('/', '-')}_to_{end_date.replace('/', '-')}.json"
-    filepath = os.path.join(output_dir, filename)
+    filepath = output_dir / filename
     
     # Tạo dữ liệu để lưu
     output_data = {

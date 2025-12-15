@@ -5,10 +5,29 @@ import json
 import re
 from urllib.parse import urlparse, parse_qs, unquote
 import os
-
+from worker.get_id import get_id_from_url
+import sys
 # ==============================================================================
 # JS TOOLS & HELPER FUNCTIONS
 # ==============================================================================
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+worker_path = os.path.join(parent_dir, 'worker')
+
+if worker_path not in sys.path:
+    sys.path.append(worker_path)
+
+# Import hàm lấy thông tin an toàn
+try:
+    from get_id import get_id_from_url
+except ImportError:
+    try:
+        from worker.get_id import get_id_from_url
+    except:
+        print("⚠️ Cảnh báo: Không import được worker/get_id.py")
+        get_id_from_url = None
+
+
 JS_EXPAND_SCRIPT = """
 (node) => {
     if (!node) return 0;
@@ -204,7 +223,7 @@ class FBController:
         
         self.job_keywords = [
             "tuyển dụng", "tuyển nhân viên", "tuyển gấp", "việc làm", 
-            "lương", "thu nhập", "phỏng vấn", "hồ sơ",
+            "lương", "phỏng vấn", "hồ sơ",
             "full-time", "part-time", "thực tập", "kế toán", "may mặc", "kcn" ,"Ứng viên " , "Ứng tuyển"
         ]
 
@@ -316,15 +335,40 @@ class FBController:
                 except:
                     data = []
 
-            # tránh trùng ID
+            # 1. Tránh trùng ID (Check cả format cũ post_id và mới id)
             for item in data:
-                if item.get("post_id") == post_id:
-                    print("🔁 ID trùng -> bỏ qua.")
+                existing_id = item.get("id") or item.get("post_id")
+                if existing_id == post_id:
+                    print(f"🔁 ID {post_id} đã tồn tại -> bỏ qua.")
                     return False
 
+            # 2. [NEW] Gọi Worker lấy thông tin chi tiết
+            print(f"📥 Đang fetch chi tiết bài viết {post_id} (chờ worker)...")
+            
+            # Tạo link giả lập để worker xử lý
+            target_url = f"https://www.facebook.com/{post_id}"
+            
+            details = {}
+            if get_id_from_url:
+                try:
+                    # Truyền profile_id để worker dùng đúng cookie của trình duyệt đang chạy
+                    details = get_id_from_url(target_url, self.profile_id)
+                except Exception as e:
+                    print(f"⚠️ Lỗi khi gọi get_id_from_url: {e}")
+            
+            # 3. [NEW] Format dữ liệu JSON theo yêu cầu
+            # Map flag: green -> xanh, yellow -> vàng
+            flag_vn = "xanh" if post_type == "green" else "vàng" if post_type == "yellow" else post_type
+            
+            # Lấy thông tin từ kết quả worker trả về
+            post_text = details.get("post_text", "")
+            owning_profile = details.get("owning_profile", {})
+
             record = {
-                "post_id": post_id,
-                "flag": post_type   # green | yellow
+                "id": post_id,
+                "flag": flag_vn,
+                "text": post_text,
+                "owning_profile": owning_profile
             }
 
             data.append(record)
@@ -332,7 +376,11 @@ class FBController:
             with open(filepath, "w", encoding="utf8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
 
-            print(f"💾 Đã lưu {record}")
+            print(f"💾 Đã lưu Post {post_id} | Chủ bài: {owning_profile.get('name', 'N/A')}")
+            
+            # Dispatch cho các profile khác (nếu Sếp dùng logic cũ)
+            self.dispatch_get_id_for_all_profiles(post_id)
+            
             return True
         except Exception as e:
             print(f"❌ Lỗi save_post_id: {e}")
@@ -340,66 +388,52 @@ class FBController:
 
 
     def scan_while_scrolling(self):
-        print("⬇️ Scan thông minh: Đang tìm bài viết mới...")
-        
-        max_retries = 50 
-        current_try = 0
+        try:
+            viewport = self.page.viewport_size
+            height = viewport['height'] if viewport else 800
 
-        while current_try < max_retries:
-            current_try += 1
-            
-            # 1. Lấy bài đang ở tâm viewport
-            post = self.get_center_post()
+            normal_step = height * 0.12
+            escape_step = height * 0.35  # 👈 THOÁT MODULE RÁC
 
-            if post:
-                # --- TRƯỜNG HỢP 1: BÀI CŨ (ĐÃ LÀM) ---
+            print("⬇️ Scan theo center-post (LOCK khi thấy xanh)")
+
+            while True:
+                post = self.get_center_post()
+
+                # =========================
+                # ❌ KHÔNG PHẢI POST → THOÁT NGAY
+                # =========================
+                if not post:
+                    # đang đứng trên ref / kết bạn / module rác
+                    self.page.mouse.wheel(0, escape_step)
+                    time.sleep(random.uniform(0.12, 0.13))
+                    continue
+
+                # =========================
+                # POST ĐÃ XỬ LÝ → ĐẨY RA KHỎI VIEW
+                # =========================
                 if self.check_post_is_processed(post):
-                    try:
-                        # Lấy chiều cao bài viết để biết cần cuộn bao nhiêu
-                        box = post.bounding_box()
-                        if box:
-                            # Cuộn qua chiều cao bài + 50px đệm
-                            total_scroll_distance = box['height'] + 50
-                        else:
-                            total_scroll_distance = 600 # Fallback nếu ko đo được
+                    self.page.mouse.wheel(0, normal_step)
+                    time.sleep(random.uniform(0.08, 0.15))
+                    continue
 
-                        # --- [LOGIC SẾP YÊU CẦU] ---
-                        # Chia nhỏ thành 15-25 bước để lướt mượt
-                        steps = random.randint(15, 25)
-                        step_px = total_scroll_distance / steps
-                        
-                        # print(f"⏩ Bài cũ -> Lướt {int(total_scroll_distance)}px trong {steps} bước...")
-
-                        for _ in range(steps):
-                            self.page.mouse.wheel(0, step_px)
-                            # Nghỉ ngẫu nhiên 0.03 - 0.08s
-                            time.sleep(random.uniform(0.03, 0.08))
-                        
-                        continue # Lướt xong thì vòng lại check bài mới ngay
-                        
-                    except Exception as e:
-                        print(f"⚠️ Lỗi cuộn mượt: {e}")
-                        self.page.mouse.wheel(0, 400)
-                        time.sleep(0.5)
-                        continue
-
-                # --- TRƯỜNG HỢP 2: BÀI MỚI (CHƯA LÀM) -> TRẢ VỀ NGAY ---
+                # =========================
+                # LOCK POST HỢP LỆ
+                # =========================
                 is_ad = self.check_current_post_is_ad(post)
 
                 if is_ad:
-                    print("🟥 ADS detected (Mới)")
+                    print("🟥 ADS detected (center-post)")
                     return post, "green"
                 else:
-                    print("🟨 Bài thường detected (Mới)")
+                    print("🟨 Bài thường detected (center-post)")
                     return post, "yellow"
 
-            # --- TRƯỜNG HỢP 3: CHƯA THẤY BÀI (Khoảng trắng) ---
-            # Cuộn nhẹ để dò tìm
-            self.page.mouse.wheel(0, 150)
-            time.sleep(random.uniform(0.1, 0.2))
+        except Exception as e:
+            print(f"⚠️ Lỗi scan: {e}")
+            return None, None
 
-        print("⚠️ Hết lượt scan (không thấy bài mới).")
-        return None, None
+
 
 
        
@@ -458,15 +492,6 @@ class FBController:
                     let cur = el.closest(POST_SELECTOR);
 
                     while (cur) {
-
-                        // ❌ LOẠI REELS
-                        if (
-                            cur.innerText &&
-                            cur.innerText.trim().toLowerCase().startsWith('reels')
-                        ) {
-                            return null;
-                        }
-
                         // ✅ PHẢI CÓ LIKE BUTTON → mới là post thật
                         const hasLike = cur.querySelector(
                             'div[aria-label="Thích"], div[aria-label="Like"],' +
@@ -487,9 +512,6 @@ class FBController:
             """)
         except:
             return None
-
-
-
 
     def check_current_post_is_ad(self, post_handle):
         if not post_handle or not post_handle.as_element(): return False
@@ -606,7 +628,18 @@ class FBController:
 
             if not has_keyword:
                 print("❌ Không có keyword -> skip bài")
+
+                # 1. Đánh dấu đã xử lý
                 self.mark_post_as_processed(post_handle)
+
+                # 2. 🚨 ĐẨY POST RA KHỎI VIEWPORT (QUAN TRỌNG)
+                try:
+                    viewport = self.page.viewport_size
+                    height = viewport['height'] if viewport else 800
+                    self.page.mouse.wheel(0, height * 0.4)
+                except:
+                    pass
+
                 return False
 
             print("✅ Có keyword")
@@ -694,8 +727,6 @@ class FBController:
         """
         Khi đã có post_id → gọi get_id cho toàn bộ PROFILE_IDS
         """
-        from worker.get_id import get_id_from_url
-
         print(f"📡 Dispatch get_id cho post_id={post_id}")
 
         for pid in self.all_profile_ids:
