@@ -37,7 +37,7 @@ function updateRowCount() {
 async function loadPostsForManager() {
   if (postsLoaded || !postTableBody) return;
   try {
-    const res = await fetch('../backend/data/post_ids/621e1f5d-0c42-481e-9ddd-7abaafce68ed.json');
+    const res = await fetch('../backend/data/post_ids/031ca13d-e8fa-400c-a603-df57a2806788.json');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (!Array.isArray(data) || data.length === 0) {
