@@ -1,8 +1,32 @@
 [
-  "122150960222694490",
-  "101620679431321",
-  "1171101481878307",
-  "122152251362694490",
-  "120235170330520148",
-  "1506669197252501"
+  {
+    "id": "122150960222694490",
+    "flag": "xanh",
+    "text": "Nội dung mô phỏng cho post 122150960222694490",
+    "owning_profile": {
+      "__typename": "User",
+      "name": "Vinfast Tuyển Dụng",
+      "id": "61570834715466"
+    }
+  },
+  {
+    "id": "101620679431321",
+    "flag": "đỏ",
+    "text": "Nội dung mô phỏng cho post 101620679431321",
+    "owning_profile": {
+      "__typename": "User",
+      "name": "TH True Mart tuyển dụng",
+      "id": "100087385844583"
+    }
+  },
+  {
+    "id": "1171101481878307",
+    "flag": "vàng",
+    "text": "Nội dung mô phỏng cho post 1171101481878307",
+    "owning_profile": {
+      "__typename": "User",
+      "name": "Americus & Gosani",
+      "id": "100069353979673"
+    }
+  }
 ]

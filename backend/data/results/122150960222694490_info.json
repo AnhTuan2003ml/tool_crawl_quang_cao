@@ -1,12 +1,15 @@
 {
   "post_id": "122150960222694490",
+  "flag": "xanh",
+  "text": "Nội dung mô phỏng cho post 122150960222694490",
+  "owning_profile": {
+    "__typename": "User",
+    "name": "Vinfast Tuyển Dụng",
+    "id": "61570834715466"
+  },
   "source_file": "031ca13d-e8fa-400c-a603-df57a2806788.json",
   "profile_id": "031ca13d-e8fa-400c-a603-df57a2806788",
   "reactions": [
-    {
-      "id": "61580808625812",
-      "name": "Huynh Cong Minh"
-    },
     {
       "id": "1214542366",
       "name": "Lê Tuấn Anh"
@@ -30,6 +33,10 @@
     {
       "id": "61550190320270",
       "name": "Ha Vo"
+    },
+    {
+      "id": "61550193146115",
+      "name": "Duc Phan"
     },
     {
       "id": "61550237573639",
@@ -890,6 +897,10 @@
     {
       "id": "100003378679843",
       "name": "Trần Thế Ân"
+    },
+    {
+      "id": "100003486531925",
+      "name": "Tuấn Võ"
     },
     {
       "id": "100003498836725",
@@ -1828,6 +1839,10 @@
       "name": "Dung Tran"
     },
     {
+      "id": "100007951984952",
+      "name": "Chuong Phan"
+    },
+    {
       "id": "100007962273267",
       "name": "Vũ Thục Khanh"
     },
@@ -2224,6 +2239,10 @@
       "name": "Nga Nguyen"
     },
     {
+      "id": "100012165750794",
+      "name": "Nguyen The Anh"
+    },
+    {
       "id": "100012191446614",
       "name": "Hoàng Thuận"
     },
@@ -2500,6 +2519,10 @@
       "name": "Hoài Thanh"
     },
     {
+      "id": "100018049517791",
+      "name": "Trần Mai Thông"
+    },
+    {
       "id": "100018712299690",
       "name": "Đặng Duy Hưng"
     },
@@ -2666,6 +2689,10 @@
     {
       "id": "100024020507922",
       "name": "Trần Nguyên Hùng"
+    },
+    {
+      "id": "100024284104280",
+      "name": "Cường Bii"
     },
     {
       "id": "100024454964725",
@@ -3640,6 +3667,10 @@
       "name": "Nguyễn Kim Huệ"
     },
     {
+      "id": "100056587181748",
+      "name": "Hải Hải"
+    },
+    {
       "id": "100056964455463",
       "name": "Huỳnh Mộng Thu"
     },
@@ -3984,6 +4015,10 @@
       "name": "Thương Hoài"
     },
     {
+      "id": "100073984576166",
+      "name": "Thúy Quỳnh"
+    },
+    {
       "id": "100074021537759",
       "name": "An Bùi Như"
     },
@@ -4082,10 +4117,6 @@
     {
       "id": "100077555650415",
       "name": "Phương Cacao"
-    },
-    {
-      "id": "100077636558595",
-      "name": "Lâm Quốc Bảo"
     },
     {
       "id": "100078034662037",
@@ -4458,280 +4489,10 @@
   ],
   "comments": [
     {
-      "id": "100011310454271",
-      "name": "Đức Nguyễn",
-      "text": "Này chắc hết slot oy",
-      "created_time_vn": "2025-12-14 23:49:21"
-    },
-    {
-      "id": "100000165078699",
-      "name": "Tùng Bùi",
-      "text": "Ib em ạ",
-      "created_time_vn": "2025-12-13 14:19:46"
-    },
-    {
-      "id": "100035332923847",
-      "name": "Trịnh Xuân Trường",
-      "text": "Có tuyển khu Ninh Bình ko a",
-      "created_time_vn": "2025-12-12 18:21:45"
-    },
-    {
-      "id": "100025749559239",
-      "name": "Minh Diệu",
-      "text": "Điều kiện như thế nào zậy ad",
-      "created_time_vn": "2025-12-09 21:33:21"
-    },
-    {
-      "id": "61582500838091",
-      "name": "Cố Quên",
-      "text": "Làm cv ơ đâu dậy a",
-      "created_time_vn": "2025-12-09 21:08:48"
-    },
-    {
-      "id": "100022875712192",
-      "name": "Hoàng Long",
-      "text": "Công nhân kho có cần bằng ko",
-      "created_time_vn": "2025-12-09 13:01:09"
-    },
-    {
       "id": "61550007209843",
       "name": "Trần Thọ",
       "text": "Chúc doanh nghiệp thịnh vương",
       "created_time_vn": "2025-12-07 21:16:59"
-    },
-    {
-      "id": "100005094872268",
-      "name": "Dung Nguyen",
-      "text": "Trợ lý giám đốc yêu cầu như nào",
-      "created_time_vn": "2025-12-06 22:10:19"
-    },
-    {
-      "id": "100070122397219",
-      "name": "Huyến Car A.I",
-      "text": "👍",
-      "created_time_vn": "2025-12-06 21:05:48"
-    },
-    {
-      "id": "100008858381523",
-      "name": "Hồ Đơn Phương",
-      "text": "Còn tuyển ko",
-      "created_time_vn": "2025-12-03 22:11:42"
-    },
-    {
-      "id": "100025789984189",
-      "name": "Phạm Văn Đô",
-      "text": "Xin chăn ạ",
-      "created_time_vn": "2025-12-03 21:43:19"
-    },
-    {
-      "id": "100043881496415",
-      "name": "Hoàn Đoàn Văn",
-      "text": "Mình đã có kinh nghiệm quản lý kho thành phẩm gần 10 năm. Muốn ứng tuyển vị trí nhân viên kho thì làm ntn.",
-      "created_time_vn": "2025-12-03 18:53:49"
-    },
-    {
-      "id": "100012357012718",
-      "name": "Hao Tran",
-      "text": "Ib e ạ",
-      "created_time_vn": "2025-12-01 20:09:31"
-    },
-    {
-      "id": "100005246042832",
-      "name": "Văn Toàn",
-      "text": "Poll",
-      "created_time_vn": "2025-12-01 06:09:51"
-    },
-    {
-      "id": "100041024493272",
-      "name": "Minh Hiếu",
-      "text": "Tuyển ở đâu vậy ạ",
-      "created_time_vn": "2025-11-30 20:37:33"
-    },
-    {
-      "id": "100006398494860",
-      "name": "Tuan Tuan Trung",
-      "text": "Nhan viên kho yeu câu thế mao ban",
-      "created_time_vn": "2025-11-30 06:35:26"
-    },
-    {
-      "id": "100009956405807",
-      "name": "Trần Ngọc",
-      "text": "Còn tuyển kiểm soát nội bộ không bạn ?",
-      "created_time_vn": "2025-11-29 23:41:52"
-    },
-    {
-      "id": "100027609980867",
-      "name": "Xuân Quân",
-      "text": "Có tuyển cn lao động ko",
-      "created_time_vn": "2025-11-29 20:27:49"
-    },
-    {
-      "id": "100074452901885",
-      "name": "Lâm Púch Xê A",
-      "text": "Chơn Thành tuyển dụng không ạ",
-      "created_time_vn": "2025-11-27 12:29:41"
-    },
-    {
-      "id": "100006828812149",
-      "name": "Hai Con Cuông",
-      "text": "Chốt",
-      "created_time_vn": "2025-11-26 22:23:20"
-    },
-    {
-      "id": "100014070158894",
-      "name": "Hoang Duong",
-      "text": "E o đông nai làm dc k ạ",
-      "created_time_vn": "2025-11-26 14:54:32"
-    },
-    {
-      "id": "100005029181365",
-      "name": "Huy Nguyen",
-      "text": "Công ty có tuyển khu vực Quảng Ngãi không ad ơi?",
-      "created_time_vn": "2025-11-25 12:13:38"
-    },
-    {
-      "id": "100084546177261",
-      "name": "Vuong Nguyen",
-      "text": "Con tuyên ko ak",
-      "created_time_vn": "2025-11-25 10:20:26"
-    },
-    {
-      "id": "61562755996958",
-      "name": "Nguyễn Q. Sáng",
-      "text": "Trần Quỳnh",
-      "created_time_vn": "2025-11-24 21:27:05"
-    },
-    {
-      "id": "100057777966094",
-      "name": "Trần Thắng",
-      "text": "Nhân viên kho ntn bạn",
-      "created_time_vn": "2025-11-24 06:57:27"
-    },
-    {
-      "id": "61553474652388",
-      "name": "Hoàng Thiên",
-      "text": ".",
-      "created_time_vn": "2025-11-22 23:32:20"
-    },
-    {
-      "id": "100003117464476",
-      "name": "Nguyễn Thị Hải Luận",
-      "text": "Kim Ly Van, Nguyễn Lệ Thu",
-      "created_time_vn": "2025-11-22 14:05:38"
-    },
-    {
-      "id": "100034771966756",
-      "name": "Du Tran",
-      "text": "Trà vinh có không???",
-      "created_time_vn": "2025-11-21 21:53:36"
-    },
-    {
-      "id": "61579318266095",
-      "name": "Trần Thịnh",
-      "text": "Trà vinh có tuyển ko ạ.",
-      "created_time_vn": "2025-11-20 19:17:49"
-    },
-    {
-      "id": "100005475302341",
-      "name": "Thắng Bx",
-      "text": ".",
-      "created_time_vn": "2025-11-20 13:21:58"
-    },
-    {
-      "id": "100005475302341",
-      "name": "Thắng Bx",
-      "text": "Ib m nhe",
-      "created_time_vn": "2025-11-18 20:38:20"
-    },
-    {
-      "id": "61565854161210",
-      "name": "Huynh Ba",
-      "text": "Ib",
-      "created_time_vn": "2025-11-18 05:54:21"
-    },
-    {
-      "id": "100007067495704",
-      "name": "Biên Nghệ An",
-      "text": ".",
-      "created_time_vn": "2025-11-16 21:40:39"
-    },
-    {
-      "id": "100010274467802",
-      "name": "Dương Lê",
-      "text": "Còn tuyển kho k ak",
-      "created_time_vn": "2025-11-15 16:52:51"
-    },
-    {
-      "id": "100012451836115",
-      "name": "Hùng Lâm",
-      "text": ".",
-      "created_time_vn": "2025-11-13 23:23:47"
-    },
-    {
-      "id": "100063919234949",
-      "name": "Thanh Nguyen Trung",
-      "text": "Toi 50 tuoi hien dang song tai tp hcm . Có bằng lai xe dấu D . Ko biết có tuyển dung ko a",
-      "created_time_vn": "2025-11-13 13:46:13"
-    },
-    {
-      "id": "61577538753470",
-      "name": "Đinh Văn Khanh",
-      "text": ".",
-      "created_time_vn": "2025-11-11 12:00:09"
-    },
-    {
-      "id": "100011408690394",
-      "name": "Nguyentrung Nguyen Trung",
-      "text": "Mình muốn ứng tuyểnquan lý nội bộ",
-      "created_time_vn": "2025-11-10 19:45:09"
-    },
-    {
-      "id": "100024020507922",
-      "name": "Trần Nguyên Hùng",
-      "text": "...",
-      "created_time_vn": "2025-11-10 13:01:04"
-    },
-    {
-      "id": "100014542606661",
-      "name": "Thai Ninh",
-      "text": "Nhân viên kho yêu cầu thế nào độ tuổi nhiu",
-      "created_time_vn": "2025-11-10 12:56:04"
-    },
-    {
-      "id": "100046326636929",
-      "name": "Nguyễn Thắng",
-      "text": "Tphcm có k ạ",
-      "created_time_vn": "2025-11-09 22:41:45"
-    },
-    {
-      "id": "100006913396585",
-      "name": "Nguyễn Văn Triều",
-      "text": "Ib thủ kho",
-      "created_time_vn": "2025-11-09 20:53:25"
-    },
-    {
-      "id": "100079717576937",
-      "name": "Nguyễn Vân Quân",
-      "text": "Ib",
-      "created_time_vn": "2025-11-09 17:34:45"
-    },
-    {
-      "id": "100018797025595",
-      "name": "Lê Thanh Hiền",
-      "text": "khu vực nào a",
-      "created_time_vn": "2025-11-08 16:33:58"
-    },
-    {
-      "id": "61574468717923",
-      "name": "Thuỳ Liên",
-      "text": "Ib e ạ",
-      "created_time_vn": "2025-11-08 14:37:25"
-    },
-    {
-      "id": "100004471183096",
-      "name": "Lều Tú",
-      "text": "xin đăng ký",
-      "created_time_vn": "2025-11-08 00:00:21"
     },
     {
       "id": "100066725032703",
@@ -4740,10 +4501,208 @@
       "created_time_vn": "2025-11-07 21:39:21"
     },
     {
+      "id": "100070122397219",
+      "name": "Huyến Car A.I",
+      "text": "👍",
+      "created_time_vn": "2025-12-06 21:05:48"
+    },
+    {
+      "id": "61574468717923",
+      "name": "Thuỳ Liên",
+      "text": "Ib e ạ",
+      "created_time_vn": "2025-11-08 14:37:25"
+    },
+    {
+      "id": "100025789984189",
+      "name": "Phạm Văn Đô",
+      "text": "Xin chăn ạ",
+      "created_time_vn": "2025-12-03 21:43:19"
+    },
+    {
+      "id": "100000165078699",
+      "name": "Tùng Bùi",
+      "text": "Ib em ạ",
+      "created_time_vn": "2025-12-13 14:19:46"
+    },
+    {
+      "id": "100012357012718",
+      "name": "Hao Tran",
+      "text": "Ib e ạ",
+      "created_time_vn": "2025-12-01 20:09:31"
+    },
+    {
+      "id": "100009956405807",
+      "name": "Trần Ngọc",
+      "text": "Còn tuyển kiểm soát nội bộ không bạn ?",
+      "created_time_vn": "2025-11-29 23:41:52"
+    },
+    {
+      "id": "61579318266095",
+      "name": "Trần Thịnh",
+      "text": "Trà vinh có tuyển ko ạ.",
+      "created_time_vn": "2025-11-20 19:17:49"
+    },
+    {
+      "id": "100005029181365",
+      "name": "Huy Nguyen",
+      "text": "Công ty có tuyển khu vực Quảng Ngãi không ad ơi?",
+      "created_time_vn": "2025-11-25 12:13:38"
+    },
+    {
+      "id": "100005094872268",
+      "name": "Dung Nguyen",
+      "text": "Trợ lý giám đốc yêu cầu như nào",
+      "created_time_vn": "2025-12-06 22:10:19"
+    },
+    {
+      "id": "100035332923847",
+      "name": "Trịnh Xuân Trường",
+      "text": "Có tuyển khu Ninh Bình ko a",
+      "created_time_vn": "2025-12-12 18:21:45"
+    },
+    {
+      "id": "100014542606661",
+      "name": "Thai Ninh",
+      "text": "Nhân viên kho yêu cầu thế nào độ tuổi nhiu",
+      "created_time_vn": "2025-11-10 12:56:04"
+    },
+    {
+      "id": "100057777966094",
+      "name": "Trần Thắng",
+      "text": "Nhân viên kho ntn bạn",
+      "created_time_vn": "2025-11-24 06:57:27"
+    },
+    {
+      "id": "100014070158894",
+      "name": "Hoang Duong",
+      "text": "E o đông nai làm dc k ạ",
+      "created_time_vn": "2025-11-26 14:54:32"
+    },
+    {
+      "id": "100046326636929",
+      "name": "Nguyễn Thắng",
+      "text": "Tphcm có k ạ",
+      "created_time_vn": "2025-11-09 22:41:45"
+    },
+    {
+      "id": "100043881496415",
+      "name": "Hoàn Đoàn Văn",
+      "text": "Mình đã có kinh nghiệm quản lý kho thành phẩm gần 10 năm. Muốn ứng tuyển vị trí nhân viên kho thì làm ntn.",
+      "created_time_vn": "2025-12-03 18:53:49"
+    },
+    {
+      "id": "100084546177261",
+      "name": "Vuong Nguyen",
+      "text": "Con tuyên ko ak",
+      "created_time_vn": "2025-11-25 10:20:26"
+    },
+    {
+      "id": "100006913396585",
+      "name": "Nguyễn Văn Triều",
+      "text": "Ib thủ kho",
+      "created_time_vn": "2025-11-09 20:53:25"
+    },
+    {
+      "id": "100074452901885",
+      "name": "Lâm Púch Xê A",
+      "text": "Chơn Thành tuyển dụng không ạ",
+      "created_time_vn": "2025-11-27 12:29:41"
+    },
+    {
+      "id": "61582500838091",
+      "name": "Cố Quên",
+      "text": "Làm cv ơ đâu dậy a",
+      "created_time_vn": "2025-12-09 21:08:48"
+    },
+    {
       "id": "100085209656750",
       "name": "Vạn Minh",
       "text": "Còn tuyển Kỷ thuật viên không bạn",
       "created_time_vn": "2025-11-07 12:11:26"
+    },
+    {
+      "id": "100006398494860",
+      "name": "Tuan Tuan Trung",
+      "text": "Nhan viên kho yeu câu thế mao ban",
+      "created_time_vn": "2025-11-30 06:35:26"
+    },
+    {
+      "id": "100025749559239",
+      "name": "Minh Diệu",
+      "text": "Điều kiện như thế nào zậy ad",
+      "created_time_vn": "2025-12-09 21:33:21"
+    },
+    {
+      "id": "100034771966756",
+      "name": "Du Tran",
+      "text": "Trà vinh có không???",
+      "created_time_vn": "2025-11-21 21:53:36"
+    },
+    {
+      "id": "100012165750794",
+      "name": "Nguyen The Anh",
+      "text": "hóng",
+      "created_time_vn": "2025-12-15 10:44:05"
+    },
+    {
+      "id": "100027609980867",
+      "name": "Xuân Quân",
+      "text": "Có tuyển cn lao động ko",
+      "created_time_vn": "2025-11-29 20:27:49"
+    },
+    {
+      "id": "100041024493272",
+      "name": "Minh Hiếu",
+      "text": "Tuyển ở đâu vậy ạ",
+      "created_time_vn": "2025-11-30 20:37:33"
+    },
+    {
+      "id": "100022875712192",
+      "name": "Hoàng Long",
+      "text": "Công nhân kho có cần bằng ko",
+      "created_time_vn": "2025-12-09 13:01:09"
+    },
+    {
+      "id": "100007067495704",
+      "name": "Biên Nghệ An",
+      "text": ".",
+      "created_time_vn": "2025-11-16 21:40:39"
+    },
+    {
+      "id": "100011408690394",
+      "name": "Nguyentrung Nguyen Trung",
+      "text": "Mình muốn ứng tuyểnquan lý nội bộ",
+      "created_time_vn": "2025-11-10 19:45:09"
+    },
+    {
+      "id": "61553474652388",
+      "name": "Hoàng Thiên",
+      "text": ".",
+      "created_time_vn": "2025-11-22 23:32:20"
+    },
+    {
+      "id": "100008858381523",
+      "name": "Hồ Đơn Phương",
+      "text": "Còn tuyển ko",
+      "created_time_vn": "2025-12-03 22:11:42"
+    },
+    {
+      "id": "100063919234949",
+      "name": "Thanh Nguyen Trung",
+      "text": "Toi 50 tuoi hien dang song tai tp hcm . Có bằng lai xe dấu D . Ko biết có tuyển dung ko a",
+      "created_time_vn": "2025-11-13 13:46:13"
+    },
+    {
+      "id": "100018797025595",
+      "name": "Lê Thanh Hiền",
+      "text": "khu vực nào a",
+      "created_time_vn": "2025-11-08 16:33:58"
+    },
+    {
+      "id": "100005246042832",
+      "name": "Văn Toàn",
+      "text": "Poll",
+      "created_time_vn": "2025-12-01 06:09:51"
     },
     {
       "id": "61582728937643",
@@ -4752,10 +4711,82 @@
       "created_time_vn": "2025-11-06 07:23:41"
     },
     {
+      "id": "100005475302341",
+      "name": "Thắng Bx",
+      "text": "Ib m nhe",
+      "created_time_vn": "2025-11-18 20:38:20"
+    },
+    {
+      "id": "100004471183096",
+      "name": "Lều Tú",
+      "text": "xin đăng ký",
+      "created_time_vn": "2025-11-08 00:00:21"
+    },
+    {
+      "id": "100006828812149",
+      "name": "Hai Con Cuông",
+      "text": "Chốt",
+      "created_time_vn": "2025-11-26 22:23:20"
+    },
+    {
+      "id": "100012451836115",
+      "name": "Hùng Lâm",
+      "text": ".",
+      "created_time_vn": "2025-11-13 23:23:47"
+    },
+    {
+      "id": "100003117464476",
+      "name": "Nguyễn Thị Hải Luận",
+      "text": "Kim Ly Van, Nguyễn Lệ Thu",
+      "created_time_vn": "2025-11-22 14:05:38"
+    },
+    {
+      "id": "100010274467802",
+      "name": "Dương Lê",
+      "text": "Còn tuyển kho k ak",
+      "created_time_vn": "2025-11-15 16:52:51"
+    },
+    {
+      "id": "61577538753470",
+      "name": "Đinh Văn Khanh",
+      "text": ".",
+      "created_time_vn": "2025-11-11 12:00:09"
+    },
+    {
+      "id": "61562755996958",
+      "name": "Nguyễn Q. Sáng",
+      "text": "Trần Quỳnh",
+      "created_time_vn": "2025-11-24 21:27:05"
+    },
+    {
+      "id": "100005475302341",
+      "name": "Thắng Bx",
+      "text": ".",
+      "created_time_vn": "2025-11-20 13:21:58"
+    },
+    {
+      "id": "100024020507922",
+      "name": "Trần Nguyên Hùng",
+      "text": "...",
+      "created_time_vn": "2025-11-10 13:01:04"
+    },
+    {
+      "id": "100079717576937",
+      "name": "Nguyễn Vân Quân",
+      "text": "Ib",
+      "created_time_vn": "2025-11-09 17:34:45"
+    },
+    {
       "id": "61572587993897",
       "name": "Phan Phổ",
       "text": "Phạm Tiên Sinh",
       "created_time_vn": "2025-11-06 06:38:11"
+    },
+    {
+      "id": "61565854161210",
+      "name": "Huynh Ba",
+      "text": "Ib",
+      "created_time_vn": "2025-11-18 05:54:21"
     },
     {
       "id": "100034153822517",
@@ -4776,7 +4807,9 @@
       "created_time_vn": "2025-11-18 17:57:55"
     }
   ],
-  "reactions_count": 1113,
+  "reactions_count": 1119,
   "comments_count": 53,
+  "reactions_count_before_filter": 1119,
+  "comments_count_before_filter": 53,
   "status": "success"
 }
