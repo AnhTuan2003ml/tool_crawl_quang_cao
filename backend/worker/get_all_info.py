@@ -17,13 +17,63 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 DEFAULT_PROFILE_ID = "031ca13d-e8fa-400c-a603-df57a2806788"
 
 
-def process_post_id(post_id, file_name, profile_id, payload_dict, cookies):
+def filter_by_owner_id(items, owner_id):
     """
-    Xử lý một post_id: lấy reactions và comments
+    Lọc bỏ các items có id trùng với owner_id
     
     Args:
-        post_id (str): Facebook ID của post
-        file_name (str): Tên file JSON chứa post_id này
+        items (list): Danh sách items (reactions hoặc comments)
+        owner_id (str): ID của owner cần loại bỏ
+        
+    Returns:
+        list: Danh sách items đã được lọc
+    """
+    if not owner_id or not items:
+        return items
+    
+    filtered = []
+    removed_count = 0
+    
+    for item in items:
+        # Reactions: {"id": user_id, "name": user_name}
+        # Comments: {"id": user_id, "name": user_name, "text": ...} hoặc {"id": comment_id, "author": {"id": user_id, ...}}
+        item_id = None
+        
+        # Thử lấy id từ các vị trí có thể
+        if "id" in item:
+            # Với comments, có thể là comment_id hoặc user_id
+            # Nếu có "author", thì id là comment_id, cần lấy từ author
+            if "author" in item and isinstance(item["author"], dict):
+                item_id = item["author"].get("id")
+            else:
+                # Nếu không có author, thì id chính là user_id
+                item_id = item.get("id")
+        
+        # Nếu vẫn chưa có, thử các field khác
+        if not item_id:
+            item_id = item.get("user_id")
+        
+        # Chỉ thêm vào nếu id khác với owner_id
+        if item_id != owner_id:
+            filtered.append(item)
+        else:
+            removed_count += 1
+    
+    if removed_count > 0:
+        print(f"   🚫 Đã lọc bỏ {removed_count} items từ owner (ID: {owner_id})")
+    
+    return filtered
+
+
+def process_post_id(post_data, file_name, profile_id, payload_dict, cookies):
+    """
+    Xử lý một post: lấy reactions và comments
+    
+    Args:
+        post_data (dict hoặc str): 
+            - Nếu là dict: {"id": "...", "flag": "...", "text": "...", "owning_profile": {...}}
+            - Nếu là str: post_id (format cũ, để tương thích)
+        file_name (str): Tên file JSON chứa post này
         profile_id (str): Profile ID
         payload_dict (dict): Payload dictionary đã được load sẵn
         cookies (str): Cookie string đã được load sẵn
@@ -31,20 +81,49 @@ def process_post_id(post_id, file_name, profile_id, payload_dict, cookies):
     Returns:
         dict: Kết quả với reactions và comments
     """
+    # Xử lý cả format cũ (string) và format mới (object)
+    if isinstance(post_data, str):
+        # Format cũ: chỉ là string post_id
+        post_id = post_data
+        flag = None
+        text = None
+        owning_profile = None
+        owning_profile_id = None
+    else:
+        # Format mới: object với id, flag, text, owning_profile
+        post_id = post_data.get("id")
+        flag = post_data.get("flag")
+        text = post_data.get("text")
+        owning_profile = post_data.get("owning_profile")
+        owning_profile_id = owning_profile.get("id") if owning_profile else None
+    
+    if not post_id:
+        print(f"⚠️ Không tìm thấy post_id trong post_data")
+        return None
+    
     print("\n" + "="*70)
     print(f"📌 Xử lý Post ID: {post_id}")
+    if flag:
+        print(f"🏷️  Flag: {flag}")
+    if owning_profile:
+        print(f"👤 Owner: {owning_profile.get('name', 'N/A')} (ID: {owning_profile_id})")
     print(f"📁 Từ file: {file_name}")
     print(f"👤 Profile ID: {profile_id}")
     print("="*70)
     
     result = {
         "post_id": post_id,
+        "flag": flag,
+        "text": text,
+        "owning_profile": owning_profile,
         "source_file": file_name,
         "profile_id": profile_id,
         "reactions": [],
         "comments": [],
         "reactions_count": 0,
         "comments_count": 0,
+        "reactions_count_before_filter": 0,
+        "comments_count_before_filter": 0,
         "status": "success"
     }
     
@@ -52,16 +131,34 @@ def process_post_id(post_id, file_name, profile_id, payload_dict, cookies):
         # 1. Lấy reactions
         print(f"\n🔵 Bắt đầu lấy REACTIONS cho post_id: {post_id}")
         reactions = get_all_users_by_fid(post_id, payload_dict, profile_id, cookies)
+        result["reactions_count_before_filter"] = len(reactions)
+        
+        # Lọc bỏ reactions từ owner
+        if owning_profile_id:
+            reactions = filter_by_owner_id(reactions, owning_profile_id)
+            filtered_count = result["reactions_count_before_filter"] - len(reactions)
+            if filtered_count > 0:
+                print(f"🚫 Đã lọc bỏ {filtered_count} reactions từ owner (ID: {owning_profile_id})")
+        
         result["reactions"] = reactions
         result["reactions_count"] = len(reactions)
-        print(f"✅ Đã lấy được {len(reactions)} reactions")
+        print(f"✅ Đã lấy được {result['reactions_count']} reactions (sau khi lọc)")
         
         # 2. Lấy comments
         print(f"\n🟢 Bắt đầu lấy COMMENTS cho post_id: {post_id}")
         comments = get_all_comments_by_post_id(post_id, payload_dict, profile_id, cookies)
+        result["comments_count_before_filter"] = len(comments)
+        
+        # Lọc bỏ comments từ owner
+        if owning_profile_id:
+            comments = filter_by_owner_id(comments, owning_profile_id)
+            filtered_count = result["comments_count_before_filter"] - len(comments)
+            if filtered_count > 0:
+                print(f"🚫 Đã lọc bỏ {filtered_count} comments từ owner (ID: {owning_profile_id})")
+        
         result["comments"] = comments
         result["comments_count"] = len(comments)
-        print(f"✅ Đã lấy được {len(comments)} comments")
+        print(f"✅ Đã lấy được {result['comments_count']} comments (sau khi lọc)")
         
     except Exception as e:
         print(f"❌ Lỗi khi xử lý post_id {post_id}: {e}")
@@ -128,9 +225,9 @@ def process_post_ids_file(file_path):
             print(f"⚠️ File {file_name} không chứa mảng post_ids")
             return []
         
-        print(f"📋 Tìm thấy {len(post_ids)} post_ids trong file")
+        print(f"📋 Tìm thấy {len(post_ids)} post(s) trong file")
         
-        # Load payload và cookies một lần cho tất cả post_ids
+        # Load payload và cookies một lần cho tất cả posts
         print(f"\n🔄 Đang lấy payload và cookies từ profile_id: {profile_id}")
         payload_dict = get_payload_by_profile_id(profile_id)
         if not payload_dict:
@@ -142,22 +239,33 @@ def process_post_ids_file(file_path):
             print(f"❌ Không thể lấy cookies từ profile_id: {profile_id}")
             return []
         
-        print(f"✅ Đã load payload và cookies thành công (sẽ dùng chung cho tất cả {len(post_ids)} post_ids)")
+        print(f"✅ Đã load payload và cookies thành công (sẽ dùng chung cho tất cả {len(post_ids)} posts)")
         
         results = []
-        for i, post_id in enumerate(post_ids, 1):
+        for i, post_data in enumerate(post_ids, 1):
+            # Xử lý cả format cũ (string) và format mới (object)
+            if isinstance(post_data, str):
+                post_id = post_data
+            else:
+                post_id = post_data.get("id")
+            
+            if not post_id:
+                print(f"⚠️ [{i}/{len(post_ids)}] Bỏ qua item không có post_id: {post_data}")
+                continue
+            
             print(f"\n{'='*70}")
             print(f"📌 [{i}/{len(post_ids)}] Xử lý Post ID: {post_id}")
             print(f"{'='*70}")
             
-            result = process_post_id(post_id, file_name, profile_id, payload_dict, cookies)
-            results.append(result)
-            
-            # Lưu kết quả riêng cho mỗi post_id
-            post_output_file = os.path.join(OUTPUT_DIR, f"{post_id}_info.json")
-            with open(post_output_file, "w", encoding="utf-8") as f:
-                json.dump(result, f, ensure_ascii=False, indent=2)
-            print(f"💾 Đã lưu kết quả vào: {post_output_file}")
+            result = process_post_id(post_data, file_name, profile_id, payload_dict, cookies)
+            if result:
+                results.append(result)
+                
+                # Lưu kết quả riêng cho mỗi post_id
+                post_output_file = os.path.join(OUTPUT_DIR, f"{post_id}_info.json")
+                with open(post_output_file, "w", encoding="utf-8") as f:
+                    json.dump(result, f, ensure_ascii=False, indent=2)
+                print(f"💾 Đã lưu kết quả vào: {post_output_file}")
         
         return results
         

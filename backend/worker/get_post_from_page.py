@@ -370,11 +370,6 @@ if __name__ == "__main__":
     start_date = "2025-12-8"  # Ngày bắt đầu (sẽ tự động đặt 00:00:00 VN = 17:00:00 UTC ngày hôm trước)
     end_date = "2025-12-14"    # Ngày kết thúc (sẽ tự động đặt 23:59:59 VN = 16:59:59 UTC ngày hôm sau)
     
-    # Hoặc có thể dùng format khác:
-    # start_date = "14/12/2025"
-    # end_date = "14/12/2025"
-    
-    # Lấy posts (không giới hạn)
     posts = get_posts_from_page(page_id, profile_id, start_date, end_date, limit=None)
     
     # In kết quả
