@@ -86,7 +86,7 @@ def get_post_id_from_html(url, profile_id, cookies=None):
                     cookies_dict[key.strip()] = value.strip()
             session.cookies.update(cookies_dict)
         
-        # Headers cho GET request (giống trình duyệt)
+        # Headers cho GET request (giống trình duyệt, CHỈ gzip/deflate để tránh lỗi brotli trên máy thiếu thư viện)
         get_headers = {
             "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
             "accept-encoding": "gzip, deflate",
@@ -376,10 +376,10 @@ def get_page_id_from_html(url, profile_id, cookies=None):
                     cookies_dict[key.strip()] = value.strip()
             session.cookies.update(cookies_dict)
         
-        # Headers cho GET request (giống trình duyệt)
+        # Headers cho GET request (giống trình duyệt, CHỈ gzip/deflate để tránh lỗi brotli trên máy thiếu thư viện)
         get_headers = {
             "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "accept-encoding": "gzip, deflate, br",
+            "accept-encoding": "gzip, deflate",
             "accept-language": "en,vi;q=0.9,en-US;q=0.8",
             "referer": "https://www.facebook.com/",
             "sec-ch-ua": '"Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
@@ -546,6 +546,6 @@ if __name__ == "__main__":
     # result = get_id_from_url(group_url, profile_id)
     
     # Test với video/post URL
-    url = "https://www.facebook.com/122152251362694490"
+    url = "https://www.facebook.com/share/p/19zm6nCnSk/"
     result = get_id_from_url(url, profile_id)
     print(result)

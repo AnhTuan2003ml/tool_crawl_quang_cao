@@ -1,5 +1,6 @@
 import requests
 import json
+from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from urllib.parse import urlparse, parse_qs
 
@@ -380,13 +381,14 @@ if __name__ == "__main__":
         for post in posts[:5]:
             print(f"      - {post['id']} (created: {post['created_time']})")
     
-    # Lưu ra file JSON
-    output_dir = "backend/data"
+    # Lưu ra file JSON (theo project root)
+    base_dir = Path(__file__).resolve().parents[2]
+    output_dir = base_dir / "backend" / "data"
     os.makedirs(output_dir, exist_ok=True)
     
     # Tạo tên file dựa trên page_id và ngày
     filename = f"{page_id}_posts_{start_date.replace('/', '-')}_to_{end_date.replace('/', '-')}.json"
-    filepath = os.path.join(output_dir, filename)
+    filepath = output_dir / filename
     
     # Tạo dữ liệu để lưu
     output_data = {
