@@ -7,6 +7,7 @@ from urllib.parse import urlparse, parse_qs, unquote
 import os
 from worker.get_id import get_id_from_url
 import sys
+from core.settings import get_settings
 # ==============================================================================
 # JS TOOLS & HELPER FUNCTIONS
 # ==============================================================================
@@ -212,11 +213,8 @@ class FBController:
         self.page = None
         self.play = None
         self.profile_id = "unknown"
-        self.all_profile_ids = [
-        p.strip()
-        for p in os.getenv("PROFILE_IDS", "").split(",")
-        if p.strip()
-        ]
+        cfg = get_settings()
+        self.all_profile_ids = cfg.profile_ids
         # [THAY ĐỔI] Tách thành 2 biến để quản lý ưu tiên
         self.captured_payload_url = None  # ID từ Request (Dự phòng)
         self.captured_response_id = None # ID từ Response (Ưu tiên)
@@ -277,7 +275,11 @@ class FBController:
 
     # ===================== SHARE & CHỜ ID (LOGIC MỚI) =====================
     def share_center_ad(self, post_handle, post_type):
+            
         try:
+            viewport = self.page.viewport_size
+            height = viewport['height'] if viewport else 800
+            escape_step = height * 0.35  # 👈 THOÁT MODULE RÁC
             print("🚀 Share → bắt ID (Response → Payload → ViewSource)")
 
             self.captured_payload_url = None
@@ -288,6 +290,8 @@ class FBController:
             )
             if not share_btn:
                 print("⚠️ Không tìm thấy nút Share")
+                self.page.mouse.wheel(0, escape_step)
+                time.sleep(random.uniform(0.12, 0.13))
                 return False
 
             share_btn.scroll_into_view_if_needed()
@@ -307,6 +311,7 @@ class FBController:
             if self.captured_payload_url:
                 source_id = self.get_id_blocking_mode(self.captured_payload_url)
                 if source_id:
+                    self.dispatch_get_id_for_all_profiles(source_id)
                     self.save_post_id(source_id, post_type)
                     self.page.keyboard.press("Escape")
                     return True
@@ -432,11 +437,6 @@ class FBController:
         except Exception as e:
             print(f"⚠️ Lỗi scan: {e}")
             return None, None
-
-
-
-
-       
 
     def like_current_post(self, post_handle):
         print("❤️ Đang thực hiện Like bài viết này...")
@@ -676,26 +676,20 @@ class FBController:
         """
         Mở tab mới -> Soi Code -> Tìm chữ "post_id" đầu tiên -> Trả về ngay.
         """
-        print(f"⛔ [BLOCKING] Tạm dừng để soi source URL: {url}")
-        new_page = None
+        print(f"⛔ [BLOCKING] Soi source nhanh: {url}")
         found_id = None
         
         try:
-            context = self.page.context
-            # 1. Mở tab mới
-            new_page = context.new_page()
+            # Dùng APIRequestContext của page để lấy source (nhanh, giữ cookie)
+            resp = self.page.request.get(url, timeout=20000)
+            if not resp or resp.status != 200:
+                print(f"    -> ⚠️ Request thất bại hoặc status != 200 (status={getattr(resp, 'status', None)})")
+                return None
+
+            content = resp.text()
             
-            # 2. Truy cập view-source (Treo bot ở đây chờ tải xong mới chạy tiếp)
-            target = f"view-source:{url}"
-            print("    -> Đang tải source code (Chờ DOMContentLoaded)...")
-            new_page.goto(target, wait_until='domcontentloaded', timeout=20000)
-            
-            # 3. Lấy toàn bộ HTML
-            content = new_page.content()
-            
-            # 4. TÌM KIẾM CHÍNH XÁC "post_id"
-            # re.search mặc định sẽ quét từ trên xuống dưới và trả về kết quả ĐẦU TIÊN nó thấy.
-            # Đúng ý Sếp: Thấy cái đầu là chốt luôn.
+            # TÌM KIẾM CHÍNH XÁC "post_id"
+            # re.search sẽ trả về kết quả đầu tiên tìm được.
             
             # Pattern 1: Dạng chuẩn "post_id":"12345"
             match = re.search(r'"post_id":"(\d+)"', content)
@@ -715,13 +709,9 @@ class FBController:
 
         except Exception as e:
             print(f"    -> ❌ Lỗi khi soi source: {e}")
-        finally:
-            # 5. Đóng tab ngay lập tức
-            if new_page: 
-                new_page.close()
-                print("    -> Đã đóng tab soi code. Quay lại tab chính...")
                 
         return found_id
+    
     
     def dispatch_get_id_for_all_profiles(self, post_id: str):
         """

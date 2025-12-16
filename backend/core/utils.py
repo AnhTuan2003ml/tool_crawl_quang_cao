@@ -29,5 +29,10 @@ def extract_uid_from_url(url):
             
     return None
 
-def clean_profile_list(raw: str):
-    return [p.strip() for p in raw.split(",") if p.strip()]
+def clean_profile_list(raw):
+    """Chuẩn hóa danh sách profile từ string hoặc list."""
+    if not raw:
+        return []
+
+    items = raw if isinstance(raw, list) else str(raw).split(",")
+    return [str(p).strip() for p in items if str(p).strip()]

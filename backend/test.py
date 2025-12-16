@@ -1,13 +1,11 @@
-import os
 import time
-from dotenv import load_dotenv
 from core.nst import connect_profile
 from core.browser import FBController
+from core.settings import get_settings
 
-load_dotenv()
 
 def test_check_resolution():
-    profile_list = os.getenv("PROFILE_IDS", "").split(",")
+    profile_list = get_settings().profile_ids
     profile_id = profile_list[0].strip()
     
     if not profile_id:

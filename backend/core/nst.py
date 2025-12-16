@@ -1,13 +1,12 @@
 import requests
-import os
 import json
-import urllib.parse # Cần cái này để mã hóa User-Agent có dấu cách
-from dotenv import load_dotenv
+import urllib.parse  # Cần cái này để mã hóa User-Agent có dấu cách
 
-load_dotenv()
+from core.settings import get_settings
 
-API_KEY = os.getenv("API_KEY")
-HEADLESS = os.getenv("HEADLESS", "false").lower() == "true"
+settings = get_settings()
+API_KEY = settings.api_key
+HEADLESS = settings.headless
 
 def connect_profile(profile_id: str):
     # Cấu hình chuẩn theo JS mẫu: Dùng fingerprint để fake User-Agent

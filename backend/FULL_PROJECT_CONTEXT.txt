@@ -2,7 +2,6 @@
 
 PROJECT STRUCTURE:
 backend/
-    .env
     .gitignore
     main.py
     requirements.txt
@@ -13,13 +12,21 @@ backend/
     config/
         cloneM.txt
         cookies.json
+        groups.json
         payload.txt
+        settings.json
     core/
         browser.py
+        join_groups.py
         nst.py
         runner.py
         scraper.py
+        search_worker.py
+        settings.py
         utils.py
+        data/
+            post_ids/
+                621e1f5d-0c42-481e-9ddd-7abaafce68ed.json
     data/
         987870664956102_posts_2025-12-8_to_2025-12-14.json
         cookies/
@@ -49,16 +56,14 @@ if __name__ == "__main__":
 --- END FILE: main.py ---
 
 --- START FILE: test.py ---
-import os
 import time
-from dotenv import load_dotenv
 from core.nst import connect_profile
 from core.browser import FBController
+from core.settings import get_settings
 
-load_dotenv()
 
 def test_check_resolution():
-    profile_list = os.getenv("PROFILE_IDS", "").split(",")
+    profile_list = get_settings().profile_ids
     profile_id = profile_list[0].strip()
     
     if not profile_id:
@@ -218,6 +223,26 @@ App package cho FastAPI endpoints.
 }
 --- END FILE: config\cookies.json ---
 
+--- START FILE: config\groups.json ---
+[
+    "3013041542259942",
+    "1884004131909284"
+]
+--- END FILE: config\groups.json ---
+
+--- START FILE: config\settings.json ---
+{
+  "API_KEY": "7a43ee33-9f15-434d-a1b6-6d1b5809f935",
+  "HEADLESS": false,
+  "TARGET_URL": "https://facebook.com",
+  "PROFILE_IDS": [
+    "621e1f5d-0c42-481e-9ddd-7abaafce68ed"
+  ],
+  "RUN_MINUTES": 30,
+  "REST_MINUTES": 120
+}
+--- END FILE: config\settings.json ---
+
 --- START FILE: core\browser.py ---
 import time
 import random
@@ -226,10 +251,30 @@ import json
 import re
 from urllib.parse import urlparse, parse_qs, unquote
 import os
-
+from worker.get_id import get_id_from_url
+import sys
+from core.settings import get_settings
 # ==============================================================================
 # JS TOOLS & HELPER FUNCTIONS
 # ==============================================================================
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+worker_path = os.path.join(parent_dir, 'worker')
+
+if worker_path not in sys.path:
+    sys.path.append(worker_path)
+
+# Import hàm lấy thông tin an toàn
+try:
+    from get_id import get_id_from_url
+except ImportError:
+    try:
+        from worker.get_id import get_id_from_url
+    except:
+        print("⚠️ Cảnh báo: Không import được worker/get_id.py")
+        get_id_from_url = None
+
+
 JS_EXPAND_SCRIPT = """
 (node) => {
     if (!node) return 0;
@@ -414,18 +459,15 @@ class FBController:
         self.page = None
         self.play = None
         self.profile_id = "unknown"
-        self.all_profile_ids = [
-        p.strip()
-        for p in os.getenv("PROFILE_IDS", "").split(",")
-        if p.strip()
-        ]
+        cfg = get_settings()
+        self.all_profile_ids = cfg.profile_ids
         # [THAY ĐỔI] Tách thành 2 biến để quản lý ưu tiên
         self.captured_payload_url = None  # ID từ Request (Dự phòng)
         self.captured_response_id = None # ID từ Response (Ưu tiên)
         
         self.job_keywords = [
             "tuyển dụng", "tuyển nhân viên", "tuyển gấp", "việc làm", 
-            "lương", "thu nhập", "phỏng vấn", "hồ sơ",
+            "lương", "phỏng vấn", "hồ sơ",
             "full-time", "part-time", "thực tập", "kế toán", "may mặc", "kcn" ,"Ứng viên " , "Ứng tuyển"
         ]
 
@@ -537,15 +579,40 @@ class FBController:
                 except:
                     data = []
 
-            # tránh trùng ID
+            # 1. Tránh trùng ID (Check cả format cũ post_id và mới id)
             for item in data:
-                if item.get("post_id") == post_id:
-                    print("🔁 ID trùng -> bỏ qua.")
+                existing_id = item.get("id") or item.get("post_id")
+                if existing_id == post_id:
+                    print(f"🔁 ID {post_id} đã tồn tại -> bỏ qua.")
                     return False
 
+            # 2. [NEW] Gọi Worker lấy thông tin chi tiết
+            print(f"📥 Đang fetch chi tiết bài viết {post_id} (chờ worker)...")
+            
+            # Tạo link giả lập để worker xử lý
+            target_url = f"https://www.facebook.com/{post_id}"
+            
+            details = {}
+            if get_id_from_url:
+                try:
+                    # Truyền profile_id để worker dùng đúng cookie của trình duyệt đang chạy
+                    details = get_id_from_url(target_url, self.profile_id)
+                except Exception as e:
+                    print(f"⚠️ Lỗi khi gọi get_id_from_url: {e}")
+            
+            # 3. [NEW] Format dữ liệu JSON theo yêu cầu
+            # Map flag: green -> xanh, yellow -> vàng
+            flag_vn = "xanh" if post_type == "green" else "vàng" if post_type == "yellow" else post_type
+            
+            # Lấy thông tin từ kết quả worker trả về
+            post_text = details.get("post_text", "")
+            owning_profile = details.get("owning_profile", {})
+
             record = {
-                "post_id": post_id,
-                "flag": post_type   # green | yellow
+                "id": post_id,
+                "flag": flag_vn,
+                "text": post_text,
+                "owning_profile": owning_profile
             }
 
             data.append(record)
@@ -553,7 +620,11 @@ class FBController:
             with open(filepath, "w", encoding="utf8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
 
-            print(f"💾 Đã lưu {record}")
+            print(f"💾 Đã lưu Post {post_id} | Chủ bài: {owning_profile.get('name', 'N/A')}")
+            
+            # Dispatch cho các profile khác (nếu Sếp dùng logic cũ)
+            self.dispatch_get_id_for_all_profiles(post_id)
+            
             return True
         except Exception as e:
             print(f"❌ Lỗi save_post_id: {e}")
@@ -561,69 +632,50 @@ class FBController:
 
 
     def scan_while_scrolling(self):
-        print("⬇️ Scan thông minh: Đang tìm bài viết mới...")
-        
-        max_retries = 50 
-        current_try = 0
+        try:
+            viewport = self.page.viewport_size
+            height = viewport['height'] if viewport else 800
 
-        while current_try < max_retries:
-            current_try += 1
-            
-            # 1. Lấy bài đang ở tâm viewport
-            post = self.get_center_post()
+            normal_step = height * 0.12
+            escape_step = height * 0.35  # 👈 THOÁT MODULE RÁC
 
-            if post:
-                # --- TRƯỜNG HỢP 1: BÀI CŨ (ĐÃ LÀM) ---
+            print("⬇️ Scan theo center-post (LOCK khi thấy xanh)")
+
+            while True:
+                post = self.get_center_post()
+
+                # =========================
+                # ❌ KHÔNG PHẢI POST → THOÁT NGAY
+                # =========================
+                if not post:
+                    # đang đứng trên ref / kết bạn / module rác
+                    self.page.mouse.wheel(0, escape_step)
+                    time.sleep(random.uniform(0.12, 0.13))
+                    continue
+
+                # =========================
+                # POST ĐÃ XỬ LÝ → ĐẨY RA KHỎI VIEW
+                # =========================
                 if self.check_post_is_processed(post):
-                    try:
-                        # Lấy chiều cao bài viết để biết cần cuộn bao nhiêu
-                        box = post.bounding_box()
-                        if box:
-                            # Cuộn qua chiều cao bài + 50px đệm
-                            total_scroll_distance = box['height'] + 50
-                        else:
-                            total_scroll_distance = 600 # Fallback nếu ko đo được
+                    self.page.mouse.wheel(0, normal_step)
+                    time.sleep(random.uniform(0.08, 0.15))
+                    continue
 
-                        # --- [LOGIC SẾP YÊU CẦU] ---
-                        # Chia nhỏ thành 15-25 bước để lướt mượt
-                        steps = random.randint(15, 25)
-                        step_px = total_scroll_distance / steps
-                        
-                        # print(f"⏩ Bài cũ -> Lướt {int(total_scroll_distance)}px trong {steps} bước...")
-
-                        for _ in range(steps):
-                            self.page.mouse.wheel(0, step_px)
-                            # Nghỉ ngẫu nhiên 0.03 - 0.08s
-                            time.sleep(random.uniform(0.03, 0.08))
-                        
-                        continue # Lướt xong thì vòng lại check bài mới ngay
-                        
-                    except Exception as e:
-                        print(f"⚠️ Lỗi cuộn mượt: {e}")
-                        self.page.mouse.wheel(0, 400)
-                        time.sleep(0.5)
-                        continue
-
-                # --- TRƯỜNG HỢP 2: BÀI MỚI (CHƯA LÀM) -> TRẢ VỀ NGAY ---
+                # =========================
+                # LOCK POST HỢP LỆ
+                # =========================
                 is_ad = self.check_current_post_is_ad(post)
 
                 if is_ad:
-                    print("🟥 ADS detected (Mới)")
+                    print("🟥 ADS detected (center-post)")
                     return post, "green"
                 else:
-                    print("🟨 Bài thường detected (Mới)")
+                    print("🟨 Bài thường detected (center-post)")
                     return post, "yellow"
 
-            # --- TRƯỜNG HỢP 3: CHƯA THẤY BÀI (Khoảng trắng) ---
-            # Cuộn nhẹ để dò tìm
-            self.page.mouse.wheel(0, 150)
-            time.sleep(random.uniform(0.1, 0.2))
-
-        print("⚠️ Hết lượt scan (không thấy bài mới).")
-        return None, None
-
-
-       
+        except Exception as e:
+            print(f"⚠️ Lỗi scan: {e}")
+            return None, None
 
     def like_current_post(self, post_handle):
         print("❤️ Đang thực hiện Like bài viết này...")
@@ -679,15 +731,6 @@ class FBController:
                     let cur = el.closest(POST_SELECTOR);
 
                     while (cur) {
-
-                        // ❌ LOẠI REELS
-                        if (
-                            cur.innerText &&
-                            cur.innerText.trim().toLowerCase().startsWith('reels')
-                        ) {
-                            return null;
-                        }
-
                         // ✅ PHẢI CÓ LIKE BUTTON → mới là post thật
                         const hasLike = cur.querySelector(
                             'div[aria-label="Thích"], div[aria-label="Like"],' +
@@ -708,9 +751,6 @@ class FBController:
             """)
         except:
             return None
-
-
-
 
     def check_current_post_is_ad(self, post_handle):
         if not post_handle or not post_handle.as_element(): return False
@@ -827,7 +867,18 @@ class FBController:
 
             if not has_keyword:
                 print("❌ Không có keyword -> skip bài")
+
+                # 1. Đánh dấu đã xử lý
                 self.mark_post_as_processed(post_handle)
+
+                # 2. 🚨 ĐẨY POST RA KHỎI VIEWPORT (QUAN TRỌNG)
+                try:
+                    viewport = self.page.viewport_size
+                    height = viewport['height'] if viewport else 800
+                    self.page.mouse.wheel(0, height * 0.4)
+                except:
+                    pass
+
                 return False
 
             print("✅ Có keyword")
@@ -915,8 +966,6 @@ class FBController:
         """
         Khi đã có post_id → gọi get_id cho toàn bộ PROFILE_IDS
         """
-        from worker.get_id import get_id_from_url
-
         print(f"📡 Dispatch get_id cho post_id={post_id}")
 
         for pid in self.all_profile_ids:
@@ -931,17 +980,138 @@ class FBController:
                 print(f"   ❌ Lỗi get_id với profile {pid}: {e}")
 --- END FILE: core\browser.py ---
 
---- START FILE: core\nst.py ---
-import requests
+--- START FILE: core\join_groups.py ---
+import sys
 import os
 import json
-import urllib.parse # Cần cái này để mã hóa User-Agent có dấu cách
-from dotenv import load_dotenv
+import time
+import random
 
-load_dotenv()
+# --- SETUP ĐƯỜNG DẪN ĐỂ IMPORT CORE ---
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
 
-API_KEY = os.getenv("API_KEY")
-HEADLESS = os.getenv("HEADLESS", "false").lower() == "true"
+from core.nst import connect_profile
+from core.browser import FBController
+
+class GroupJoiner(FBController):
+    """
+    Class chuyên dụng để đi xin vào nhóm
+    """
+    def join_group(self, group_id):
+        url = f"https://www.facebook.com/groups/{group_id}"
+        print(f"\n🚀 Đang truy cập nhóm: {group_id}")
+        print(f"🔗 Link: {url}")
+        
+        try:
+            self.goto(url)
+            time.sleep(random.uniform(3, 5)) # Chờ load trang
+
+            # 1. Kiểm tra xem đã tham gia chưa
+            is_joined = self.page.query_selector('div[aria-label="Đã tham gia"], div[aria-label="Mời"]')
+            if is_joined:
+                print(f"✅ [SKIP] Đã là thành viên của nhóm {group_id}")
+                return False
+
+            # 2. Tìm nút "Tham gia nhóm"
+            join_btn_selector = 'div[aria-label="Tham gia nhóm"][role="button"]'
+            join_btn = self.page.query_selector(join_btn_selector)
+
+            if not join_btn:
+                join_btn = self.page.get_by_text("Tham gia nhóm", exact=True).first
+            
+            if join_btn:
+                print("point 👉 Tìm thấy nút 'Tham gia nhóm'. Đang click...")
+                join_btn.click()
+                
+                # ======================================================
+                # [MỚI] ẤN ESC 2 LẦN ĐỂ TẮT POPUP CÂU HỎI / NỘI QUY
+                # ======================================================
+               
+                time.sleep(2)           # Chờ popup hiện lên
+                self.page.keyboard.press("Escape")
+               
+                # ======================================================
+                
+                time.sleep(2) # Chờ UI cập nhật lại sau khi tắt popup
+                
+                # 3. Kiểm tra lại trạng thái
+                # Nếu nút chuyển thành "Hủy yêu cầu" hoặc "Đã tham gia" -> Thành công
+                check_success = self.page.query_selector('div[aria-label="Hủy yêu cầu"], div[aria-label="Đã tham gia"]')
+                
+                if check_success:
+                    print(f"✅ Đã gửi yêu cầu tham gia thành công: {group_id}")
+                else:
+                    # Nếu vẫn còn nút tham gia -> Có thể do chưa trả lời câu hỏi bắt buộc
+                    print(f"⚠️ Đã click nhưng chưa thấy đổi trạng thái (Có thể cần trả lời câu hỏi bắt buộc): {group_id}")
+                
+                return True
+            else:
+                print(f"❌ Không tìm thấy nút tham gia (Có thể nhóm kín, bị chặn, hoặc layout khác).")
+                return False
+
+        except Exception as e:
+            print(f"❌ Lỗi khi xử lý nhóm {group_id}: {e}")
+            return False
+
+def run_batch_join(profile_id, json_file_path):
+    # 1. Đọc file JSON
+    try:
+        with open(json_file_path, "r", encoding="utf-8") as f:
+            group_ids = json.load(f)
+        
+        if not group_ids:
+            print("⚠️ File JSON rỗng.")
+            return
+            
+        print(f"📋 Tìm thấy {len(group_ids)} nhóm cần tham gia.")
+        
+    except Exception as e:
+        print(f"❌ Lỗi đọc file JSON: {e}")
+        return
+
+    # 2. Kết nối Profile
+    try:
+        print(f"🔌 Đang kết nối profile {profile_id}...")
+        ws_url = connect_profile(profile_id)
+        fb = GroupJoiner(ws_url)
+        fb.profile_id = profile_id
+        fb.connect()
+        
+        # 3. Chạy vòng lặp
+        for gid in group_ids:
+            fb.join_group(gid)
+            
+            # Nghỉ ngẫu nhiên
+            sleep_time = random.uniform(10, 20) 
+            print(f"💤 Nghỉ {sleep_time:.1f}s trước khi qua nhóm tiếp theo...")
+            time.sleep(sleep_time)
+            
+    except Exception as e:
+        print(f"❌ Lỗi kết nối/browser: {e}")
+    finally:
+        print("🏁 Hoàn tất danh sách.")
+        # fb.browser.close() 
+
+if __name__ == "__main__":
+    # --- CẤU HÌNH ---
+    MY_PROFILE_ID = "621e1f5d-0c42-481e-9ddd-7abaafce68ed" 
+    JSON_PATH = os.path.join(parent_dir, "data", "groups.json")
+    
+    run_batch_join(MY_PROFILE_ID, JSON_PATH)
+--- END FILE: core\join_groups.py ---
+
+--- START FILE: core\nst.py ---
+import requests
+import json
+import urllib.parse  # Cần cái này để mã hóa User-Agent có dấu cách
+
+from core.settings import get_settings
+
+settings = get_settings()
+API_KEY = settings.api_key
+HEADLESS = settings.headless
 
 def connect_profile(profile_id: str):
     # Cấu hình chuẩn theo JS mẫu: Dùng fingerprint để fake User-Agent
@@ -982,35 +1152,33 @@ def connect_profile(profile_id: str):
 --- END FILE: core\nst.py ---
 
 --- START FILE: core\runner.py ---
-import os
 import time  # [Cần thêm thư viện này để đếm giờ]
 from multiprocessing import Process
 from typing import Optional
 
-from dotenv import load_dotenv
-
 from core.browser import FBController
 from core.nst import connect_profile
 from core.scraper import SimpleBot
+from core.settings import get_settings
 from core.utils import clean_profile_list
 
 
 class AppRunner:
     def __init__(self, run_minutes: Optional[int] = None, rest_minutes: Optional[int] = None):
-        load_dotenv()
-        self.target_url = os.getenv("TARGET_URL", "https://facebook.com")
-        self.profiles = clean_profile_list(os.getenv("PROFILE_IDS", ""))
+        cfg = get_settings()
+        self.target_url = cfg.target_url
+        self.profiles = clean_profile_list(cfg.profile_ids)
 
-        # Ưu tiên giá trị truyền từ API; fallback ENV; cuối cùng là default.
+        # Ưu tiên giá trị truyền từ API; fallback cấu hình; cuối cùng là default.
         self.RUN_MINUTES = self._coerce_positive_int(
             run_minutes,
-            self._coerce_positive_int(os.getenv("RUN_MINUTES"), 30),
+            cfg.run_minutes,
             default=30,
         )
         # REST_MINUTES mặc định 120p (tương đương 2h như cấu hình cũ)
         self.REST_MINUTES = self._coerce_positive_int(
             rest_minutes,
-            self._coerce_positive_int(os.getenv("REST_MINUTES"), 120),
+            cfg.rest_minutes,
             default=120,
         )
 
@@ -1146,6 +1314,240 @@ class SimpleBot:
                 time.sleep(2)
 --- END FILE: core\scraper.py ---
 
+--- START FILE: core\search_worker.py ---
+import sys
+import os
+import urllib.parse
+import time
+
+# --- SETUP ĐƯỜNG DẪN ĐỂ IMPORT CORE ---
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+
+from core.nst import connect_profile
+from core.browser import FBController, JS_EXPAND_SCRIPT, JS_CHECK_AND_HIGHLIGHT_SCOPED
+from core.scraper import SimpleBot
+
+# ==============================================================================
+# CLASS CONTROLLER MỚI (CHỈ LIKE, KHÔNG SHARE/SAVE)
+# ==============================================================================
+class SearchBotController(FBController):
+    """
+    Kế thừa FBController nhưng sửa lại hàm process_post
+    để chỉ thực hiện hành động Like, bỏ qua Share và Save ID.
+    """
+    def process_post(self, post_handle, post_type):
+        try:
+            print(f"🧠 [FilterMode] Đang soi bài viết (type={post_type})...")
+
+            # 1. Expand nội dung (để check keyword cho chuẩn)
+            self.page.evaluate(JS_EXPAND_SCRIPT, post_handle)
+
+            # 2. Check keyword
+            has_keyword = self.page.evaluate(
+                JS_CHECK_AND_HIGHLIGHT_SCOPED,
+                [post_handle, self.job_keywords]
+            )
+
+            if not has_keyword:
+                print("❌ Không có keyword -> Bỏ qua")
+                self.mark_post_as_processed(post_handle)
+                
+                # Đẩy bài viết lên để bot không bị kẹt
+                try:
+                    viewport = self.page.viewport_size
+                    height = viewport['height'] if viewport else 800
+                    self.page.mouse.wheel(0, height * 0.4)
+                except: pass
+                
+                return False
+
+            print("✅ Phát hiện bài có Keyword phù hợp!")
+
+            # 3. THỰC HIỆN LIKE (Quan trọng nhất)
+            self.like_current_post(post_handle)
+
+            # 4. Đánh dấu đã xử lý (Để bot lướt tiếp bài sau)
+            self.mark_post_as_processed(post_handle)
+            
+            return True
+
+        except Exception as e:
+            print(f"❌ Lỗi process_post: {e}")
+            return False
+
+# ==============================================================================
+# HÀM 1: TÌM KIẾM & LIKE (Trang Search)
+# ==============================================================================
+def search_and_like(profile_id: str, search_text: str, duration_minutes: int = 30):
+    """Nhập từ khóa -> Vào trang Search -> Lướt & Like bài có từ khóa"""
+    try:
+        # 1. Tạo URL Tìm kiếm
+        encoded_query = urllib.parse.quote_plus(search_text)
+        target_url = f"https://www.facebook.com/search/posts?q={encoded_query}"
+        
+        print(f"🔍 [Search] Từ khóa: '{search_text}'")
+        print(f"🔗 Link: {target_url}")
+
+        _run_bot_logic(profile_id, target_url, search_text, duration_minutes)
+
+    except Exception as e:
+        print(f"❌ Lỗi search_and_like: {e}")
+
+# ==============================================================================
+# HÀM 2: LƯỚT NEWFEED & LIKE (Trang Chủ)
+# ==============================================================================
+def feed_and_like(profile_id: str, filter_text: str, duration_minutes: int = 30):
+    """Vào trang chủ (Feed) -> Lướt -> Chỉ Like bài nào chứa filter_text"""
+    try:
+        # 1. URL là Trang chủ
+        target_url = "https://www.facebook.com/"
+        
+        print(f"🏠 [Feed] Lướt News Feed tìm từ khóa: '{filter_text}'")
+        
+        _run_bot_logic(profile_id, target_url, filter_text, duration_minutes)
+
+    except Exception as e:
+        print(f"❌ Lỗi feed_and_like: {e}")
+
+# ==============================================================================
+# HÀM CHẠY CHUNG (CORE LOGIC)
+# ==============================================================================
+def _run_bot_logic(profile_id, url, keywords_str, duration_minutes):
+    try:
+        # 1. Kết nối
+        print(f"🚀 Đang mở profile: {profile_id}")
+        ws_url = connect_profile(profile_id)
+        
+        # Dùng Controller đã cắt bỏ Share/Save
+        fb = SearchBotController(ws_url)
+        fb.profile_id = profile_id
+        fb.connect()
+
+        # 2. Inject Keywords
+        # Bot sẽ chỉ dừng lại Like nếu bài viết chứa các từ này
+        if keywords_str:
+            new_keywords = [keywords_str] + keywords_str.split()
+            fb.job_keywords.extend(new_keywords)
+            # Lọc trùng và từ quá ngắn
+            fb.job_keywords = list(set([k for k in fb.job_keywords if len(k) > 1]))
+            print(f"✅ Filter Keywords: {fb.job_keywords}")
+        
+        # 3. Chạy Bot
+        bot = SimpleBot(fb)
+        print(f"▶️ Bắt đầu lướt trong {duration_minutes} phút...")
+        duration_seconds = duration_minutes * 60
+        
+        bot.run(url, duration=duration_seconds)
+        
+    except Exception as e:
+        print(f"❌ Lỗi Runner: {e}")
+    finally:
+        print("🛑 Kết thúc.")
+
+if __name__ == "__main__":
+    # --- TEST ---
+    TEST_ID = "621e1f5d-0c42-481e-9ddd-7abaafce68ed"
+    
+    print("--- CHỌN CHẾ ĐỘ ---")
+    print("1. Search & Like (Vào trang tìm kiếm)")
+    print("2. Feed & Like (Lướt trang chủ)")
+    mode = input("Nhập 1 hoặc 2: ")
+    
+    text = "bắc ninh bắc giang"
+    
+    if mode == "1":
+        search_and_like(TEST_ID, text, duration_minutes=15)
+    elif mode == "2":
+        feed_and_like(TEST_ID, text, duration_minutes=15)
+--- END FILE: core\search_worker.py ---
+
+--- START FILE: core\settings.py ---
+import json
+from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
+from typing import List, Any
+
+# Đường dẫn cố định để đọc cấu hình
+SETTINGS_PATH = Path(__file__).resolve().parent.parent / "config" / "settings.json"
+
+
+def _parse_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return False
+
+
+def _coerce_positive_int(value: Any, default: int) -> int:
+    try:
+        num = int(value)
+        return num if num > 0 else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _parse_profile_ids(value: Any) -> List[str]:
+    if isinstance(value, list):
+        items = value
+    elif isinstance(value, str):
+        items = value.split(",")
+    else:
+        return []
+
+    return [str(item).strip() for item in items if str(item).strip()]
+
+
+@dataclass
+class Settings:
+    api_key: str
+    headless: bool = False
+    target_url: str = "https://facebook.com"
+    profile_ids: List[str] = field(default_factory=list)
+    run_minutes: int = 30
+    rest_minutes: int = 120
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    """
+    Đọc và cache cấu hình từ settings.json.
+    Gọi get_settings.cache_clear() nếu cần reload.
+    """
+    if not SETTINGS_PATH.exists():
+        raise FileNotFoundError(f"Không tìm thấy file cấu hình: {SETTINGS_PATH}")
+
+    with SETTINGS_PATH.open(encoding="utf-8") as f:
+        try:
+            raw = json.load(f)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"settings.json không hợp lệ: {exc}") from exc
+
+    return Settings(
+        api_key=str(raw.get("API_KEY", "")),
+        headless=_parse_bool(raw.get("HEADLESS", False)),
+        target_url=str(raw.get("TARGET_URL", "https://facebook.com")),
+        profile_ids=_parse_profile_ids(raw.get("PROFILE_IDS", [])),
+        run_minutes=_coerce_positive_int(raw.get("RUN_MINUTES", 30), 30),
+        rest_minutes=_coerce_positive_int(raw.get("REST_MINUTES", 120), 120),
+    )
+
+
+def reload_settings() -> Settings:
+    """Xóa cache và đọc lại settings.json (dùng khi file đổi nội dung)."""
+    get_settings.cache_clear()
+    return get_settings()
+
+
+--- END FILE: core\settings.py ---
+
 --- START FILE: core\utils.py ---
 
 
@@ -1178,9 +1580,29 @@ def extract_uid_from_url(url):
             
     return None
 
-def clean_profile_list(raw: str):
-    return [p.strip() for p in raw.split(",") if p.strip()]
+def clean_profile_list(raw):
+    """Chuẩn hóa danh sách profile từ string hoặc list."""
+    if not raw:
+        return []
+
+    items = raw if isinstance(raw, list) else str(raw).split(",")
+    return [str(p).strip() for p in items if str(p).strip()]
 --- END FILE: core\utils.py ---
+
+--- START FILE: core\data\post_ids\621e1f5d-0c42-481e-9ddd-7abaafce68ed.json ---
+[
+  {
+    "id": "122192681342340472",
+    "flag": "xanh",
+    "text": "📢 EVOTECH (CÔNG NGHỆ) ĐANG TÌM KIẾM ĐỒNG ĐỘI 🎯 CÁC VỊ TRÍ TUYỂN DỤNG - 03 chuyên viên kinh doanh giải pháp và bán hàng - 02 nhân viên chăm sóc khách hàng - 01 trợ lý cá nhân 🌟 QUYỀN LỢI: - UPTO 30M+ - Được đào tạo chuyên sâu về hệ sinh thái Zalo và kỹ năng tư vấn khách hàng - Lộ trình thăng tiến rõ ràng - Nhiều hoạt động gắn kết: sinh nhật, mini event nội bộ, teambuilding - Môi trường start-up công nghệ trẻ trung, được thử sức với các dự án đa ngành ⏰ THỜI GIAN LÀM VIỆC: 8h30 -17h30, Thứ 2 - Thứ 6 (Thứ 7 cách tuần) 📍 ĐỊA ĐIỂM LÀM VIỆC: The Manor Central Park, Nguyễn Xiển, Hà Nội 📩 CÁCH THỨC ỨNG TUYỂN: Gửi CV về hr@evotech.vn với cú pháp [TÊN_VỊ TRÍ ỨNG TUYỂN] Hoặc inbox fanpage/Zalo 0364974616 (Huyền HR) để nhận JD chi tiết!",
+    "owning_profile": {
+      "__typename": "User",
+      "name": "Evo career",
+      "id": "61560214182865"
+    }
+  }
+]
+--- END FILE: core\data\post_ids\621e1f5d-0c42-481e-9ddd-7abaafce68ed.json ---
 
 --- START FILE: data\987870664956102_posts_2025-12-8_to_2025-12-14.json ---
 {
@@ -2676,20 +3098,78 @@ def clean_profile_list(raw: str):
 --- START FILE: data\post_ids\621e1f5d-0c42-481e-9ddd-7abaafce68ed.json ---
 [
   {
-    "post_id": "122149766798739410",
+    "post_id": "834712089308596",
     "flag": "green"
   },
   {
-    "post_id": "1605677690592132",
-    "flag": "yellow"
-  },
-  {
-    "post_id": "2042598906591131",
-    "flag": "yellow"
-  },
-  {
-    "post_id": "1289314786575770",
+    "post_id": "1436375725164718",
     "flag": "green"
+  },
+  {
+    "id": "1302779741890507",
+    "flag": "xanh",
+    "text": "Bán Laptop sinh viên - Hỗ trợ trả góp Laptop đồ hoạ Dell Precision 5550, Nguyên Zin 100%, Đẹp 99%, Dòng máy trạm vỏ nhôm cao cấp của nhà Dell Chuyên dựng phim đồ họa 3D render CAM CAD Autodesk Revit Game giải trí Xem thêm",
+    "owning_profile": {
+      "__typename": "User",
+      "name": "Tuyển dụng HD SAISON",
+      "id": "100064754795833"
+    }
+  },
+  {
+    "id": "1288495153315513",
+    "flag": "xanh",
+    "text": "CHỦ ĐỘNG TÀI CHÍNH – VỮNG VÀNG TƯƠNG LAI 💫 🎯 Tự do tài chính không đến từ việc có bao nhiêu tiền, mà từ cách chúng ta kiểm soát cuộc sống: chủ động, có mục tiêu và sẵn sàng trước bất trắc. Khi quản lý tốt dòng tiền, bạn có thể lựa chọn cách sống mình mong muốn – vững vàng chăm lo cho gia đình, đầu tư cho tương lai, hay tự do theo đuổi đam mê.. 👉 Chỉ với 3 bước đơn giản, bạn sẽ tạo nên nền tảng tài chính vững chắc cho bạn và gia đình ✨ Bước 1: Đánh giá tình hình tài chính hiện tại – liệt kê thu nhập, chi tiêu để hiểu “sức khỏe tài chính” của bản thân. ✨ Bước 2: Lập kế hoạch chi tiêu, tiết kiệm phù hợp với mục tiêu – cân bằng giữa nhu cầu hiện tại và tầm nhìn dài hạn. ✨ Bước 3: Chọn giải pháp tài chính toàn diện – vừa bảo vệ trước rủi ro, vừa tích lũy tài sản cho tương lai. Bảo hiểm Liên kết đơn vị An Phát Đầu Tư Thịnh Vượng từ Dai-ichi Life Việt Nam - giải pháp tài chính thông minh giúp bạn: 🔹 Bảo vệ toàn diện: Giá trị bảo vệ cao, đồng thời miễn phí bảo vệ thêm một người thân trước rủi ro Tử vong do Tai nạn. 🔹 Đầu tư linh hoạt: Tự do lựa chọn và điều chỉnh danh mục đầu tư với 05 Quỹ liên kết đơn vị, gia tăng giá trị đầu tư với 2 khoản thưởng định kỳ hấp dẫn. 👉 Mỗi quyết định tài chính đúng đắn hôm nay sẽ là nền tảng vững chắc cho một tương lai thịnh vượng mai sau. 📍 Tìm hiểu thêm về Bảo hiểm Liên kết đơn vị An Phát Đầu Tư Thịnh Vượng tại: https://tinyurl.com/ilp2fbpost2 #DaiichiLifeVietNam #KetNoiTrieuYeuThuong #BaoHiemNhanTho #AnPhatDauTuThinhVuong #KeHoachTaiChinh #AnTamToanDien #ChonDauTu #TronBaoVe",
+    "owning_profile": {
+      "__typename": "User",
+      "name": "Dai-ichi Life Việt Nam",
+      "id": "100064651214139"
+    }
+  },
+  {
+    "id": "884189837467511",
+    "flag": "xanh",
+    "text": "Mẹ muốn khởi động nhẹ nhàng? Muốn tăng tốc? Hay muốn bứt phá? 🚀 Nutifood Shop Online luôn có một con đường dành riêng cho mẹ: 🔹 GÓI VÀNG – BẮT ĐẦU thử sức an toàn 🔹 GÓI BẠCH KIM – PHÁT TRIỂN chuyên nghiệp hơn 🔹 GÓI KIM CƯƠNG – BỨT PHÁ thu nhập Chọn gói phù hợp, nhận ngay bộ sản phẩm uy tín, đa dạng dành cho mọi gia đình từ trẻ nhỏ đến người lớn, hệ thống CSKH tự động 24/7 vô cùng tiện lời giúp mẹ thêm phần vững vàng ở bước đầu làm chủ 💪 👉 Đăng ký ngay tại phần bình luận để nhận thêm tư vấn chi tiết! #NutifoodShopOnline #LamMeDaGioiLamChuKhoGi",
+    "owning_profile": {
+      "__typename": "User",
+      "name": "Nutifood - Ngôi Nhà Dinh Dưỡng",
+      "id": "100076295079138"
+    }
+  },
+  {
+    "id": "101620679431321",
+    "flag": "xanh",
+    "text": "[TH TRUEMART] TUYỂN DỤNG NHÂN VIÊN BÁN HÀNG TẠI TP. HỒ CHÍ MINH 📍 Địa điểm: … Xem thêm",
+    "owning_profile": {
+      "__typename": "User",
+      "name": "TH True Mart tuyển dụng",
+      "id": "100087385844583"
+    }
+  },
+  {
+    "id": "2100679304014618",
+    "flag": "vàng",
+    "text": "Team mình cần tuyển các vị trí sau: TTS Content: lương 5 triệu, yêu cầu sinh viên năm cuối, có hỗ trợ dấu mộc Nhân viên Seeding: lương cứng 8-11 triệu, yêu cầu từ 6 tháng kinh nghiệm trở lên Công việc: viết bài - nghĩ idea - bắt trend mỗi ngày - seeding đa nền tảng cho thương hiệu lên độ phủ Làm việc tại Nguyễn Huy Tưởng - Thanh Xuân Ứng tuyển gửi CV về mail: phamthuthaohr.0203@gmail.com ib/z.l: 0982745036",
+    "owning_profile": {
+      "__typename": "User",
+      "name": "Thu Thảo",
+      "id": "100086145870368"
+    }
+  },
+  {
+    "id": "1880500019220235",
+    "flag": "vàng",
+    "text": "",
+    "owning_profile": {}
+  },
+  {
+    "id": "2423883404674379",
+    "flag": "vàng",
+    "text": "📍 [Thanh xuân – Hà Nội ] BÊN MÌNH ĐANG CẦN TUYỂN CHUYÊN VIÊN MKT ADS Số lượng : 2 -Thu nhập : 15 – 20 triệu( 10tr lương cứng) + % doanh thu+ thưởng ngày , tuần, tháng,+ phụ cấp -Môi trường trẻ, thoải mái, không drama -Cơ hội thăng tiến đang chờ bạn * Thời gian làm việc : Từ 08h40 đến 17h30 từ thứ 2 đến sáng thứ 7, trưa nghỉ từ 12h đến 13h30. Được nghỉ giữa giờ từ 15h-15h30 Nghỉ chiều thứ 7, chủ nhật + 1 ngày bất kì trong tháng có lương. 😍 Điều kiện ứng tuyển : - Trên 4th kinh nghiệm với FB Ads( có kinh nghiệm chạy chuyển đổi) - Chủ động, có trách nhiệm với công việc - Mong muốn đồng hành lâu dài 💡 Quyền lợi: - Môi trường trẻ trung + thưởng hấp dẫn - Cơ chế thăng tiến rõ ràng - Lễ, Tết, liên hoan, du lịch và các phúc lợi khác theo đúng quy định 📞 QUAN TÂM INBOX MÌNH NHẬN JD NHÉ",
+    "owning_profile": {
+      "__typename": "User",
+      "name": "Dang Cam Ly",
+      "id": "100020561268374"
+    }
   }
 ]
 --- END FILE: data\post_ids\621e1f5d-0c42-481e-9ddd-7abaafce68ed.json ---
@@ -10364,7 +10844,7 @@ if __name__ == "__main__":
     # result = get_id_from_url(group_url, profile_id)
     
     # Test với video/post URL
-    url = "https://www.facebook.com/share/p/19zm6nCnSk/"
+    url = "https://www.facebook.com/groups/851670585436522/posts/1880500019220235/#"
     result = get_id_from_url(url, profile_id)
     print(result)
 --- END FILE: worker\get_id.py ---

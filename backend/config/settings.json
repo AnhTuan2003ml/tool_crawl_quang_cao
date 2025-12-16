@@ -1,0 +1,10 @@
+{
+  "API_KEY": "7a43ee33-9f15-434d-a1b6-6d1b5809f935",
+  "HEADLESS": false,
+  "TARGET_URL": "https://facebook.com",
+  "PROFILE_IDS": [
+    "621e1f5d-0c42-481e-9ddd-7abaafce68ed"
+  ],
+  "RUN_MINUTES": 30,
+  "REST_MINUTES": 120
+}

@@ -1,32 +1,30 @@
-import os
 import time  # [Cần thêm thư viện này để đếm giờ]
 from multiprocessing import Process
 from typing import Optional
 
-from dotenv import load_dotenv
-
 from core.browser import FBController
 from core.nst import connect_profile
 from core.scraper import SimpleBot
+from core.settings import get_settings
 from core.utils import clean_profile_list
 
 
 class AppRunner:
     def __init__(self, run_minutes: Optional[int] = None, rest_minutes: Optional[int] = None):
-        load_dotenv()
-        self.target_url = os.getenv("TARGET_URL", "https://facebook.com")
-        self.profiles = clean_profile_list(os.getenv("PROFILE_IDS", ""))
+        cfg = get_settings()
+        self.target_url = cfg.target_url
+        self.profiles = clean_profile_list(cfg.profile_ids)
 
-        # Ưu tiên giá trị truyền từ API; fallback ENV; cuối cùng là default.
+        # Ưu tiên giá trị truyền từ API; fallback cấu hình; cuối cùng là default.
         self.RUN_MINUTES = self._coerce_positive_int(
             run_minutes,
-            self._coerce_positive_int(os.getenv("RUN_MINUTES"), 30),
+            cfg.run_minutes,
             default=30,
         )
         # REST_MINUTES mặc định 120p (tương đương 2h như cấu hình cũ)
         self.REST_MINUTES = self._coerce_positive_int(
             rest_minutes,
-            self._coerce_positive_int(os.getenv("REST_MINUTES"), 120),
+            cfg.rest_minutes,
             default=120,
         )
 

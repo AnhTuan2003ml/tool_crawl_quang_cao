@@ -45,13 +45,20 @@ class GroupJoiner(FBController):
                 # ======================================================
                 # [MỚI] ẤN ESC 2 LẦN ĐỂ TẮT POPUP CÂU HỎI / NỘI QUY
                 # ======================================================
-               
-                time.sleep(2)           # Chờ popup hiện lên
-                self.page.keyboard.press("Escape")
-               
+                # Thay sleep cứng bằng auto-wait popup/dialog
                 # ======================================================
+                try:
+                    # Chờ popup dialog (nếu có) rồi đóng
+                    self.page.wait_for_selector('div[role="dialog"]', timeout=3000)
+                    self.page.keyboard.press("Escape")
+                except:
+                    pass
                 
-                time.sleep(2) # Chờ UI cập nhật lại sau khi tắt popup
+                try:
+                    # Chờ UI cập nhật sau khi đóng popup (không sleep cứng)
+                    self.page.wait_for_timeout(800)
+                except:
+                    pass
                 
                 # 3. Kiểm tra lại trạng thái
                 # Nếu nút chuyển thành "Hủy yêu cầu" hoặc "Đã tham gia" -> Thành công
