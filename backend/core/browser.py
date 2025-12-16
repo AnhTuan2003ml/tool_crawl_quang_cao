@@ -290,11 +290,11 @@ class FBController:
             )
             if not share_btn:
                 print("⚠️ Không tìm thấy nút Share")
-                self.page.mouse.wheel(0, escape_step)
+                self.scroll_past_post(post_handle)
                 time.sleep(random.uniform(0.12, 0.13))
                 return False
 
-            share_btn.scroll_into_view_if_needed()
+            self.bring_element_into_view_smooth(share_btn)
             self.page.wait_for_timeout(300)
             share_btn.click()
 
@@ -450,7 +450,7 @@ class FBController:
             selector = 'div[role="button"][aria-label="Thích"], div[role="button"][aria-label="Like"]'
             like_btn = element.query_selector(selector)
             if like_btn:
-                like_btn.scroll_into_view_if_needed()
+                self.bring_element_into_view_smooth(like_btn)
                 time.sleep(0.5)
                 like_btn.click()
                 print("✅ Đã Bấm Like thành công!")
@@ -729,3 +729,81 @@ class FBController:
                 get_id_from_url(pid, post_id)
             except Exception as e:
                 print(f"   ❌ Lỗi get_id với profile {pid}: {e}")
+                
+                
+    def bring_element_into_view_smooth(self, element):
+        """
+        Kiểm tra element (nút Share) có trong màn hình không.
+        Nếu không, cuộn chuột nhẹ nhàng tới nó (Không dùng scroll_into_view gây giật).
+        """
+        try:
+            box = element.bounding_box()
+            if not box: return False # Element chưa render
+
+            viewport = self.page.viewport_size
+            vh = viewport['height']
+            
+            # Tọa độ Y của element so với đỉnh màn hình hiện tại
+            element_y = box['y']
+            element_height = box['height']
+
+            # Kiểm tra: Nút có nằm lọt thỏm trong màn hình không?
+            # (Cho phép lề trên 100px, lề dưới 100px để chắc chắn click được)
+            is_in_view = (element_y > 100) and (element_y + element_height < vh - 100)
+
+            if is_in_view:
+                return True # Đang đẹp rồi, không cần cuộn
+
+            # Nếu nút nằm dưới đáy màn hình -> Cần cuộn xuống
+            if element_y > vh - 100:
+                # Tính khoảng cách cần cuộn: Đưa nút lên vị trí khoảng 70% màn hình
+                scroll_distance = element_y - (vh * 0.7)
+                print(f"    -> 🔽 Nút Share bị che, cuộn xuống {int(scroll_distance)}px")
+                
+                # Cuộn mượt
+                self.page.mouse.wheel(0, scroll_distance)
+                time.sleep(0.5) # Chờ render lại
+                return True
+            
+            return True
+        except Exception as e:
+            print(f"⚠️ Lỗi tính toán cuộn: {e}")
+            return False
+
+    def scroll_past_post(self, post_handle):
+        """
+        Cuộn qua bài viết hiện tại một cách thông minh.
+        - Bài ngắn: Cuộn ít.
+        - Bài dài: Cuộn nhiều.
+        -> Tránh việc dùng PageDown bị trôi bài.
+        """
+        try:
+            box = post_handle.bounding_box()
+            if not box:
+                # Fallback nếu không lấy được kích thước -> Dùng PageDown
+                self.page.keyboard.press("PageDown")
+                return
+
+            post_height = box['height']
+            post_y = box['y']
+            
+            # Chiến thuật: Cuộn sao cho ĐÁY bài viết hiện tại trôi lên mép trên màn hình
+            # Cộng thêm 50px padding để tách biệt bài sau
+            scroll_distance = post_y + post_height + 50
+            
+            # Nếu khoảng cách quá lớn (bài siêu dài), chia nhỏ ra cuộn cho đỡ sốc
+            if scroll_distance > 2000:
+                steps = 3
+                step_dist = scroll_distance / steps
+                for _ in range(steps):
+                    self.page.mouse.wheel(0, step_dist)
+                    time.sleep(0.1)
+            else:
+                self.page.mouse.wheel(0, scroll_distance)
+                
+            print(f"    -> 📉 Đã cuộn qua bài (height={int(post_height)}px)")
+            time.sleep(1) # Chờ bài mới load
+
+        except Exception as e:
+            print(f"⚠️ Lỗi scroll_past_post: {e}")
+            self.page.keyboard.press("PageDown")

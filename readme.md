@@ -28,9 +28,13 @@
      - `GET /status` → kiểm tra đang chạy hay không
      - `GET /health` → ping sống
 
-5. Biến môi trường (tùy chỉnh trong `.env`):
-   - `TARGET_URL` (mặc định `https://facebook.com`)
-   - `PROFILE_IDS` danh sách id, phân tách dấu phẩy.
+5. Cấu hình tại `backend/config/settings.json`:
+   - `API_KEY`: key cho NST.
+   - `HEADLESS`: `true/false` để bật tắt headless.
+   - `TARGET_URL`: mặc định `https://facebook.com`.
+   - `PROFILE_IDS`: danh sách id (chuỗi hoặc mảng).
+   - `RUN_MINUTES`: số phút chạy mỗi phiên (mặc định 30).
+   - `REST_MINUTES`: số phút nghỉ giữa các phiên (mặc định 120).
 
 ## Frontend (tĩnh)
 
