@@ -22,15 +22,21 @@
 body {
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   background : var(--bg-gradient);
-  min-height : 100vh;
-  padding    : 20px;
+  height     : 100vh;
+  overflow   : hidden;
+  padding    : 12px;
   color      : var(--text-primary);
   line-height: 1.6;
 }
 
 .container {
-  max-width: 1400px;
-  margin   : 0 auto;
+  width         : 100%;
+  max-width     : 100%;
+  margin        : 0 auto;
+  padding       : 0 12px 12px;
+  height        : 100%;
+  display       : flex;
+  flex-direction: column;
 }
 
 /* Header */
@@ -38,19 +44,19 @@ body {
   background     : rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
   border-radius  : 16px;
-  padding        : 24px 32px;
-  margin-bottom  : 24px;
-  box-shadow     : var(--shadow-lg);
+  padding        : 2px;
+  margin-bottom  : 18px;
+  box-shadow     : 0 12px 30px rgba(0, 0, 0, 0.08);
   text-align     : center;
   animation      : slideDown 0.5s ease-out;
   position       : relative;
 }
 
 .header-content h1 {
-  font-size              : 28px;
-  font-weight            : 700;
-  color                  : var(--text-primary);
-  margin-bottom          : 8px;
+  font-size  : 28px;
+  font-weight: 700;
+  color      : var(--text-primary);
+
   background             : var(--bg-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -65,25 +71,25 @@ body {
 
 /* Color Legend */
 .color-legend {
-  display       : flex;
-  gap           : 20px;
-  align-items   : center;
-  flex-wrap     : wrap;
+  display        : flex;
+  gap            : 20px;
+  align-items    : center;
+  flex-wrap      : wrap;
   justify-content: center;
-  margin-bottom : 16px;
-  padding       : 10px 16px;
-  background    : #f9fafb;
-  border-radius : 8px;
-  border        : 1px dashed var(--border);
-  font-size     : 12px;
+  margin-bottom  : 16px;
+  padding        : 10px 16px;
+  background     : #f9fafb;
+  border-radius  : 8px;
+  border         : 1px dashed var(--border);
+  font-size      : 12px;
 }
 
 .legend-item {
-  display     : flex;
-  align-items : center;
-  gap         : 6px;
-  font-size   : 13px;
-  font-weight : 500;
+  display    : flex;
+  align-items: center;
+  gap        : 6px;
+  font-size  : 13px;
+  font-weight: 500;
 }
 
 .legend-dot {
@@ -115,8 +121,11 @@ body {
 .layout {
   display              : grid;
   grid-template-columns: 320px 1fr;
-  gap                  : 24px;
+  gap                  : 16px;
   align-items          : start;
+  flex                 : 1;
+  min-height           : 0;
+  overflow             : hidden;
 }
 
 /* Panels */
@@ -130,10 +139,33 @@ body {
   transition   : transform 0.3s ease, box-shadow 0.3s ease;
 }
 
-.left-panel:hover,
-.right-panel:hover {
-  transform : translateY(-2px);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+.left-panel {
+  height    : 100%;
+  overflow-y: auto;
+}
+
+.right-panel {
+  min-height: 0;
+  height    : 100%;
+  overflow-y: auto;
+}
+
+/* Thu nhỏ thanh scroll cho left-panel */
+.left-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.left-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.left-panel::-webkit-scrollbar-thumb {
+  background   : rgba(99, 102, 241, 0.35);
+  border-radius: 999px;
+}
+
+.left-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.55);
 }
 
 .panel-header {
@@ -357,78 +389,78 @@ button:active {
 /* Filter Container */
 .filter-container {
   margin-bottom: 16px;
-  padding: 12px 16px;
-  background: #f9fafb;
+  padding      : 12px 16px;
+  background   : #f9fafb;
   border-radius: 10px;
-  border: 1px solid var(--border);
+  border       : 1px solid var(--border);
 }
 
 .filter-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-size    : 13px;
+  font-weight  : 600;
+  color        : var(--text-primary);
   margin-bottom: 10px;
 }
 
 .filter-buttons {
-  display: flex;
-  gap: 8px;
+  display  : flex;
+  gap      : 8px;
   flex-wrap: wrap;
 }
 
 .filter-btn {
-  width: auto;
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  border: 2px solid var(--border);
-  background: white;
-  color: var(--text-primary);
+  width        : auto;
+  padding      : 8px 16px;
+  font-size    : 13px;
+  font-weight  : 600;
+  border       : 2px solid var(--border);
+  background   : white;
+  color        : var(--text-primary);
   border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  cursor       : pointer;
+  transition   : all 0.3s ease;
+  display      : flex;
+  align-items  : center;
+  gap          : 6px;
 }
 
 .filter-btn:hover {
   border-color: var(--primary);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
+  transform   : translateY(-1px);
+  box-shadow  : 0 2px 8px rgba(99, 102, 241, 0.2);
 }
 
 .filter-btn.active {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-  color: white;
+  background  : linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color       : white;
   border-color: var(--primary);
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+  box-shadow  : 0 2px 8px rgba(99, 102, 241, 0.3);
 }
 
 .filter-btn.filter-green.active {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  background  : linear-gradient(135deg, #10b981 0%, #059669 100%);
   border-color: #10b981;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+  box-shadow  : 0 2px 8px rgba(16, 185, 129, 0.3);
 }
 
 .filter-btn.filter-yellow.active {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  background  : linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
   border-color: #f59e0b;
-  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+  box-shadow  : 0 2px 8px rgba(245, 158, 11, 0.3);
 }
 
 .filter-btn.filter-red.active {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  background  : linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
   border-color: #ef4444;
-  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+  box-shadow  : 0 2px 8px rgba(239, 68, 68, 0.3);
 }
 
 .filter-dot {
-  width: 10px;
-  height: 10px;
+  width        : 10px;
+  height       : 10px;
   border-radius: 50%;
-  display: inline-block;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  display      : inline-block;
+  box-shadow   : 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .filter-dot-green {
@@ -456,38 +488,255 @@ tbody tr.filtered-out {
   overflow-x   : auto;
   border-radius: 12px;
   border       : 1px solid var(--border);
+  margin       : 0 10px;
 }
 
 /* Tabs trong header bên phải */
 .panel-tabs {
   display: flex;
-  gap: 8px;
+  gap    : 8px;
 }
 
 .tab-button {
-  width: auto;
-  padding: 8px 14px;
+  width        : auto;
+  padding      : 8px 14px;
   border-radius: 999px;
-  border: none;
-  background: rgba(255, 255, 255, 0.15);
-  color: #e5e7eb;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  transition: background 0.2s ease, color 0.2s ease, transform 0.1s ease;
+  border       : none;
+  background   : rgba(255, 255, 255, 0.15);
+  color        : #e5e7eb;
+  font-size    : 13px;
+  font-weight  : 600;
+  cursor       : pointer;
+  display      : inline-flex;
+  align-items  : center;
+  gap          : 6px;
+  transition   : background 0.2s ease, color 0.2s ease, transform 0.1s ease;
 }
 
 .tab-button:hover {
   background: rgba(255, 255, 255, 0.25);
-  transform: translateY(-1px);
+  transform : translateY(-1px);
 }
 
 .tab-button.active {
   background: #ffffff;
-  color: #111827;
+  color     : #111827;
+}
+
+/* Settings view */
+.settings-stack {
+  display       : flex;
+  flex-direction: column;
+  gap           : 14px;
+  padding       : 10px;
+}
+
+.setting-card {
+  background    : #f9fafb;
+  border        : 1px solid var(--border);
+  border-radius : 12px;
+  padding       : 16px;
+  display       : flex;
+  flex-direction: column;
+  gap           : 12px;
+}
+
+.setting-card-header {
+  display        : flex;
+  justify-content: space-between;
+  align-items    : center;
+  gap            : 8px;
+}
+
+.setting-card h4 {
+  margin   : 0;
+  font-size: 16px;
+}
+
+.muted {
+  color    : var(--text-secondary);
+  font-size: 13px;
+  margin   : 0;
+}
+
+.inline-field {
+  display: flex;
+  gap    : 10px;
+}
+
+.inline-field input {
+  flex: 1;
+}
+
+/* Settings: làm input + button thấp lại (chỉ trong tab Setting profile) */
+#settingsView .inline-field input,
+#settingsView .add-profile-form input {
+  height       : 34px;
+  padding      : 6px 10px;
+  font-size    : 13px;
+  border-width : 1px;
+  border-radius: 10px;
+}
+
+#settingsView .profile-id-input {
+  height       : 34px;
+  padding      : 6px 10px;
+  width        : 64%;
+  font-size    : 13px;
+  border       : 1px solid var(--border);
+  border-radius: 10px;
+  background   : #ffffff;
+}
+
+#settingsView button {
+  width        : auto;
+  height       : 34px;
+  padding      : 6px 12px;
+  font-size    : 13px;
+  border-radius: 10px;
+}
+
+#settingsView .inline-field button {
+  flex     : 0 0 auto;
+  min-width: 120px;
+}
+
+.setting-card-actions {
+  display: flex;
+  gap    : 8px;
+}
+
+.profile-list {
+  display       : flex;
+  flex-direction: column;
+  gap           : 10px;
+}
+
+.profile-row {
+  display      : flex;
+  align-items  : center;
+  gap          : 8px;
+  padding      : 10px 12px;
+  background   : #ffffff;
+  border       : 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.profile-row .profile-id {
+  flex       : 1 1 40%;
+  font-weight: 700;
+  font-size  : 14px;
+  word-break : break-all;
+}
+
+.profile-row .profile-actions {
+  display        : flex;
+  gap            : 8px;
+  flex-wrap      : wrap;
+  justify-content: flex-end;
+}
+
+.profile-row .profile-actions button {
+  width    : auto;
+  flex     : 0 0 auto;
+  min-width: 70px;
+  height   : 30px;
+  padding  : 4px 10px;
+  font-size: 12px;
+}
+
+.add-profile-row {
+  margin-top: 8px;
+}
+
+.add-profile-row button {
+  width: 100%;
+}
+
+.add-profile-form {
+  background  : #f8fafc;
+  border-style: dashed;
+  gap         : 8px;
+}
+
+.add-profile-form input {
+  flex         : 1 1 60%;
+  padding      : 12px 14px;
+  border       : 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.add-profile-form button {
+  min-width: 80px;
+  height   : 30px;
+  padding  : 4px 10px;
+  font-size: 12px;
+}
+
+.empty-state-box {
+  border       : 1px dashed var(--border);
+  border-radius: 10px;
+  padding      : 12px;
+  text-align   : center;
+}
+
+.hint {
+  font-size: 12px;
+  color    : var(--text-secondary);
+}
+
+/* Toast (thay cho alert để không nháy UI) */
+.toast-container {
+  position      : fixed;
+  top           : 14px;
+  left          : 50%;
+  transform     : translateX(-50%);
+  display       : flex;
+  flex-direction: column;
+  gap           : 8px;
+  z-index       : 2000;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: none;
+  min-width     : 260px;
+  max-width     : min(520px, calc(100vw - 24px));
+  background    : rgba(17, 24, 39, 0.92);
+  color         : #fff;
+  border-radius : 12px;
+  padding       : 10px 12px;
+  box-shadow    : 0 10px 30px rgba(0, 0, 0, 0.25);
+  font-size     : 13px;
+  line-height   : 1.35;
+  opacity       : 0;
+  transform     : translateY(-6px);
+  transition    : opacity 180ms ease, transform 180ms ease;
+}
+
+.toast.show {
+  opacity  : 1;
+  transform: translateY(0);
+}
+
+.toast.success {
+  background: rgba(16, 185, 129, 0.92);
+}
+
+.toast.error {
+  background: rgba(239, 68, 68, 0.92);
+}
+
+#settingsPreview {
+  width        : 100%;
+  padding      : 12px;
+  border       : 1px solid var(--border);
+  border-radius: 10px;
+  background   : #0b1021;
+  color        : #e5e7eb;
+  font-family  : "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size    : 13px;
+  resize       : vertical;
 }
 
 table {
@@ -516,18 +765,21 @@ table {
 
 #postTable td:nth-child(2) {
   white-space: normal;
-  word-break: break-word;
+  word-break : break-word;
 }
 
 /* Riêng phần Quản lý post: ẩn hẳn thanh scroll ngang cho gọn */
 #postView .table-container {
-  overflow-x: auto;
-  scrollbar-width: none;       /* Firefox */
-  -ms-overflow-style: none;    /* IE/Edge cũ */
+  overflow-x        : auto;
+  scrollbar-width   : none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE/Edge cũ */
 }
 
 #postView .table-container::-webkit-scrollbar {
-  display: none;               /* Chrome/Safari */
+  display: none;
+  /* Chrome/Safari */
 }
 
 thead {
@@ -553,9 +805,9 @@ td {
 
 /* Link cho ID (ID Bài Post, ID User) */
 .id-link {
-  color: #2563eb;
+  color          : #2563eb;
   text-decoration: none;
-  font-weight: 500;
+  font-weight    : 500;
 }
 
 .id-link:hover {
@@ -565,22 +817,22 @@ td {
 /* Type column colors */
 td.type-cell {
   font-weight: 600;
-  text-align: center;
+  text-align : center;
 }
 
 td.type-cell.type-green {
   background: #49ee98;
-  color: #065f46;
+  color     : #065f46;
 }
 
 td.type-cell.type-yellow {
   background: #e9d47d;
-  color: #92400e;
+  color     : #92400e;
 }
 
 td.type-cell.type-red {
   background: #ed7b7b;
-  color: #991b1b;
+  color     : #991b1b;
 }
 
 tbody tr {
@@ -666,39 +918,39 @@ tbody tr:last-child td {
 
 /* Modal */
 .modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  position       : fixed;
+  top            : 0;
+  left           : 0;
+  right          : 0;
+  bottom         : 0;
+  background     : rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
+  display        : flex;
+  align-items    : center;
   justify-content: center;
-  z-index: 1000;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  pointer-events: none;
+  z-index        : 1000;
+  opacity        : 0;
+  transition     : opacity 0.3s ease;
+  pointer-events : none;
 }
 
 .modal.show {
-  opacity: 1;
+  opacity       : 1;
   pointer-events: all;
 }
 
 .modal-content {
-  background: var(--card-bg);
-  border-radius: 16px;
-  box-shadow: var(--shadow-lg);
-  width: 90%;
-  max-width: 500px;
-  max-height: 90vh;
-  overflow: hidden;
-  display: flex;
+  background    : var(--card-bg);
+  border-radius : 16px;
+  box-shadow    : var(--shadow-lg);
+  width         : 90%;
+  max-width     : 500px;
+  max-height    : 90vh;
+  overflow      : hidden;
+  display       : flex;
   flex-direction: column;
-  transform: scale(0.9) translateY(20px);
-  transition: transform 0.3s ease;
+  transform     : scale(0.9) translateY(20px);
+  transition    : transform 0.3s ease;
 }
 
 .modal.show .modal-content {
@@ -706,85 +958,85 @@ tbody tr:last-child td {
 }
 
 .modal-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 20px 24px;
-  display: flex;
+  background     : linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding        : 20px 24px;
+  display        : flex;
   justify-content: space-between;
-  align-items: center;
+  align-items    : center;
 }
 
 .modal-header h3 {
-  color: white;
-  font-size: 18px;
+  color      : white;
+  font-size  : 18px;
   font-weight: 600;
-  margin: 0;
+  margin     : 0;
 }
 
 .modal-close {
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  color: white;
-  font-size: 24px;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
+  background     : rgba(255, 255, 255, 0.2);
+  border         : none;
+  color          : white;
+  font-size      : 24px;
+  width          : 32px;
+  height         : 32px;
+  border-radius  : 50%;
+  cursor         : pointer;
+  display        : flex;
+  align-items    : center;
   justify-content: center;
-  transition: all 0.3s ease;
-  padding: 0;
-  line-height: 1;
+  transition     : all 0.3s ease;
+  padding        : 0;
+  line-height    : 1;
 }
 
 .modal-close:hover {
   background: rgba(255, 255, 255, 0.3);
-  transform: rotate(90deg);
+  transform : rotate(90deg);
 }
 
 .modal-body {
-  padding: 24px;
+  padding   : 24px;
   overflow-y: auto;
-  flex: 1;
+  flex      : 1;
 }
 
 .modal-body textarea {
-  width: 100%;
-  padding: 12px 16px;
-  border: 2px solid var(--border);
+  width        : 100%;
+  padding      : 12px 16px;
+  border       : 2px solid var(--border);
   border-radius: 10px;
-  font-size: 15px;
-  transition: all 0.3s ease;
-  background: #f9fafb;
-  color: var(--text-primary);
-  font-family: inherit;
-  resize: vertical;
+  font-size    : 15px;
+  transition   : all 0.3s ease;
+  background   : #f9fafb;
+  color        : var(--text-primary);
+  font-family  : inherit;
+  resize       : vertical;
 }
 
 .modal-body textarea:focus {
-  outline: none;
+  outline     : none;
   border-color: var(--primary);
-  background: white;
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+  background  : white;
+  box-shadow  : 0 0 0 4px rgba(99, 102, 241, 0.1);
 }
 
 .modal-footer {
-  padding: 20px 24px;
-  border-top: 1px solid var(--border);
-  display: flex;
-  gap: 12px;
+  padding        : 20px 24px;
+  border-top     : 1px solid var(--border);
+  display        : flex;
+  gap            : 12px;
   justify-content: flex-end;
 }
 
 .modal-footer button {
-  width: auto;
+  width    : auto;
   min-width: 100px;
-  padding: 10px 20px;
+  padding  : 10px 20px;
 }
 
 .btn-secondary {
   background: #f3f4f6;
-  color: var(--text-primary);
+  color     : var(--text-primary);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
@@ -795,35 +1047,35 @@ tbody tr:last-child td {
 
 .btn-secondary:disabled {
   background: #9ca3af;
-  cursor: not-allowed;
+  cursor    : not-allowed;
   box-shadow: none;
 }
 
 /* Help Button */
 .help-button {
-  position: fixed;
-  top: 24px;
-  right: 24px;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-  color: white;
-  border: none;
-  font-size: 24px;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.4);
-  transition: all 0.3s ease;
-  z-index: 999;
-  display: flex;
-  align-items: center;
+  position       : fixed;
+  top            : 24px;
+  right          : 36px;
+  width          : 48px;
+  height         : 48px;
+  border-radius  : 50%;
+  background     : linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color          : white;
+  border         : none;
+  font-size      : 24px;
+  font-weight    : 700;
+  cursor         : pointer;
+  box-shadow     : 0 4px 14px 0 rgba(99, 102, 241, 0.4);
+  transition     : all 0.3s ease;
+  z-index        : 999;
+  display        : flex;
+  align-items    : center;
   justify-content: center;
-  line-height: 1;
+  line-height    : 1;
 }
 
 .help-button:hover {
-  transform: scale(1.1);
+  transform : scale(1.1);
   box-shadow: 0 6px 20px 0 rgba(99, 102, 241, 0.6);
 }
 
@@ -833,63 +1085,63 @@ tbody tr:last-child td {
 
 /* Help Tooltip */
 .help-tooltip {
-  position: fixed;
-  top: 90px;
-  right: 24px;
-  width: 320px;
-  background: var(--card-bg);
-  border-radius: 12px;
-  box-shadow: var(--shadow-lg);
-  z-index: 1000;
-  opacity: 0;
-  transform: translateY(-10px);
-  transition: all 0.3s ease;
+  position      : fixed;
+  top           : 90px;
+  right         : 24px;
+  width         : 320px;
+  background    : var(--card-bg);
+  border-radius : 12px;
+  box-shadow    : var(--shadow-lg);
+  z-index       : 1000;
+  opacity       : 0;
+  transform     : translateY(-10px);
+  transition    : all 0.3s ease;
   pointer-events: none;
-  border: 1px solid var(--border);
+  border        : 1px solid var(--border);
 }
 
 .help-tooltip.show {
-  opacity: 1;
-  transform: translateY(0);
+  opacity       : 1;
+  transform     : translateY(0);
   pointer-events: all;
 }
 
 .tooltip-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 16px 20px;
-  border-radius: 12px 12px 0 0;
-  display: flex;
+  background     : linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding        : 16px 20px;
+  border-radius  : 12px 12px 0 0;
+  display        : flex;
   justify-content: space-between;
-  align-items: center;
+  align-items    : center;
 }
 
 .tooltip-header h4 {
-  color: white;
-  font-size: 16px;
+  color      : white;
+  font-size  : 16px;
   font-weight: 600;
-  margin: 0;
+  margin     : 0;
 }
 
 .tooltip-close {
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  color: white;
-  font-size: 20px;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
+  background     : rgba(255, 255, 255, 0.2);
+  border         : none;
+  color          : white;
+  font-size      : 20px;
+  width          : 28px;
+  height         : 28px;
+  border-radius  : 50%;
+  cursor         : pointer;
+  display        : flex;
+  align-items    : center;
   justify-content: center;
-  transition: all 0.3s ease;
-  padding: 0;
-  line-height: 1;
+  transition     : all 0.3s ease;
+  padding        : 0;
+  line-height    : 1;
 }
 
 .tooltip-close:hover {
   background: rgba(255, 255, 255, 0.3);
-  transform: rotate(90deg);
+  transform : rotate(90deg);
 }
 
 .tooltip-body {
@@ -897,9 +1149,9 @@ tbody tr:last-child td {
 }
 
 .tooltip-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  display      : flex;
+  align-items  : flex-start;
+  gap          : 12px;
   margin-bottom: 16px;
 }
 
@@ -908,13 +1160,13 @@ tbody tr:last-child td {
 }
 
 .tooltip-dot {
-  width: 16px;
-  height: 16px;
+  width        : 16px;
+  height       : 16px;
   border-radius: 50%;
-  display: inline-block;
-  flex-shrink: 0;
-  margin-top: 2px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  display      : inline-block;
+  flex-shrink  : 0;
+  margin-top   : 2px;
+  box-shadow   : 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .tooltip-green {
@@ -930,32 +1182,32 @@ tbody tr:last-child td {
 }
 
 .tooltip-item div {
-  flex: 1;
-  font-size: 14px;
+  flex       : 1;
+  font-size  : 14px;
   line-height: 1.5;
-  color: var(--text-primary);
+  color      : var(--text-primary);
 }
 
 .tooltip-item strong {
-  color: var(--text-primary);
+  color      : var(--text-primary);
   font-weight: 600;
 }
 
 /* Nút xem comment (icon con mắt) */
 .comment-eye-btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 20px;
-  line-height: 1;
-  padding: 6px 8px;
+  background   : transparent;
+  border       : none;
+  cursor       : pointer;
+  font-size    : 20px;
+  line-height  : 1;
+  padding      : 6px 8px;
   border-radius: 6px;
-  transition: background 0.2s ease, transform 0.1s ease;
+  transition   : background 0.2s ease, transform 0.1s ease;
 }
 
 .comment-eye-btn:hover {
   background: rgba(148, 163, 184, 0.15);
-  transform: scale(1.05);
+  transform : scale(1.05);
 }
 
 td:nth-child(5) {
@@ -964,35 +1216,35 @@ td:nth-child(5) {
 
 /* Floating chat buttons (Messenger & Zalo) */
 .chat-floating {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  display: flex;
+  position      : fixed;
+  right         : 24px;
+  bottom        : 24px;
+  display       : flex;
   flex-direction: column;
-  gap: 10px;
-  z-index: 900;
+  gap           : 10px;
+  z-index       : 900;
 }
 
 .chat-btn {
-  width: 68px;
-  height: 68px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
+  width          : 68px;
+  height         : 68px;
+  border-radius  : 50%;
+  display        : flex;
+  align-items    : center;
   justify-content: center;
-  color: #ffffff;
-  font-weight: 700;
-  font-size: 18px;
+  color          : #ffffff;
+  font-weight    : 700;
+  font-size      : 18px;
   text-decoration: none;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.45);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
-  opacity: 0.95;
+  box-shadow     : 0 6px 18px rgba(15, 23, 42, 0.45);
+  transition     : transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+  opacity        : 0.95;
 }
 
 .chat-btn:hover {
-  transform: translateY(-2px) scale(1.03);
+  transform : translateY(-2px) scale(1.03);
   box-shadow: 0 10px 25px rgba(15, 23, 42, 0.55);
-  opacity: 1;
+  opacity   : 1;
 }
 
 .chat-mess {
@@ -1004,57 +1256,57 @@ td:nth-child(5) {
 }
 
 .chat-icon {
-  width: 50px;
-  height: 50px;
+  width  : 50px;
+  height : 50px;
   display: block;
 }
 
 /* Icon Messenger: vòng tròn gradient + tia sét */
 .chat-icon-mess {
-  position: relative;
+  position     : relative;
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 0, #ffffff 0, #ffffff 8%, transparent 20%),
-              radial-gradient(circle at 30% 0, #ff7cf8 0, #ff7cf8 25%, transparent 55%),
-              radial-gradient(circle at 70% 100%, #00c6ff 0, #0078ff 40%, #4b00ff 90%);
+  background   : radial-gradient(circle at 30% 0, #ffffff 0, #ffffff 8%, transparent 20%),
+    radial-gradient(circle at 30% 0, #ff7cf8 0, #ff7cf8 25%, transparent 55%),
+    radial-gradient(circle at 70% 100%, #00c6ff 0, #0078ff 40%, #4b00ff 90%);
 }
 
 .chat-icon-mess::before {
-  content: '';
-  position: absolute;
-  left: 9px;
-  top: 11px;
-  width: 14px;
-  height: 8px;
+  content      : '';
+  position     : absolute;
+  left         : 9px;
+  top          : 11px;
+  width        : 14px;
+  height       : 8px;
   border-radius: 999px;
-  border: 2px solid #ffffff;
-  border-top: none;
-  transform: rotate(10deg);
+  border       : 2px solid #ffffff;
+  border-top   : none;
+  transform    : rotate(10deg);
 }
 
 .chat-icon-mess::after {
-  content: '';
-  position: absolute;
-  left: 13px;
-  top: 11px;
-  width: 6px;
-  height: 8px;
-  border-right: 2px solid #ffffff;
+  content      : '';
+  position     : absolute;
+  left         : 13px;
+  top          : 11px;
+  width        : 6px;
+  height       : 8px;
+  border-right : 2px solid #ffffff;
   border-bottom: 2px solid #ffffff;
-  transform: rotate(25deg);
+  transform    : rotate(25deg);
 }
 
 /* Icon Zalo: chữ Z trong khung bo tròn */
 .chat-icon-zalo {
-  position: relative;
-  border-radius: 12px;
-  background: white;
-  font-weight: 700;
-  font-size: 13px;
-  color: #0066ff;
-  display: flex;
-  align-items: center;
+  position       : relative;
+  border-radius  : 12px;
+  background     : white;
+  font-weight    : 700;
+  font-size      : 13px;
+  color          : #0066ff;
+  display        : flex;
+  align-items    : center;
   justify-content: center;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family    : system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .chat-icon-zalo::before {
@@ -1063,11 +1315,11 @@ td:nth-child(5) {
 
 /* Ảnh Zalo thật */
 .chat-img {
-  width: 50px;
-  height: 50px;
-  display: block;
+  width        : 50px;
+  height       : 50px;
+  display      : block;
   border-radius: 12px;
-  object-fit: cover;
+  object-fit   : cover;
 }
 
 /* Responsive */

@@ -7,7 +7,7 @@ from urllib.parse import urlparse, parse_qs, unquote
 import os
 from worker.get_id import get_id_from_url
 import sys
-from core.settings import get_settings
+from core.settings import get_settings, SETTINGS_PATH
 # ==============================================================================
 # JS TOOLS & HELPER FUNCTIONS
 # ==============================================================================
@@ -548,7 +548,11 @@ class FBController:
         except: pass
         
     def save_cookies(self):
-        """Lưu Cookie dạng Dictionary: { 'PROFILE_ID': 'COOKIE_STRING' }"""
+        """
+        Lấy cookie từ browser context và lưu thẳng vào:
+        backend/config/settings.json -> PROFILE_IDS[profile_id]["cookie"]
+        Trả về cookie_string.
+        """
         try:
             print("🍪 Đang trích xuất Cookie (Key=ID, Value=String)...")
             
@@ -579,26 +583,46 @@ class FBController:
             else:
                 cookie_string = ""
 
-            # 4. Tạo cấu trúc dữ liệu theo yêu cầu Sếp
-            # Key là Profile ID, Value là chuỗi Cookie
-            data_to_save = {
-                self.profile_id: cookie_string
-            }
+            # 4. Lưu vào settings.json theo đúng profile_id
+            try:
+                if not SETTINGS_PATH.exists():
+                    print(f"⚠️ Không tìm thấy settings.json: {SETTINGS_PATH}")
+                    return cookie_string
 
-            # 5. Lưu vào file JSON
-            folder = "data/cookies"
-            os.makedirs(folder, exist_ok=True)
-            
-            # Tên file vẫn là ID profile cho dễ quản lý
-            json_path = f"{folder}/{self.profile_id}.json"
-            
-            with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(data_to_save, f, indent=2, ensure_ascii=False)
-                
-            print(f"✅ Đã lưu Cookie format {{ID: String}} vào: {json_path}")
-            print(f"\n🔑 DỮ LIỆU ĐÃ LƯU:\n{json.dumps(data_to_save, indent=2)}\n")
-            
-            return data_to_save
+                with SETTINGS_PATH.open("r", encoding="utf-8") as f:
+                    raw = json.load(f)
+
+                if not isinstance(raw, dict):
+                    raw = {}
+
+                profiles = raw.get("PROFILE_IDS")
+                if profiles is None or isinstance(profiles, (list, str)):
+                    profiles = {}
+                if not isinstance(profiles, dict):
+                    profiles = {}
+
+                pid = str(self.profile_id or "").strip()
+                if not pid:
+                    print("⚠️ profile_id rỗng, không ghi vào settings.json")
+                    return cookie_string
+
+                cfg = profiles.get(pid)
+                if not isinstance(cfg, dict):
+                    cfg = {}
+                cfg["cookie"] = cookie_string
+                profiles[pid] = cfg
+                raw["PROFILE_IDS"] = profiles
+
+                # ghi file
+                with SETTINGS_PATH.open("w", encoding="utf-8") as f:
+                    json.dump(raw, f, indent=2, ensure_ascii=False)
+                    f.write("\n")
+
+                print(f"✅ Đã cập nhật cookie vào settings.json cho profile_id={pid}")
+            except Exception as e:
+                print(f"⚠️ Không ghi được cookie vào settings.json: {e}")
+
+            return cookie_string
             
         except Exception as e:
             print(f"❌ Lỗi lưu cookies: {e}")

@@ -9,6 +9,7 @@
 </head>
 <body>
   <div class="container">
+    <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
     <header class="header">
       <div class="header-content">
         <h1>HỆ THỐNG ADS FACEBOOK</h1>
@@ -95,6 +96,7 @@
           <div class="panel-tabs">
             <button id="tabScanList" type="button" class="tab-button active">📋 Danh sách quét</button>
             <button id="tabPostManager" type="button" class="tab-button">📝 Quản lý post</button>
+            <button id="tabSettings" type="button" class="tab-button">⚙️ Setting profile</button>
           </div>
           <span id="rowCount" class="badge">0</span>
         </div>
@@ -162,6 +164,42 @@
             <div class="empty-icon">📭</div>
             <p>Chưa có dữ liệu post</p>
             <p class="empty-hint">Kiểm tra lại file JSON trong thư mục post_ids</p>
+          </div>
+        </div>
+
+        <!-- View: Setting profile -->
+        <div id="settingsView" style="display:none;">
+          <div class="settings-stack">
+            <div class="setting-card">
+              <div class="setting-card-header">
+                <div>
+                  <h4>API Key</h4>
+                 
+                </div>
+              </div>
+              <div class="inline-field">
+                <input id="settingApiKey" type="text" placeholder="Nhập API Key" />
+                <button id="saveApiKeyBtn" class="btn-primary" type="button">Lưu API Key</button>
+              </div>
+              <p class="hint">API Key được lưu trên trình duyệt; đổi thì nhập mới rồi bấm Lưu.</p>
+            </div>
+
+            <div class="setting-card">
+              <div class="setting-card-header">
+                <div>
+                  <h4>Danh sách profile</h4>
+                  <p class="muted">Thêm profile_id và thao tác nhanh</p>
+                </div>
+              </div>
+
+              <div id="profileList" class="profile-list empty-state-box">
+                <p class="muted">Chưa có profile nào</p>
+              </div>
+
+              <div class="add-profile-row">
+                <button id="addProfileRowBtn" class="btn-success" type="button">+ Thêm profile</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

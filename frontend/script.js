@@ -11,13 +11,23 @@ const backendStatus = document.getElementById('backendStatus');
 // Tabs & view cho danh sách quét / quản lý post
 const tabScanList = document.getElementById('tabScanList');
 const tabPostManager = document.getElementById('tabPostManager');
+const tabSettings = document.getElementById('tabSettings');
 const scanView = document.getElementById('scanView');
 const postView = document.getElementById('postView');
+const settingsView = document.getElementById('settingsView');
 // Bảng quản lý post
 const postTableBody = document.querySelector('#postTable tbody');
 const postEmptyState = document.getElementById('postEmptyState');
+// Setting profile elements
+const settingApiKeyInput = document.getElementById('settingApiKey');
+const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
+const profileList = document.getElementById('profileList');
+// (Preview settings.json đã bị bỏ khỏi UI)
+const addProfileRowBtn = document.getElementById('addProfileRowBtn');
 
 const API_BASE = 'http://localhost:8000';
+const SETTINGS_STORAGE_KEY = 'profileSettings';
+const toastContainer = document.getElementById('toastContainer');
 
 let counter = 1;
 let timerId = null;
@@ -25,6 +35,11 @@ let initialLoaded = false;
 let dataCheckInterval = null; // Interval để kiểm tra dữ liệu mới
 let loadedPostIds = new Set(); // Lưu các post_id đã load để tránh trùng lặp
 let postsLoaded = false; // Đã load dữ liệu quản lý post hay chưa
+let profileState = {
+  apiKey: '',
+  profiles: {}, // { [profileId]: { cookie: '', access_token: '' } }
+};
+let addRowEl = null; // Row tạm để nhập profile mới
 
 stopBtn.disabled = true;
 
@@ -61,6 +76,384 @@ function setScanning(isOn) {
   startBtnText.textContent = isOn ? 'Đang quét...' : 'Bắt đầu quét';
   stopBtn.disabled = !isOn;
   backendRunBtn.disabled = isOn;
+}
+
+// ==== Settings (frontend-only) ====
+async function tryLoadProfileStateFromBackend() {
+  try {
+    const raw = await callBackendNoAlert('/settings', { method: 'GET' });
+    if (!raw) return false;
+
+    const apiKey = raw.API_KEY || raw.api_key || '';
+    const profileIds = raw.PROFILE_IDS || raw.profile_ids || {};
+
+    profileState.apiKey = String(apiKey || '').trim();
+
+    // PROFILE_IDS có thể là list/string/dict; normalize về dict
+    const nextProfiles = {};
+    if (Array.isArray(profileIds)) {
+      profileIds.forEach((pid) => {
+        const key = String(pid || '').trim();
+        if (key) nextProfiles[key] = { cookie: '', access_token: '' };
+      });
+    } else if (typeof profileIds === 'string') {
+      profileIds.split(',').map((s) => s.trim()).filter(Boolean).forEach((pid) => {
+        nextProfiles[pid] = { cookie: '', access_token: '' };
+      });
+    } else if (profileIds && typeof profileIds === 'object') {
+      Object.entries(profileIds).forEach(([pid, cfg]) => {
+        const key = String(pid || '').trim();
+        if (!key) return;
+        nextProfiles[key] = {
+          cookie: (cfg && cfg.cookie) ? String(cfg.cookie) : '',
+          access_token: (cfg && (cfg.access_token || cfg.accessToken)) ? String(cfg.access_token || cfg.accessToken) : '',
+        };
+      });
+    }
+
+    profileState.profiles = nextProfiles;
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(profileState));
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+async function loadProfileState() {
+  // Ưu tiên lấy từ backend nếu có
+  const loadedFromBackend = await tryLoadProfileStateFromBackend();
+  if (loadedFromBackend) {
+    if (settingApiKeyInput) settingApiKeyInput.value = profileState.apiKey || '';
+    renderProfileList();
+    return;
+  }
+
+  try {
+    const stored = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      profileState = {
+        apiKey: parsed.apiKey || '',
+        profiles: parsed.profiles || {},
+      };
+    }
+  } catch (err) {
+    console.warn('Không đọc được dữ liệu settings từ localStorage', err);
+  }
+
+  if (settingApiKeyInput) settingApiKeyInput.value = profileState.apiKey || '';
+  renderProfileList();
+}
+
+function saveProfileState() {
+  localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(profileState));
+}
+
+function showToast(message, type = 'success', ms = 1600) {
+  if (!toastContainer) return;
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = message;
+  toastContainer.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 220);
+  }, ms);
+}
+
+// (Preview settings.json đã bị bỏ khỏi UI)
+
+function createPill(text) {
+  const pill = document.createElement('span');
+  pill.className = 'pill';
+  pill.textContent = text;
+  return pill;
+}
+
+function setProfileListEmptyStateIfNeeded() {
+  if (!profileList) return;
+  const hasRow = Boolean(profileList.querySelector('.profile-row:not(.add-profile-form)'));
+  if (hasRow) {
+    profileList.classList.remove('empty-state-box');
+    const p = profileList.querySelector('p.muted');
+    if (p && p.textContent && p.textContent.includes('Chưa có profile')) {
+      // nếu đang là empty placeholder thì xóa
+      profileList.innerHTML = '';
+    }
+    return;
+  }
+  profileList.classList.add('empty-state-box');
+  profileList.innerHTML = '<p class="muted">Chưa có profile nào</p>';
+}
+
+function buildProfileRow(initialPid, initialInfo) {
+  let currentPid = initialPid;
+  const row = document.createElement('div');
+  row.className = 'profile-row';
+
+  const pidInput = document.createElement('input');
+  pidInput.className = 'profile-id-input';
+  pidInput.type = 'text';
+  pidInput.value = currentPid;
+
+  const actions = document.createElement('div');
+  actions.className = 'profile-actions';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className = 'btn-secondary';
+  saveBtn.textContent = 'Lưu';
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'btn-danger';
+  removeBtn.textContent = 'Xóa';
+
+  const groupBtn = document.createElement('button');
+  groupBtn.type = 'button';
+  groupBtn.className = 'btn-primary';
+  groupBtn.textContent = 'Thêm group';
+
+  const cookieBtn = document.createElement('button');
+  cookieBtn.type = 'button';
+  cookieBtn.className = 'btn-primary';
+  cookieBtn.textContent = 'Cập nhật cookie';
+
+  const tokenBtn = document.createElement('button');
+  tokenBtn.type = 'button';
+  tokenBtn.className = 'btn-success';
+  tokenBtn.textContent = initialInfo?.access_token ? 'Cập nhật token' : 'Lấy access_token';
+
+  groupBtn.addEventListener('click', () => {
+    showToast('Chưa có API cho "Thêm group".', 'error');
+  });
+
+  saveBtn.addEventListener('click', async () => {
+    const nextPid = (pidInput.value || '').replace(/\s+/g, '').trim();
+    if (!nextPid) {
+      showToast('profile_id không được để trống', 'error');
+      pidInput.value = currentPid;
+      pidInput.focus();
+      return;
+    }
+    // normalize hiển thị để tránh dính space
+    if (pidInput.value !== nextPid) pidInput.value = nextPid;
+
+    const cur = profileState.profiles[currentPid] || { cookie: '', access_token: '' };
+    saveBtn.disabled = true;
+    try {
+      if (nextPid !== currentPid) {
+        // rename = add new -> copy data -> delete old
+        await callBackend('/settings/profiles', {
+          method: 'POST',
+          body: JSON.stringify({ profile_id: nextPid }),
+        });
+        await callBackend(`/settings/profiles/${encodeURIComponent(nextPid)}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            cookie: cur.cookie || '',
+            access_token: cur.access_token || '',
+          }),
+        });
+        await callBackend(`/settings/profiles/${encodeURIComponent(currentPid)}`, { method: 'DELETE' });
+
+        delete profileState.profiles[currentPid];
+        profileState.profiles[nextPid] = { ...cur };
+        currentPid = nextPid;
+        pidInput.value = currentPid;
+      } else {
+        await callBackend(`/settings/profiles/${encodeURIComponent(currentPid)}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            cookie: cur.cookie || '',
+            access_token: cur.access_token || '',
+          }),
+        });
+      }
+
+      saveProfileState();
+      tokenBtn.textContent = (profileState.profiles[currentPid]?.access_token) ? 'Cập nhật token' : 'Lấy access_token';
+      showToast('Đã lưu', 'success');
+    } catch (e) {
+      showToast('Không lưu được (kiểm tra FastAPI).', 'error');
+      pidInput.value = currentPid;
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  removeBtn.addEventListener('click', () => {
+    if (!confirm(`Xóa profile ${currentPid}?`)) return;
+    removeBtn.disabled = true;
+    callBackend(`/settings/profiles/${encodeURIComponent(currentPid)}`, { method: 'DELETE' })
+      .then(() => {
+        delete profileState.profiles[currentPid];
+        saveProfileState();
+        row.remove();
+        setProfileListEmptyStateIfNeeded();
+        showToast('Đã xóa', 'success');
+      })
+      .catch(() => showToast('Không xóa được (kiểm tra FastAPI).', 'error'))
+      .finally(() => (removeBtn.disabled = false));
+  });
+
+  cookieBtn.addEventListener('click', () => {
+    cookieBtn.disabled = true;
+    showToast('Đang bật NST & lấy cookie...', 'success', 900);
+    const safePid = String(currentPid || '').replace(/\s+/g, '');
+    callBackend(`/settings/profiles/${encodeURIComponent(safePid)}/cookie/fetch`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+      .then(() => {
+        // Cookie đã được backend lưu vào backend/config/settings.json, frontend không lưu/không hiển thị
+        showToast('Đã lưu cookie vào settings.json', 'success');
+      })
+      .catch(() => showToast('Không lấy được cookie (kiểm tra FastAPI / đăng nhập NST).', 'error'))
+      .finally(() => (cookieBtn.disabled = false));
+  });
+
+  tokenBtn.addEventListener('click', () => {
+    const info = profileState.profiles[currentPid] || {};
+    const newVal = prompt(`Dán access token cho profile ${currentPid}:`, info.access_token || '');
+    if (newVal === null) return;
+    const nextToken = newVal.trim();
+    tokenBtn.disabled = true;
+    callBackend(`/settings/profiles/${encodeURIComponent(currentPid)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ access_token: nextToken }),
+    })
+      .then(() => {
+        profileState.profiles[currentPid] = { ...profileState.profiles[currentPid], access_token: nextToken };
+        saveProfileState();
+        tokenBtn.textContent = nextToken ? 'Cập nhật token' : 'Lấy access_token';
+        showToast('Đã lưu token', 'success');
+      })
+      .catch(() => showToast('Không lưu token (kiểm tra FastAPI).', 'error'))
+      .finally(() => (tokenBtn.disabled = false));
+  });
+
+  actions.appendChild(saveBtn);
+  actions.appendChild(removeBtn);
+  actions.appendChild(groupBtn);
+  actions.appendChild(cookieBtn);
+  actions.appendChild(tokenBtn);
+
+  row.appendChild(pidInput);
+  row.appendChild(actions);
+  return row;
+}
+
+function renderProfileList() {
+  if (!profileList) return;
+  // nếu đang có row thêm mới, bỏ trước khi render lại
+  if (addRowEl && addRowEl.parentNode) {
+    addRowEl.parentNode.removeChild(addRowEl);
+    addRowEl = null;
+  }
+  profileList.innerHTML = '';
+  const ids = Object.keys(profileState.profiles || {});
+  if (ids.length === 0) {
+    profileList.classList.add('empty-state-box');
+    profileList.innerHTML = '<p class="muted">Chưa có profile nào</p>';
+    return;
+  }
+
+  profileList.classList.remove('empty-state-box');
+  ids.forEach((pid) => {
+    const info = profileState.profiles[pid] || {};
+    profileList.appendChild(buildProfileRow(pid, info));
+  });
+}
+
+function showAddProfileRow() {
+  if (!profileList) return;
+  if (addRowEl && addRowEl.parentNode) return;
+
+  addRowEl = document.createElement('div');
+  addRowEl.className = 'profile-row add-profile-form';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.placeholder = 'Nhập profile_id (UUID)';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className = 'btn-success';
+  saveBtn.textContent = 'Lưu';
+  saveBtn.addEventListener('click', () => {
+    const value = (input.value || '').trim();
+    if (!value) {
+      showToast('Vui lòng nhập profile_id', 'error');
+      return;
+    }
+    callBackend('/settings/profiles', {
+      method: 'POST',
+      body: JSON.stringify({ profile_id: value }),
+    })
+      .then(() => {
+        if (!profileState.profiles[value]) {
+          profileState.profiles[value] = { cookie: '', access_token: '' };
+        }
+        saveProfileState();
+        // Thêm row mới mà không render lại toàn bộ (tránh nháy)
+        if (profileList.classList.contains('empty-state-box')) {
+          profileList.classList.remove('empty-state-box');
+          profileList.innerHTML = '';
+        }
+        const newRow = buildProfileRow(value, profileState.profiles[value]);
+        // insert trước addRowEl để form vẫn ở cuối
+        profileList.insertBefore(newRow, addRowEl);
+        // remove form add
+        addRowEl.remove();
+        addRowEl = null;
+      })
+      .catch(() => showToast('Không thêm được profile (kiểm tra FastAPI).', 'error'));
+  });
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'btn-secondary';
+  cancelBtn.textContent = 'Hủy';
+  cancelBtn.addEventListener('click', () => {
+    if (addRowEl && addRowEl.parentNode) {
+      addRowEl.parentNode.removeChild(addRowEl);
+      addRowEl = null;
+    }
+  });
+
+  addRowEl.appendChild(input);
+  addRowEl.appendChild(saveBtn);
+  addRowEl.appendChild(cancelBtn);
+  // luôn để form ở cuối list
+  if (profileList.classList.contains('empty-state-box')) {
+    profileList.classList.remove('empty-state-box');
+    profileList.innerHTML = '';
+  }
+  profileList.appendChild(addRowEl);
+  input.focus();
+}
+
+if (saveApiKeyBtn) {
+  saveApiKeyBtn.addEventListener('click', () => {
+    profileState.apiKey = (settingApiKeyInput?.value || '').trim();
+    // Lưu local trước để không mất dữ liệu nếu backend lỗi
+    saveProfileState();
+
+    callBackend('/settings/api-key', {
+      method: 'PUT',
+      body: JSON.stringify({ api_key: profileState.apiKey }),
+    })
+      .then(() => showToast('Đã lưu API Key', 'success'))
+      .catch(() => {
+        showToast('Không lưu được API Key (kiểm tra FastAPI).', 'error');
+      });
+  });
+}
+
+if (addProfileRowBtn) {
+  addProfileRowBtn.addEventListener('click', showAddProfileRow);
 }
 
 function getTypeColorClass(type) {
@@ -581,8 +974,8 @@ function setBackendStatus(message, isOnline = false) {
 async function callBackend(path, options = {}) {
   const url = `${API_BASE}${path}`;
   const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: options.method || 'POST',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     ...options,
   });
 
@@ -599,6 +992,14 @@ async function callBackend(path, options = {}) {
   }
 
   return data;
+}
+
+async function callBackendNoAlert(path, options = {}) {
+  try {
+    return await callBackend(path, options);
+  } catch (e) {
+    return null;
+  }
 }
 
 async function triggerBackendRun() {
@@ -766,20 +1167,46 @@ filterButtons.forEach((btn) => {
   });
 });
 
-// ==== Tabs: Danh sách quét / Quản lý post ====
-if (tabScanList && tabPostManager && scanView && postView) {
-  tabScanList.addEventListener('click', () => {
-    tabScanList.classList.add('active');
-    tabPostManager.classList.remove('active');
-    scanView.style.display = 'block';
-    postView.style.display = 'none';
+// ==== Tabs: Danh sách quét / Quản lý post / Setting profile ====
+const tabConfig = {
+  scan: { btn: tabScanList, view: scanView },
+  post: { btn: tabPostManager, view: postView },
+  settings: { btn: tabSettings, view: settingsView },
+};
+
+const ACTIVE_TAB_KEY = 'activeTab';
+
+function switchTab(key) {
+  Object.entries(tabConfig).forEach(([k, { btn, view }]) => {
+    if (!btn || !view) return;
+    const isActive = k === key;
+    btn.classList.toggle('active', isActive);
+    view.style.display = isActive ? 'block' : 'none';
   });
 
-  tabPostManager.addEventListener('click', async () => {
-    tabPostManager.classList.add('active');
-    tabScanList.classList.remove('active');
-    scanView.style.display = 'none';
-    postView.style.display = 'block';
-    await loadPostsForManager();
-  });
+  if (key === 'post') {
+    loadPostsForManager();
+  }
+
+  // nhớ tab đang mở để không bị nhảy về tab đầu
+  try {
+    localStorage.setItem(ACTIVE_TAB_KEY, key);
+  } catch (e) {
+    // ignore
+  }
 }
+
+if (tabScanList) tabScanList.addEventListener('click', () => switchTab('scan'));
+if (tabPostManager) tabPostManager.addEventListener('click', () => switchTab('post'));
+if (tabSettings) tabSettings.addEventListener('click', () => switchTab('settings'));
+
+// Khởi tạo: luôn vào tab danh sách quét + load state profile
+let initialTab = 'scan';
+try {
+  const saved = localStorage.getItem(ACTIVE_TAB_KEY);
+  if (saved && tabConfig[saved]) initialTab = saved;
+} catch (e) {
+  // ignore
+}
+switchTab(initialTab);
+loadProfileState();

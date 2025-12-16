@@ -2,9 +2,12 @@
   "API_KEY": "7a43ee33-9f15-434d-a1b6-6d1b5809f935",
   "HEADLESS": false,
   "TARGET_URL": "https://facebook.com",
-  "PROFILE_IDS": [
-    "621e1f5d-0c42-481e-9ddd-7abaafce68ed"
-  ],
+  "PROFILE_IDS": {
+    "621e1f5d-0c42-481e-9ddd-7abaafce68ed": {
+      "access_token": "EAAAAAYsX7TsBPkK1ZBRjlt5wPp0ZBTRmXixZCJr0OAtEG2JQ2di0i1mtCIsuGvriF2cLviSV5GOl2taLMWi3K5SJb3bg5yxOOBPGMxkBadOT1mwkVjf2UujZB012zzVUiQYpD9fDzvUtB1KtT4ZB8DHDwJLmikXoB6K7OzXRdfj3as5gc9SFQK2vNNB2fUmPZBvMrUeNC06jP0Oi9Ra5r44pSBBYvSm2iJUDoKK6EVAqbmhAZDZD",
+      "cookie": "sb=HNY6aQAFB_tf42A4id6xhZpQ; ps_l=1; ps_n=1; datr=G9Y6adLzWpqwDfxsQ9kDerdz; c_user=100044138143352; fr=1L07xspZ598Fq3TXd.AWfUQBqwQDVNpNZlalR0PrKxDbJ4_MBVBE7plvG3RNLbEcO7R8s.BpQXqk..AAA.0.0.BpQXzp.AWdWQfgojLVqNmdrIgtCbSq1bo8; xs=46%3A14pMRvXIIAuMgQ%3A2%3A1765698119%3A-1%3A-1%3A%3AAcwuTrmDafgNChqMEo8NH5vwT3gqV9OODn0xoQerGoQ; wd=929x883;"
+    }
+  },
   "RUN_MINUTES": 30,
   "REST_MINUTES": 120
 }
