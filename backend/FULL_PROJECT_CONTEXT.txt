@@ -29,8 +29,6 @@ backend/
                 621e1f5d-0c42-481e-9ddd-7abaafce68ed.json
     data/
         987870664956102_posts_2025-12-8_to_2025-12-14.json
-        cookies/
-            621e1f5d-0c42-481e-9ddd-7abaafce68ed.json
         post_ids/
             031ca13d-e8fa-400c-a603-df57a2806788.json
             621e1f5d-0c42-481e-9ddd-7abaafce68ed.json
@@ -117,13 +115,23 @@ if __name__ == "__main__":
 
 --- START FILE: app\api.py ---
 from multiprocessing import Process
-from typing import Optional
+from typing import Optional, Any, Dict
+from pathlib import Path
+import json
+import os
+import tempfile
+import threading
+import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from core.runner import AppRunner
+from core.settings import SETTINGS_PATH
+from core.nst import connect_profile, stop_profile, stop_all_browsers
+from core.browser import FBController
 
 app = FastAPI(title="NST Tool API", version="1.0.0")
 
@@ -138,6 +146,125 @@ app.add_middleware(
 
 # Biến toàn cục giữ tiến trình đang chạy AppRunner
 runner_process: Optional[Process] = None
+_settings_lock = threading.Lock()
+_join_groups_lock = threading.Lock()
+_join_groups_processes: Dict[str, Process] = {}
+_feed_lock = threading.Lock()
+_feed_processes: Dict[str, Process] = {}
+
+
+def _run_join_groups_worker(profile_id: str, groups: list[str]) -> None:
+    """Worker chạy join groups cho 1 profile (để chạy song song nhiều profile)."""
+    try:
+        from core.join_groups import run_batch_join_from_list
+        run_batch_join_from_list(profile_id, groups)
+    except Exception as exc:
+        print(f"❌ Join groups worker lỗi ({profile_id}): {exc}")
+
+
+def _run_feed_worker(profile_id: str, mode: str, text: str, run_minutes: int, rest_minutes: int) -> None:
+    """
+    Worker chạy nuôi acc (feed/search & like) cho 1 profile theo vòng lặp:
+    chạy run_minutes -> tắt -> nghỉ rest_minutes -> lặp lại.
+    Nếu rest_minutes <= 0 thì chỉ chạy 1 lần.
+    """
+    try:
+        from core.search_worker import feed_and_like, search_and_like
+        m = str(mode or "feed").strip().lower()
+        run_m = int(run_minutes or 0)
+        rest_m = int(rest_minutes or 0)
+        if run_m <= 0:
+            run_m = 30
+
+        while True:
+            if m == "search":
+                search_and_like(profile_id, text or "", duration_minutes=run_m)
+            else:
+                feed_and_like(profile_id, text or "", duration_minutes=run_m)
+
+            if rest_m <= 0:
+                break
+
+            # nghỉ rồi chạy lại (process có thể bị terminate bởi stop-all)
+            import time as _t
+            _t.sleep(rest_m * 60)
+    except Exception as exc:
+        print(f"❌ Feed worker lỗi ({profile_id}): {exc}")
+
+
+def _close_fb_controller_best_effort(fb: Optional[FBController], profile_id: str) -> None:
+    """
+    Đóng sạch tab/context playwright + yêu cầu NST stop (giống logic trong cookie fetch).
+    """
+    try:
+        if fb and getattr(fb, "page", None):
+            try:
+                fb.page.close()
+            except Exception:
+                pass
+    except Exception:
+        pass
+    try:
+        if fb and getattr(fb, "browser", None) and getattr(fb.browser, "contexts", None):
+            for ctx in list(fb.browser.contexts):
+                try:
+                    ctx.close()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    try:
+        if fb and getattr(fb, "browser", None):
+            try:
+                fb.browser.close()
+            except Exception:
+                pass
+    except Exception:
+        pass
+    try:
+        if fb and getattr(fb, "play", None):
+            try:
+                fb.play.stop()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # Best-effort: yêu cầu NST stop/close browser instance của profile
+    try:
+        stop_profile(profile_id)
+    except Exception:
+        pass
+
+
+def _force_close_nst_tabs_for_profile(profile_id: str) -> dict:
+    """
+    Force đóng tab NST theo đúng kiểu cookie:
+    connect -> attach CDP -> close page/context/browser/play -> stop_profile
+    """
+    pid = _norm_profile_id(profile_id)
+    if not pid:
+        return {"profile_id": profile_id, "ok": False, "reason": "empty_profile_id"}
+
+    fb: Optional[FBController] = None
+    connected = False
+    try:
+        ws = connect_profile(pid)
+        fb = FBController(ws)
+        fb.profile_id = pid
+        fb.connect()
+        connected = True
+        return {"profile_id": pid, "ok": True, "connected": True}
+    except Exception as exc:
+        # Nếu connect fail vẫn cố stop_profile ở finally
+        return {"profile_id": pid, "ok": False, "connected": connected, "reason": str(exc)}
+    finally:
+        _close_fb_controller_best_effort(fb, pid)
+
+
+def _norm_profile_id(value: str) -> str:
+    """Chuẩn hoá profile_id: bỏ toàn bộ whitespace (tránh lỗi dính space khi copy/paste)."""
+    return re.sub(r"\s+", "", str(value or "")).strip()
 
 
 class RunRequest(BaseModel):
@@ -208,6 +335,759 @@ def status() -> dict:
     is_running = bool(runner_process and runner_process.is_alive())
     return {"running": is_running, "pid": runner_process.pid if is_running else None}
 
+
+@app.get("/settings")
+def get_settings_json() -> dict:
+    """
+    Trả nội dung file backend/config/settings.json để frontend hiển thị.
+    """
+    path: Path = SETTINGS_PATH
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy settings.json: {path}")
+
+    try:
+        with path.open(encoding="utf-8") as f:
+            raw = json.load(f)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"settings.json không hợp lệ: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Không đọc được settings.json: {exc}") from exc
+
+    return raw
+
+
+def _read_settings_raw() -> Dict[str, Any]:
+    path: Path = SETTINGS_PATH
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy settings.json: {path}")
+    try:
+        with path.open(encoding="utf-8") as f:
+            raw = json.load(f)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"settings.json không hợp lệ: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Không đọc được settings.json: {exc}") from exc
+
+    if not isinstance(raw, dict):
+        raise HTTPException(status_code=400, detail="settings.json phải là object")
+    return raw
+
+
+def _atomic_write_json(path: Path, data: Dict[str, Any]) -> None:
+    """
+    Ghi JSON an toàn: write temp file cùng thư mục rồi replace.
+    """
+    directory = str(path.parent)
+    os.makedirs(directory, exist_ok=True)
+
+    fd, tmp_path = tempfile.mkstemp(prefix="settings_", suffix=".json", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        os.replace(tmp_path, str(path))
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+        raise
+
+
+def _merge_group_ids(existing: Any, new_items: list[str]) -> list[str]:
+    """Merge + de-dupe group ids, giữ thứ tự (existing trước)."""
+    base: list[str] = []
+    if isinstance(existing, list):
+        base = [str(x).strip() for x in existing if str(x).strip()]
+    elif isinstance(existing, str):
+        base = [s.strip() for s in existing.split(",") if s.strip()]
+
+    seen: set[str] = set()
+    merged: list[str] = []
+    for gid in base + new_items:
+        gid2 = str(gid or "").strip()
+        if not gid2 or gid2 in seen:
+            continue
+        seen.add(gid2)
+        merged.append(gid2)
+    return merged
+
+
+def _write_settings_raw(raw: Dict[str, Any]) -> None:
+    try:
+        _atomic_write_json(SETTINGS_PATH, raw)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Không ghi được settings.json: {exc}") from exc
+
+
+class ApiKeyPayload(BaseModel):
+    api_key: str
+
+
+class ProfileCreatePayload(BaseModel):
+    profile_id: str
+
+
+class ProfileUpdatePayload(BaseModel):
+    cookie: Optional[str] = None
+    access_token: Optional[str] = None
+
+
+class ProfileGroupsPayload(BaseModel):
+    # Có thể truyền 1 group hoặc nhiều group (append).
+    group_id: Optional[str] = None
+    group_ids: Optional[list[str]] = None
+
+
+class ProfileGroupsReplacePayload(BaseModel):
+    # Replace hoàn toàn groups của profile. Cho phép rỗng để xoá hết.
+    groups: Optional[list[str]] = None
+
+
+class JoinGroupsRequest(BaseModel):
+    profile_ids: list[str]
+
+
+class JoinGroupsStopRequest(BaseModel):
+    # nếu không truyền -> stop tất cả
+    profile_ids: Optional[list[str]] = None
+
+
+class FeedStartRequest(BaseModel):
+    profile_ids: list[str]
+    mode: str = "feed"  # "feed" | "search"
+    text: str = ""      # input text (địa điểm, hoặc query search)
+    # backward-compat: giữ field cũ nếu frontend cũ còn gọi
+    filter_text: str = ""
+    run_minutes: int = 30
+    rest_minutes: int = 0
+
+
+class FeedStopRequest(BaseModel):
+    profile_ids: Optional[list[str]] = None
+
+
+@app.put("/settings/api-key")
+def update_api_key(payload: ApiKeyPayload) -> dict:
+    with _settings_lock:
+        raw = _read_settings_raw()
+        raw["API_KEY"] = str(payload.api_key or "").strip()
+        _write_settings_raw(raw)
+        return {"status": "ok"}
+
+
+@app.post("/settings/profiles")
+def add_profile(payload: ProfileCreatePayload) -> dict:
+    pid = _norm_profile_id(payload.profile_id)
+    if not pid:
+        raise HTTPException(status_code=400, detail="profile_id rỗng")
+
+    with _settings_lock:
+        raw = _read_settings_raw()
+        profiles = raw.get("PROFILE_IDS")
+        if profiles is None or isinstance(profiles, list) or isinstance(profiles, str):
+            # Nếu đang format cũ, convert sang dict
+            profiles = {}
+        if not isinstance(profiles, dict):
+            raise HTTPException(status_code=400, detail="PROFILE_IDS phải là object")
+
+        # Tạo profile mới: luôn có cookie/access_token/groups (groups trống)
+        cur = profiles.get(pid)
+        if cur is None or not isinstance(cur, dict):
+            cur = {}
+            profiles[pid] = cur
+        cur.setdefault("cookie", "")
+        cur.setdefault("access_token", "")
+        cur.setdefault("groups", [])
+        raw["PROFILE_IDS"] = profiles
+        _write_settings_raw(raw)
+        return {"status": "ok"}
+
+
+@app.put("/settings/profiles/{profile_id}")
+def update_profile(profile_id: str, payload: ProfileUpdatePayload) -> dict:
+    pid = _norm_profile_id(profile_id)
+    if not pid:
+        raise HTTPException(status_code=400, detail="profile_id rỗng")
+
+    with _settings_lock:
+        raw = _read_settings_raw()
+        profiles = raw.get("PROFILE_IDS") or {}
+        if isinstance(profiles, list) or isinstance(profiles, str):
+            profiles = {}
+        if not isinstance(profiles, dict):
+            raise HTTPException(status_code=400, detail="PROFILE_IDS phải là object")
+
+        cur = profiles.get(pid)
+        if cur is None:
+            profiles[pid] = {}
+            cur = profiles[pid]
+        if not isinstance(cur, dict):
+            cur = {}
+            profiles[pid] = cur
+
+        if payload.cookie is not None:
+            cur["cookie"] = str(payload.cookie)
+        if payload.access_token is not None:
+            cur["access_token"] = str(payload.access_token)
+
+        raw["PROFILE_IDS"] = profiles
+        _write_settings_raw(raw)
+        return {"status": "ok"}
+
+
+@app.post("/settings/profiles/{profile_id}/groups")
+def add_or_sync_profile_groups(profile_id: str, payload: ProfileGroupsPayload) -> dict:
+    """
+    Cập nhật groups cho 1 profile:
+    - hoặc truyền group_id / group_ids để append vào PROFILE_IDS[pid].groups
+    """
+    pid = _norm_profile_id(profile_id)
+    if not pid:
+        raise HTTPException(status_code=400, detail="profile_id rỗng")
+
+    new_groups: list[str] = []
+    if payload.group_ids:
+        new_groups.extend([str(x or "").strip() for x in payload.group_ids])
+    if payload.group_id:
+        new_groups.append(str(payload.group_id or "").strip())
+    new_groups = [g for g in new_groups if g]
+
+    if not new_groups:
+        raise HTTPException(status_code=400, detail="Thiếu group_id/group_ids")
+
+    with _settings_lock:
+        raw = _read_settings_raw()
+        profiles = raw.get("PROFILE_IDS") or {}
+        if isinstance(profiles, list) or isinstance(profiles, str):
+            profiles = {}
+        if not isinstance(profiles, dict):
+            raise HTTPException(status_code=400, detail="PROFILE_IDS phải là object")
+
+        cur = profiles.get(pid)
+        if cur is None or not isinstance(cur, dict):
+            cur = {}
+            profiles[pid] = cur
+
+        merged = _merge_group_ids(cur.get("groups"), new_groups)
+
+        cur["groups"] = merged
+        raw["PROFILE_IDS"] = profiles
+        _write_settings_raw(raw)
+
+        return {"status": "ok", "profile_id": pid, "groups": merged}
+
+
+@app.put("/settings/profiles/{profile_id}/groups")
+def replace_profile_groups(profile_id: str, payload: ProfileGroupsReplacePayload) -> dict:
+    """
+    Ghi đè toàn bộ groups của 1 profile (đúng yêu cầu: trong textarea có gì thì đè lên cái cũ).
+    """
+    pid = _norm_profile_id(profile_id)
+    if not pid:
+        raise HTTPException(status_code=400, detail="profile_id rỗng")
+
+    raw_groups = payload.groups if payload and payload.groups is not None else []
+    if not isinstance(raw_groups, list):
+        raise HTTPException(status_code=400, detail="groups phải là list")
+
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for item in raw_groups:
+        s = str(item or "").strip()
+        if not s:
+            continue
+        # de-dupe để tránh spam
+        if s in seen:
+            continue
+        seen.add(s)
+        cleaned.append(s)
+
+    with _settings_lock:
+        raw = _read_settings_raw()
+        profiles = raw.get("PROFILE_IDS") or {}
+        if isinstance(profiles, list) or isinstance(profiles, str):
+            profiles = {}
+        if not isinstance(profiles, dict):
+            raise HTTPException(status_code=400, detail="PROFILE_IDS phải là object")
+
+        cur = profiles.get(pid)
+        if cur is None or not isinstance(cur, dict):
+            cur = {}
+            profiles[pid] = cur
+
+        cur["groups"] = cleaned
+        raw["PROFILE_IDS"] = profiles
+        _write_settings_raw(raw)
+        return {"status": "ok", "profile_id": pid, "groups": cleaned}
+
+
+def _prune_join_group_processes() -> None:
+    """Dọn các process đã chạy xong khỏi map."""
+    dead = []
+    for pid, proc in list(_join_groups_processes.items()):
+        try:
+            if not proc.is_alive():
+                dead.append(pid)
+        except Exception:
+            dead.append(pid)
+    for pid in dead:
+        _join_groups_processes.pop(pid, None)
+
+
+def _prune_feed_processes() -> None:
+    dead = []
+    for pid, proc in list(_feed_processes.items()):
+        try:
+            if not proc.is_alive():
+                dead.append(pid)
+        except Exception:
+            dead.append(pid)
+    for pid in dead:
+        _feed_processes.pop(pid, None)
+
+
+@app.post("/groups/join")
+def auto_join_groups(payload: JoinGroupsRequest) -> dict:
+    """
+    Chạy auto join group cho các profile đã chọn (mỗi profile 1 process → chạy song song).
+    Groups lấy từ settings.json: PROFILE_IDS[pid].groups
+    """
+    if not payload.profile_ids:
+        raise HTTPException(status_code=400, detail="profile_ids rỗng")
+
+    pids = [_norm_profile_id(x) for x in payload.profile_ids]
+    pids = [p for p in pids if p]
+    if not pids:
+        raise HTTPException(status_code=400, detail="profile_ids không hợp lệ")
+
+    started: list[str] = []
+    skipped: list[dict] = []
+
+    with _join_groups_lock:
+        _prune_join_group_processes()
+
+        raw = _read_settings_raw()
+        profiles = raw.get("PROFILE_IDS") or {}
+        if not isinstance(profiles, dict):
+            profiles = {}
+
+        for pid in pids:
+            # skip nếu đang chạy
+            existing = _join_groups_processes.get(pid)
+            if existing and existing.is_alive():
+                skipped.append({"profile_id": pid, "reason": "already_running"})
+                continue
+
+            cfg = profiles.get(pid)
+            if not isinstance(cfg, dict):
+                skipped.append({"profile_id": pid, "reason": "profile_not_found"})
+                continue
+
+            groups = cfg.get("groups")
+            if not isinstance(groups, list):
+                groups = []
+            groups = [str(g or "").strip() for g in groups if str(g or "").strip()]
+
+            if len(groups) == 0:
+                skipped.append({"profile_id": pid, "reason": "no_groups"})
+                continue
+
+            proc = Process(
+                target=_run_join_groups_worker,
+                args=(pid, groups),
+                daemon=True,
+            )
+            proc.start()
+            _join_groups_processes[pid] = proc
+            started.append(pid)
+
+    return {
+        "status": "ok",
+        "started": started,
+        "skipped": skipped,
+        "running": list(_join_groups_processes.keys()),
+    }
+
+
+@app.post("/groups/join/stop")
+def stop_auto_join_groups(payload: Optional[JoinGroupsStopRequest] = Body(None)) -> dict:
+    """
+    Dừng auto join group:
+    - Không truyền payload -> dừng tất cả
+    - Có profile_ids -> dừng theo danh sách
+    """
+    target: Optional[list[str]] = None
+    if payload and payload.profile_ids is not None:
+        target = [_norm_profile_id(x) for x in (payload.profile_ids or [])]
+        target = [p for p in target if p]
+
+    stopped: list[str] = []
+    not_running: list[str] = []
+
+    with _join_groups_lock:
+        _prune_join_group_processes()
+        keys = list(_join_groups_processes.keys())
+        to_stop = keys if target is None else [p for p in target if p in _join_groups_processes]
+
+        # terminate processes
+        for pid in to_stop:
+            proc = _join_groups_processes.get(pid)
+            if not proc:
+                continue
+            try:
+                if proc.is_alive():
+                    proc.terminate()
+                    proc.join(timeout=5)
+            except Exception:
+                pass
+            _join_groups_processes.pop(pid, None)
+            stopped.append(pid)
+
+        if target is not None:
+            for pid in target:
+                if pid not in stopped:
+                    not_running.append(pid)
+
+    # Best-effort: yêu cầu NST stop/close browser instance của profile (giống luồng lấy cookie)
+    for pid in stopped:
+        try:
+            stop_profile(pid)
+        except Exception:
+            pass
+
+    return {"status": "ok", "stopped": stopped, "not_running": not_running}
+
+
+@app.get("/groups/join/status")
+def join_groups_status() -> dict:
+    """Trạng thái join-groups đang chạy."""
+    with _join_groups_lock:
+        _prune_join_group_processes()
+        running = []
+        for pid, proc in _join_groups_processes.items():
+            try:
+                if proc.is_alive():
+                    running.append(pid)
+            except Exception:
+                pass
+    return {"running": running}
+
+
+@app.get("/feed/status")
+def feed_status() -> dict:
+    """Trạng thái nuôi acc (feed) đang chạy."""
+    with _feed_lock:
+        _prune_feed_processes()
+        running: list[str] = []
+        for pid, proc in _feed_processes.items():
+            try:
+                if proc.is_alive():
+                    running.append(pid)
+            except Exception:
+                pass
+    return {"running": running}
+
+
+@app.post("/feed/start")
+def feed_start(payload: FeedStartRequest) -> dict:
+    """Chạy nuôi acc (feed & like) cho các profile đã chọn (mỗi profile 1 process)."""
+    if not payload.profile_ids:
+        raise HTTPException(status_code=400, detail="profile_ids rỗng")
+
+    pids = [_norm_profile_id(x) for x in payload.profile_ids]
+    pids = [p for p in pids if p]
+    if not pids:
+        raise HTTPException(status_code=400, detail="profile_ids không hợp lệ")
+
+    run_minutes = int(payload.run_minutes or 0)
+    if run_minutes <= 0:
+        raise HTTPException(status_code=400, detail="run_minutes phải > 0")
+    rest_minutes = int(payload.rest_minutes or 0)
+    if rest_minutes < 0:
+        raise HTTPException(status_code=400, detail="rest_minutes phải >= 0")
+
+    started: list[str] = []
+    skipped: list[dict] = []
+    mode = str(payload.mode or "feed").strip().lower()
+    text = str(payload.text or "").strip()
+    # backward-compat
+    if not text and getattr(payload, "filter_text", None):
+        text = str(payload.filter_text or "").strip()
+    # Cho phép text rỗng nếu mode=feed (sẽ chỉ filter theo keyword mặc định)
+    if not text and mode == "search":
+        raise HTTPException(status_code=400, detail="text rỗng (search cần text)")
+
+    with _feed_lock:
+        _prune_feed_processes()
+        for pid in pids:
+            existing = _feed_processes.get(pid)
+            if existing and existing.is_alive():
+                skipped.append({"profile_id": pid, "reason": "already_running"})
+                continue
+
+            proc = Process(
+                target=_run_feed_worker,
+                args=(pid, mode, text, run_minutes, rest_minutes),
+                daemon=True,
+            )
+            proc.start()
+            _feed_processes[pid] = proc
+            started.append(pid)
+
+    return {"status": "ok", "started": started, "skipped": skipped, "running": list(_feed_processes.keys())}
+
+
+@app.post("/feed/stop")
+def feed_stop(payload: Optional[FeedStopRequest] = Body(None)) -> dict:
+    """Dừng nuôi acc (feed) theo list profile_ids hoặc dừng tất cả nếu không truyền."""
+    target: Optional[list[str]] = None
+    if payload and payload.profile_ids is not None:
+        target = [_norm_profile_id(x) for x in (payload.profile_ids or [])]
+        target = [p for p in target if p]
+
+    stopped: list[str] = []
+    with _feed_lock:
+        _prune_feed_processes()
+        keys = list(_feed_processes.keys())
+        to_stop = keys if target is None else [p for p in target if p in _feed_processes]
+        for pid in to_stop:
+            proc = _feed_processes.get(pid)
+            try:
+                if proc and proc.is_alive():
+                    proc.terminate()
+                    proc.join(timeout=5)
+            except Exception:
+                pass
+            _feed_processes.pop(pid, None)
+            stopped.append(pid)
+
+    for pid in stopped:
+        try:
+            stop_profile(pid)
+        except Exception:
+            pass
+
+    return {"status": "ok", "stopped": stopped}
+
+
+@app.get("/jobs/status")
+def jobs_status() -> dict:
+    """Trạng thái chung (để UI hiển thị/diagnose)."""
+    is_bot_running = bool(runner_process and runner_process.is_alive())
+    with _join_groups_lock:
+        _prune_join_group_processes()
+        join_running = []
+        for pid, proc in _join_groups_processes.items():
+            try:
+                if proc.is_alive():
+                    join_running.append(pid)
+            except Exception:
+                pass
+    with _feed_lock:
+        _prune_feed_processes()
+        feed_running = []
+        for pid, proc in _feed_processes.items():
+            try:
+                if proc.is_alive():
+                    feed_running.append(pid)
+            except Exception:
+                pass
+    return {
+        "bot_running": is_bot_running,
+        "bot_pid": runner_process.pid if is_bot_running else None,
+        "join_groups_running": join_running,
+        "feed_running": feed_running,
+    }
+
+
+@app.post("/jobs/stop-all")
+def stop_all_jobs() -> dict:
+    """
+    Dừng tất cả tác vụ nền (dùng chung cho auto join group + sau này nuôi acc).
+    """
+    global runner_process
+
+    stopped = {
+        "bot": False,
+        "join_groups": [],
+        "feed": [],
+    }
+
+    # 1) stop bot runner
+    try:
+        if runner_process and runner_process.is_alive():
+            runner_process.terminate()
+            runner_process.join(timeout=5)
+            stopped["bot"] = True
+    except Exception:
+        pass
+    finally:
+        runner_process = None
+
+    # 2) stop join groups processes
+    join_to_stop: list[str] = []
+    with _join_groups_lock:
+        _prune_join_group_processes()
+        join_to_stop = list(_join_groups_processes.keys())
+        for pid in join_to_stop:
+            proc = _join_groups_processes.get(pid)
+            try:
+                if proc and proc.is_alive():
+                    proc.terminate()
+                    proc.join(timeout=5)
+            except Exception:
+                pass
+            _join_groups_processes.pop(pid, None)
+        stopped["join_groups"] = join_to_stop
+
+    # 2b) stop feed processes
+    feed_to_stop: list[str] = []
+    with _feed_lock:
+        _prune_feed_processes()
+        feed_to_stop = list(_feed_processes.keys())
+        for pid in feed_to_stop:
+            proc = _feed_processes.get(pid)
+            try:
+                if proc and proc.is_alive():
+                    proc.terminate()
+                    proc.join(timeout=5)
+            except Exception:
+                pass
+            _feed_processes.pop(pid, None)
+        stopped["feed"] = feed_to_stop
+
+    # 3) Đóng tab NST mà KHÔNG mở profile mới:
+    # - gọi stop_profile(pid) (best-effort, không connect)
+    # - gọi stop_all_browsers() (nếu bản NST hỗ trợ)
+    nst_attempted: list[str] = []
+    try:
+        raw = _read_settings_raw()
+        profiles = raw.get("PROFILE_IDS") or {}
+        if isinstance(profiles, dict):
+            nst_attempted = [str(k).strip() for k in profiles.keys() if str(k).strip()]
+    except Exception:
+        nst_attempted = []
+
+    # Ưu tiên stop các profile đang join/feed trước, rồi stop phần còn lại
+    ordered = []
+    seen = set()
+    for pid in (join_to_stop + feed_to_stop + nst_attempted):
+        if pid and pid not in seen:
+            seen.add(pid)
+            ordered.append(pid)
+
+    nst_ok: list[str] = []
+    for pid in ordered:
+        try:
+            if stop_profile(pid):
+                nst_ok.append(pid)
+        except Exception:
+            pass
+
+    # 4) Fallback: cố gắng gọi endpoint "stop/close all" của NST (nếu bản NST hỗ trợ)
+    nst_stop_all_ok = False
+    try:
+        nst_stop_all_ok = bool(stop_all_browsers())
+    except Exception:
+        nst_stop_all_ok = False
+
+    return {
+        "status": "ok",
+        "stopped": stopped,
+        "nst_stop_attempted": ordered,
+        "nst_stop_ok": nst_ok,
+        "nst_stop_all_ok": nst_stop_all_ok,
+        # giữ field này để frontend cũ không bị crash
+        "nst_force_close_results": [],
+    }
+
+@app.delete("/settings/profiles/{profile_id}")
+def delete_profile(profile_id: str) -> dict:
+    pid = _norm_profile_id(profile_id)
+    if not pid:
+        raise HTTPException(status_code=400, detail="profile_id rỗng")
+
+    with _settings_lock:
+        raw = _read_settings_raw()
+        profiles = raw.get("PROFILE_IDS") or {}
+        if isinstance(profiles, list) or isinstance(profiles, str):
+            profiles = {}
+        if not isinstance(profiles, dict):
+            raise HTTPException(status_code=400, detail="PROFILE_IDS phải là object")
+
+        if pid in profiles:
+            del profiles[pid]
+        raw["PROFILE_IDS"] = profiles
+        _write_settings_raw(raw)
+        return {"status": "ok"}
+
+
+@app.post("/settings/profiles/{profile_id}/cookie/fetch")
+def fetch_and_save_cookie(profile_id: str) -> dict:
+    """
+    Kết nối NST profile -> lấy cookie từ browser context -> lưu vào settings.json.
+    """
+    pid = _norm_profile_id(profile_id)
+    if not pid:
+        raise HTTPException(status_code=400, detail="profile_id rỗng")
+
+    try:
+        ws = connect_profile(pid)
+    except Exception as exc:
+        # NST chưa chạy / API key sai / profile_id sai
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    fb = FBController(ws)
+    fb.profile_id = pid
+    fb.connect()
+    try:
+        # đảm bảo context đã có session/cookie
+        try:
+            fb.goto("https://www.facebook.com/")
+            fb.page.wait_for_timeout(1200)
+        except Exception:
+            pass
+
+        cookie_string = fb.save_cookies()
+        if not cookie_string:
+            raise HTTPException(status_code=400, detail="Không lấy được cookie (có thể chưa đăng nhập)")
+        return {"status": "ok", "profile_id": pid, "cookie": cookie_string}
+    finally:
+        # Đóng sạch tab/context playwright
+        try:
+            if fb.page:
+                try:
+                    fb.page.close()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            if fb.browser and getattr(fb.browser, "contexts", None):
+                for ctx in list(fb.browser.contexts):
+                    try:
+                        ctx.close()
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        try:
+            if fb.browser:
+                fb.browser.close()
+        except Exception:
+            pass
+        try:
+            if fb.play:
+                fb.play.stop()
+        except Exception:
+            pass
+
+        # Best-effort: yêu cầu NST stop/close browser instance của profile
+        try:
+            stop_profile(pid)
+        except Exception:
+            pass
+
 --- END FILE: app\api.py ---
 
 --- START FILE: app\__init__.py ---
@@ -225,9 +1105,11 @@ App package cho FastAPI endpoints.
 
 --- START FILE: config\groups.json ---
 [
-    "3013041542259942",
-    "1884004131909284"
+  "3013041542259942",
+  "1884004131909284",
+  "https://www.facebook.com/groups/tuyendungkisuIT"
 ]
+
 --- END FILE: config\groups.json ---
 
 --- START FILE: config\settings.json ---
@@ -235,12 +1117,24 @@ App package cho FastAPI endpoints.
   "API_KEY": "7a43ee33-9f15-434d-a1b6-6d1b5809f935",
   "HEADLESS": false,
   "TARGET_URL": "https://facebook.com",
-  "PROFILE_IDS": [
-    "621e1f5d-0c42-481e-9ddd-7abaafce68ed"
-  ],
+  "PROFILE_IDS": {
+    "621e1f5d-0c42-481e-9ddd-7abaafce68ed": {
+      "access_token": "EAAAAAYsX7TsBPkK1ZBRjlt5wPp0ZBTRmXixZCJr0OAtEG2JQ2di0i1mtCIsuGvriF2cLviSV5GOl2taLMWi3K5SJb3bg5yxOOBPGMxkBadOT1mwkVjf2UujZB012zzVUiQYpD9fDzvUtB1KtT4ZB8DHDwJLmikXoB6K7OzXRdfj3as5gc9SFQK2vNNB2fUmPZBvMrUeNC06jP0Oi9Ra5r44pSBBYvSm2iJUDoKK6EVAqbmhAZDZD",
+      "cookie": "sb=HNY6aQAFB_tf42A4id6xhZpQ; ps_l=1; ps_n=1; datr=G9Y6adLzWpqwDfxsQ9kDerdz; c_user=100044138143352; fr=1AmhOzEsYwJm1z3F8.AWe1G4zFeIdltu_6mo02ef034OWbfWO3HXIKnZHiXgEXzm41vC0.BpQlRC..AAA.0.0.BpQlSK.AWcCt14dZZqeCwKbuvG3d3nDtq0; xs=46%3A14pMRvXIIAuMgQ%3A2%3A1765698119%3A-1%3A-1%3A%3AAcz0K0TW7XYT1T9uPpb9lyO9fUsqaeA59CgEI6TisFc; wd=929x883;",
+      "groups": [
+        "https://www.facebook.com/groups/tuyendungkisuIT"
+      ]
+    },
+    "031ca13d-e8fa-400c-a603-df57a2806788": {
+      "cookie": "",
+      "access_token": "",
+      "groups": []
+    }
+  },
   "RUN_MINUTES": 30,
   "REST_MINUTES": 120
 }
+
 --- END FILE: config\settings.json ---
 
 --- START FILE: core\browser.py ---
@@ -253,7 +1147,7 @@ from urllib.parse import urlparse, parse_qs, unquote
 import os
 from worker.get_id import get_id_from_url
 import sys
-from core.settings import get_settings
+from core.settings import get_settings, SETTINGS_PATH
 # ==============================================================================
 # JS TOOLS & HELPER FUNCTIONS
 # ==============================================================================
@@ -466,7 +1360,7 @@ class FBController:
         self.captured_response_id = None # ID từ Response (Ưu tiên)
         
         self.job_keywords = [
-            "tuyển dụng", "tuyển nhân viên", "tuyển gấp", "việc làm", 
+            "tuyển dụng", "tuyển nhân viên", "tuyển gấp", "việc làm", "tuyển",
             "lương", "phỏng vấn", "hồ sơ",
             "full-time", "part-time", "thực tập", "kế toán", "may mặc", "kcn" ,"Ứng viên " , "Ứng tuyển"
         ]
@@ -521,7 +1415,11 @@ class FBController:
 
     # ===================== SHARE & CHỜ ID (LOGIC MỚI) =====================
     def share_center_ad(self, post_handle, post_type):
+            
         try:
+            viewport = self.page.viewport_size
+            height = viewport['height'] if viewport else 800
+            escape_step = height * 0.35  # 👈 THOÁT MODULE RÁC
             print("🚀 Share → bắt ID (Response → Payload → ViewSource)")
 
             self.captured_payload_url = None
@@ -532,9 +1430,11 @@ class FBController:
             )
             if not share_btn:
                 print("⚠️ Không tìm thấy nút Share")
+                self.scroll_past_post(post_handle)
+                time.sleep(random.uniform(0.12, 0.13))
                 return False
 
-            share_btn.scroll_into_view_if_needed()
+            self.bring_element_into_view_smooth(share_btn)
             self.page.wait_for_timeout(300)
             share_btn.click()
 
@@ -551,6 +1451,7 @@ class FBController:
             if self.captured_payload_url:
                 source_id = self.get_id_blocking_mode(self.captured_payload_url)
                 if source_id:
+                    self.dispatch_get_id_for_all_profiles(source_id)
                     self.save_post_id(source_id, post_type)
                     self.page.keyboard.press("Escape")
                     return True
@@ -689,7 +1590,7 @@ class FBController:
             selector = 'div[role="button"][aria-label="Thích"], div[role="button"][aria-label="Like"]'
             like_btn = element.query_selector(selector)
             if like_btn:
-                like_btn.scroll_into_view_if_needed()
+                self.bring_element_into_view_smooth(like_btn)
                 time.sleep(0.5)
                 like_btn.click()
                 print("✅ Đã Bấm Like thành công!")
@@ -787,7 +1688,11 @@ class FBController:
         except: pass
         
     def save_cookies(self):
-        """Lưu Cookie dạng Dictionary: { 'PROFILE_ID': 'COOKIE_STRING' }"""
+        """
+        Lấy cookie từ browser context và lưu thẳng vào:
+        backend/config/settings.json -> PROFILE_IDS[profile_id]["cookie"]
+        Trả về cookie_string.
+        """
         try:
             print("🍪 Đang trích xuất Cookie (Key=ID, Value=String)...")
             
@@ -818,26 +1723,46 @@ class FBController:
             else:
                 cookie_string = ""
 
-            # 4. Tạo cấu trúc dữ liệu theo yêu cầu Sếp
-            # Key là Profile ID, Value là chuỗi Cookie
-            data_to_save = {
-                self.profile_id: cookie_string
-            }
+            # 4. Lưu vào settings.json theo đúng profile_id
+            try:
+                if not SETTINGS_PATH.exists():
+                    print(f"⚠️ Không tìm thấy settings.json: {SETTINGS_PATH}")
+                    return cookie_string
 
-            # 5. Lưu vào file JSON
-            folder = "data/cookies"
-            os.makedirs(folder, exist_ok=True)
-            
-            # Tên file vẫn là ID profile cho dễ quản lý
-            json_path = f"{folder}/{self.profile_id}.json"
-            
-            with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(data_to_save, f, indent=2, ensure_ascii=False)
-                
-            print(f"✅ Đã lưu Cookie format {{ID: String}} vào: {json_path}")
-            print(f"\n🔑 DỮ LIỆU ĐÃ LƯU:\n{json.dumps(data_to_save, indent=2)}\n")
-            
-            return data_to_save
+                with SETTINGS_PATH.open("r", encoding="utf-8") as f:
+                    raw = json.load(f)
+
+                if not isinstance(raw, dict):
+                    raw = {}
+
+                profiles = raw.get("PROFILE_IDS")
+                if profiles is None or isinstance(profiles, (list, str)):
+                    profiles = {}
+                if not isinstance(profiles, dict):
+                    profiles = {}
+
+                pid = str(self.profile_id or "").strip()
+                if not pid:
+                    print("⚠️ profile_id rỗng, không ghi vào settings.json")
+                    return cookie_string
+
+                cfg = profiles.get(pid)
+                if not isinstance(cfg, dict):
+                    cfg = {}
+                cfg["cookie"] = cookie_string
+                profiles[pid] = cfg
+                raw["PROFILE_IDS"] = profiles
+
+                # ghi file
+                with SETTINGS_PATH.open("w", encoding="utf-8") as f:
+                    json.dump(raw, f, indent=2, ensure_ascii=False)
+                    f.write("\n")
+
+                print(f"✅ Đã cập nhật cookie vào settings.json cho profile_id={pid}")
+            except Exception as e:
+                print(f"⚠️ Không ghi được cookie vào settings.json: {e}")
+
+            return cookie_string
             
         except Exception as e:
             print(f"❌ Lỗi lưu cookies: {e}")
@@ -962,6 +1887,7 @@ class FBController:
                 
         return found_id
     
+    
     def dispatch_get_id_for_all_profiles(self, post_id: str):
         """
         Khi đã có post_id → gọi get_id cho toàn bộ PROFILE_IDS
@@ -978,6 +1904,97 @@ class FBController:
                 get_id_from_url(pid, post_id)
             except Exception as e:
                 print(f"   ❌ Lỗi get_id với profile {pid}: {e}")
+                
+                
+    def bring_element_into_view_smooth(self, element):
+        """
+        Kiểm tra element (nút Share) có trong màn hình không.
+        Nếu không, cuộn chuột nhẹ nhàng tới nó (Không dùng scroll_into_view gây giật).
+        """
+        try:
+            box = element.bounding_box()
+            if not box: return False # Element chưa render
+
+            viewport = self.page.viewport_size
+            vh = None
+            try:
+                if viewport and isinstance(viewport, dict):
+                    vh = viewport.get('height')
+            except Exception:
+                vh = None
+
+            # Fallback: đôi khi connect qua CDP => viewport_size = None
+            if not vh:
+                try:
+                    vh = self.page.evaluate("() => window.innerHeight") or 800
+                except Exception:
+                    vh = 800
+            
+            # Tọa độ Y của element so với đỉnh màn hình hiện tại
+            element_y = box['y']
+            element_height = box['height']
+
+            # Kiểm tra: Nút có nằm lọt thỏm trong màn hình không?
+            # (Cho phép lề trên 100px, lề dưới 100px để chắc chắn click được)
+            is_in_view = (element_y > 100) and (element_y + element_height < vh - 100)
+
+            if is_in_view:
+                return True # Đang đẹp rồi, không cần cuộn
+
+            # Nếu nút nằm dưới đáy màn hình -> Cần cuộn xuống
+            if element_y > vh - 100:
+                # Tính khoảng cách cần cuộn: Đưa nút lên vị trí khoảng 70% màn hình
+                scroll_distance = element_y - (vh * 0.7)
+                print(f"    -> 🔽 Nút Share bị che, cuộn xuống {int(scroll_distance)}px")
+                
+                # Cuộn mượt
+                self.page.mouse.wheel(0, scroll_distance)
+                time.sleep(0.5) # Chờ render lại
+                return True
+            
+            return True
+        except Exception as e:
+            # Log nhẹ để không spam, lỗi thường do viewport null / element detach
+            print(f"⚠️ Lỗi tính toán cuộn: {e}")
+            return False
+
+    def scroll_past_post(self, post_handle):
+        """
+        Cuộn qua bài viết hiện tại một cách thông minh.
+        - Bài ngắn: Cuộn ít.
+        - Bài dài: Cuộn nhiều.
+        -> Tránh việc dùng PageDown bị trôi bài.
+        """
+        try:
+            box = post_handle.bounding_box()
+            if not box:
+                # Fallback nếu không lấy được kích thước -> Dùng PageDown
+                self.page.keyboard.press("PageDown")
+                return
+
+            post_height = box['height']
+            post_y = box['y']
+            
+            # Chiến thuật: Cuộn sao cho ĐÁY bài viết hiện tại trôi lên mép trên màn hình
+            # Cộng thêm 50px padding để tách biệt bài sau
+            scroll_distance = post_y + post_height + 50
+            
+            # Nếu khoảng cách quá lớn (bài siêu dài), chia nhỏ ra cuộn cho đỡ sốc
+            if scroll_distance > 2000:
+                steps = 3
+                step_dist = scroll_distance / steps
+                for _ in range(steps):
+                    self.page.mouse.wheel(0, step_dist)
+                    time.sleep(0.1)
+            else:
+                self.page.mouse.wheel(0, scroll_distance)
+                
+            print(f"    -> 📉 Đã cuộn qua bài (height={int(post_height)}px)")
+            time.sleep(1) # Chờ bài mới load
+
+        except Exception as e:
+            print(f"⚠️ Lỗi scroll_past_post: {e}")
+            self.page.keyboard.press("PageDown")
 --- END FILE: core\browser.py ---
 
 --- START FILE: core\join_groups.py ---
@@ -986,6 +2003,7 @@ import os
 import json
 import time
 import random
+import re
 
 # --- SETUP ĐƯỜNG DẪN ĐỂ IMPORT CORE ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -993,6 +2011,7 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
 from core.nst import connect_profile
+from core.nst import stop_profile
 from core.browser import FBController
 
 class GroupJoiner(FBController):
@@ -1000,7 +2019,25 @@ class GroupJoiner(FBController):
     Class chuyên dụng để đi xin vào nhóm
     """
     def join_group(self, group_id):
-        url = f"https://www.facebook.com/groups/{group_id}"
+        raw = str(group_id or "").strip()
+        if not raw:
+            print("⚠️ group rỗng, bỏ qua")
+            return False
+
+        # Hỗ trợ lưu group dưới dạng full URL / hoặc facebook.com/... không có scheme
+        if re.match(r"^https?://", raw, flags=re.IGNORECASE):
+            url = raw
+        elif raw.lower().startswith("facebook.com/") or raw.lower().startswith("www.facebook.com/"):
+            url = "https://" + raw
+        elif "/groups/" in raw:
+            # Trường hợp người dùng dán path có /groups/ nhưng thiếu domain
+            if raw.startswith("/"):
+                url = "https://www.facebook.com" + raw
+            else:
+                url = "https://www.facebook.com/" + raw.lstrip("/")
+        else:
+            # Fallback: coi là group_id
+            url = f"https://www.facebook.com/groups/{raw}"
         print(f"\n🚀 Đang truy cập nhóm: {group_id}")
         print(f"🔗 Link: {url}")
         
@@ -1028,13 +2065,20 @@ class GroupJoiner(FBController):
                 # ======================================================
                 # [MỚI] ẤN ESC 2 LẦN ĐỂ TẮT POPUP CÂU HỎI / NỘI QUY
                 # ======================================================
-               
-                time.sleep(2)           # Chờ popup hiện lên
-                self.page.keyboard.press("Escape")
-               
+                # Thay sleep cứng bằng auto-wait popup/dialog
                 # ======================================================
+                try:
+                    # Chờ popup dialog (nếu có) rồi đóng
+                    self.page.wait_for_selector('div[role="dialog"]', timeout=3000)
+                    self.page.keyboard.press("Escape")
+                except:
+                    pass
                 
-                time.sleep(2) # Chờ UI cập nhật lại sau khi tắt popup
+                try:
+                    # Chờ UI cập nhật sau khi đóng popup (không sleep cứng)
+                    self.page.wait_for_timeout(800)
+                except:
+                    pass
                 
                 # 3. Kiểm tra lại trạng thái
                 # Nếu nút chuyển thành "Hủy yêu cầu" hoặc "Đã tham gia" -> Thành công
@@ -1055,6 +2099,93 @@ class GroupJoiner(FBController):
             print(f"❌ Lỗi khi xử lý nhóm {group_id}: {e}")
             return False
 
+def run_batch_join_from_list(profile_id, group_ids):
+    """
+    Chạy join group cho 1 profile với danh sách group truyền trực tiếp (list).
+    Dùng cho API (đa luồng/đa process).
+    """
+    try:
+        items = list(group_ids or [])
+    except Exception:
+        items = []
+
+    # Clean
+    cleaned = []
+    for gid in items:
+        s = str(gid or "").strip()
+        if s:
+            cleaned.append(s)
+
+    if not cleaned:
+        print("⚠️ Danh sách group rỗng.")
+        return
+
+    print(f"📋 Tìm thấy {len(cleaned)} nhóm cần tham gia.")
+
+    # 2. Kết nối Profile
+    try:
+        print(f"🔌 Đang kết nối profile {profile_id}...")
+        ws_url = connect_profile(profile_id)
+        fb = GroupJoiner(ws_url)
+        fb.profile_id = profile_id
+        fb.connect()
+        
+        # 3. Chạy vòng lặp
+        for idx, gid in enumerate(cleaned):
+            fb.join_group(gid)
+            
+            # Nghỉ ngẫu nhiên (trừ khi là group cuối)
+            if idx < len(cleaned) - 1:
+                sleep_time = random.uniform(10, 20) 
+                print(f"💤 Nghỉ {sleep_time:.1f}s trước khi qua nhóm tiếp theo...")
+                time.sleep(sleep_time)
+            
+    except Exception as e:
+        print(f"❌ Lỗi kết nối/browser: {e}")
+    finally:
+        print("🏁 Hoàn tất danh sách.")
+        # Đóng sạch tab/context playwright + stop NST profile (best-effort)
+        try:
+            if 'fb' in locals() and fb:
+                try:
+                    if getattr(fb, "page", None):
+                        try:
+                            fb.page.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    if getattr(fb, "browser", None) and getattr(fb.browser, "contexts", None):
+                        for ctx in list(fb.browser.contexts):
+                            try:
+                                ctx.close()
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                try:
+                    if getattr(fb, "browser", None):
+                        try:
+                            fb.browser.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    if getattr(fb, "play", None):
+                        try:
+                            fb.play.stop()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        finally:
+            try:
+                stop_profile(profile_id)
+            except Exception:
+                pass
+
 def run_batch_join(profile_id, json_file_path):
     # 1. Đọc file JSON
     try:
@@ -1071,28 +2202,7 @@ def run_batch_join(profile_id, json_file_path):
         print(f"❌ Lỗi đọc file JSON: {e}")
         return
 
-    # 2. Kết nối Profile
-    try:
-        print(f"🔌 Đang kết nối profile {profile_id}...")
-        ws_url = connect_profile(profile_id)
-        fb = GroupJoiner(ws_url)
-        fb.profile_id = profile_id
-        fb.connect()
-        
-        # 3. Chạy vòng lặp
-        for gid in group_ids:
-            fb.join_group(gid)
-            
-            # Nghỉ ngẫu nhiên
-            sleep_time = random.uniform(10, 20) 
-            print(f"💤 Nghỉ {sleep_time:.1f}s trước khi qua nhóm tiếp theo...")
-            time.sleep(sleep_time)
-            
-    except Exception as e:
-        print(f"❌ Lỗi kết nối/browser: {e}")
-    finally:
-        print("🏁 Hoàn tất danh sách.")
-        # fb.browser.close() 
+    run_batch_join_from_list(profile_id, group_ids)
 
 if __name__ == "__main__":
     # --- CẤU HÌNH ---
@@ -1106,18 +2216,147 @@ if __name__ == "__main__":
 import requests
 import json
 import urllib.parse  # Cần cái này để mã hóa User-Agent có dấu cách
+from typing import Optional, Any
 
-from core.settings import get_settings
+from core.settings import reload_settings
 
-settings = get_settings()
-API_KEY = settings.api_key
-HEADLESS = settings.headless
+def _get_runtime_settings():
+    """
+    NST API key/headless có thể đổi trong lúc backend đang chạy.
+    Vì get_settings() có cache, dùng reload_settings() để lấy giá trị mới nhất.
+    """
+    try:
+        return reload_settings()
+    except Exception:
+        # fallback: vẫn cố đọc cache nếu reload lỗi
+        from core.settings import get_settings
+        return get_settings()
+NST_BASE_URLS = [
+    "http://127.0.0.1:8848/api/v2",
+    "http://127.0.0.1:8848/api/v1",
+    "http://127.0.0.1:8848/api",
+]
+
+
+def _nst_request(method: str, path: str, timeout: int = 15, headers: Optional[dict] = None) -> Optional[Any]:
+    """
+    Gọi NST local API. Trả về JSON nếu parse được, None nếu lỗi.
+    """
+    for base in NST_BASE_URLS:
+        url = f"{base}{path}"
+        try:
+            resp = requests.request(method, url, timeout=timeout, headers=headers)
+            try:
+                return resp.json()
+            except Exception:
+                return {"status_code": resp.status_code, "text": resp.text}
+        except Exception:
+            continue
+    return None
+
+
+def stop_profile(profile_id: str) -> bool:
+    """
+    Best-effort: yêu cầu NST stop/close browser instance của profile.
+    Vì NST có nhiều bản/endpoint khác nhau, thử nhiều đường dẫn phổ biến.
+    """
+    pid = str(profile_id or "").strip()
+    if not pid:
+        return False
+
+    cfg = _get_runtime_settings()
+    api_key = str(getattr(cfg, "api_key", "") or "").strip()
+    hdr = {"x-api-key": api_key} if api_key else None
+    # Thử cả kiểu query param và header (một số bản NST chỉ nhận header)
+    candidates = [
+        # query
+        ("POST", f"/browsers/stop/{pid}?x-api-key={api_key}"),
+        ("GET", f"/browsers/stop/{pid}?x-api-key={api_key}"),
+        ("POST", f"/browsers/close/{pid}?x-api-key={api_key}"),
+        ("GET", f"/browsers/close/{pid}?x-api-key={api_key}"),
+        ("POST", f"/browser/stop/{pid}?x-api-key={api_key}"),
+        ("GET", f"/browser/stop/{pid}?x-api-key={api_key}"),
+        ("POST", f"/browser/close/{pid}?x-api-key={api_key}"),
+        ("GET", f"/browser/close/{pid}?x-api-key={api_key}"),
+        ("POST", f"/stop/{pid}?x-api-key={api_key}"),
+        ("GET", f"/stop/{pid}?x-api-key={api_key}"),
+        ("POST", f"/close/{pid}?x-api-key={api_key}"),
+        ("GET", f"/close/{pid}?x-api-key={api_key}"),
+        ("POST", f"/disconnect/{pid}?x-api-key={api_key}"),
+        ("GET", f"/disconnect/{pid}?x-api-key={api_key}"),
+        # header (không query)
+        ("POST", f"/browsers/stop/{pid}"),
+        ("GET", f"/browsers/stop/{pid}"),
+        ("POST", f"/browsers/close/{pid}"),
+        ("GET", f"/browsers/close/{pid}"),
+        ("POST", f"/browser/stop/{pid}"),
+        ("GET", f"/browser/stop/{pid}"),
+        ("POST", f"/browser/close/{pid}"),
+        ("GET", f"/browser/close/{pid}"),
+        ("POST", f"/stop/{pid}"),
+        ("GET", f"/stop/{pid}"),
+        ("POST", f"/close/{pid}"),
+        ("GET", f"/close/{pid}"),
+        ("POST", f"/disconnect/{pid}"),
+        ("GET", f"/disconnect/{pid}"),
+    ]
+
+    for method, path in candidates:
+        data = _nst_request(method, path, headers=hdr)
+        if not data:
+            continue
+        # heuristic success: err==False or code==0 or status ok
+        if data.get("err") is False:
+            return True
+        if str(data.get("status")).lower() in {"ok", "success", "stopped", "closed"}:
+            return True
+        if data.get("code") in (0, 200):
+            return True
+    return False
+
+
+def stop_all_browsers() -> bool:
+    """
+    Best-effort: đóng toàn bộ browser/tab NST (một số bản hỗ trợ endpoint stop/close all).
+    """
+    cfg = _get_runtime_settings()
+    api_key = str(getattr(cfg, "api_key", "") or "").strip()
+    hdr = {"x-api-key": api_key} if api_key else None
+
+    candidates = [
+        ("POST", f"/browsers/stop-all?x-api-key={api_key}"),
+        ("POST", f"/browsers/close-all?x-api-key={api_key}"),
+        ("POST", f"/browsers/stopAll?x-api-key={api_key}"),
+        ("POST", f"/browsers/closeAll?x-api-key={api_key}"),
+        ("POST", f"/stop-all?x-api-key={api_key}"),
+        ("POST", f"/close-all?x-api-key={api_key}"),
+        ("POST", "/browsers/stop-all"),
+        ("POST", "/browsers/close-all"),
+        ("POST", "/stop-all"),
+        ("POST", "/close-all"),
+    ]
+
+    for method, path in candidates:
+        data = _nst_request(method, path, headers=hdr)
+        if not data:
+            continue
+        if isinstance(data, dict):
+            if data.get("err") is False:
+                return True
+            if str(data.get("status")).lower() in {"ok", "success", "stopped", "closed"}:
+                return True
+            if data.get("code") in (0, 200):
+                return True
+    return False
 
 def connect_profile(profile_id: str):
+    cfg = _get_runtime_settings()
+    api_key = str(getattr(cfg, "api_key", "") or "").strip()
+    headless = bool(getattr(cfg, "headless", False))
     # Cấu hình chuẩn theo JS mẫu: Dùng fingerprint để fake User-Agent
     # KHÔNG dùng 'args' để tránh bị hiện UI
     config = {
-        "headless": HEADLESS,
+        "headless": headless,
         "autoClose": True,
         "fingerprint": {
             # User-Agent xịn để qua mặt Facebook
@@ -1130,9 +2369,10 @@ def connect_profile(profile_id: str):
     # Mã hóa config thành chuỗi an toàn cho URL (vì User-Agent có dấu cách)
     encoded_config = urllib.parse.quote(json.dumps(config))
 
-    url = f"http://127.0.0.1:8848/api/v2/connect/{profile_id}?x-api-key={API_KEY}&config={encoded_config}"
+    # Connect vẫn ưu tiên v2 vì đang dùng ổn định
+    url = f"http://127.0.0.1:8848/api/v2/connect/{profile_id}?x-api-key={api_key}&config={encoded_config}"
 
-    print(f"🚀 Mở profile {profile_id} (headless={HEADLESS})")
+    print(f"🚀 Mở profile {profile_id} (headless={headless})")
 
     # Thử kết nối
     try:
@@ -1140,7 +2380,10 @@ def connect_profile(profile_id: str):
         data = resp.json()
 
         if data.get("err"):
-            raise Exception(f"❌ NST Error: {data.get('err')}")
+            # Trả lỗi rõ hơn để debug (profile không tồn tại / api key sai / NST chưa sẵn sàng)
+            # NST thường trả key: {err: true, msg: "...", code: ...}
+            msg = data.get("msg") or data.get("message") or data.get("error") or data.get("err")
+            raise Exception(f"❌ NST Error: {msg} | raw={data}")
 
         ws = data["data"]["webSocketDebuggerUrl"]
         print(f"🔌 WebSocket: {ws}")
@@ -1319,6 +2562,9 @@ import sys
 import os
 import urllib.parse
 import time
+import re
+import random
+from typing import Optional
 
 # --- SETUP ĐƯỜNG DẪN ĐỂ IMPORT CORE ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1326,8 +2572,362 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
 from core.nst import connect_profile
+from core.nst import stop_profile
 from core.browser import FBController, JS_EXPAND_SCRIPT, JS_CHECK_AND_HIGHLIGHT_SCOPED
 from core.scraper import SimpleBot
+
+def _parse_location_terms(raw_text: str, strip_terms: Optional[list[str]] = None) -> list[str]:
+    """
+    User input dạng: "bắc ninh , bắc giang" hoặc "tuyển dụng bắc ninh , bắc giang"
+    => trả về ["bắc ninh", "bắc giang"]
+    """
+    text = str(raw_text or "").strip().lower()
+    if not text:
+        return []
+
+    parts = [p.strip() for p in re.split(r"[,;\n]+", text) if p.strip()]
+    out: list[str] = []
+    seen: set[str] = set()
+    strip_terms = strip_terms or []
+
+    for part in parts:
+        cleaned = part
+        # remove "job keywords" khỏi input nếu user dính vào location
+        for term in strip_terms:
+            t = str(term or "").strip().lower()
+            if not t:
+                continue
+            cleaned = cleaned.replace(t, " ")
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        if not cleaned:
+            continue
+        if cleaned in seen:
+            continue
+        seen.add(cleaned)
+        out.append(cleaned)
+
+    return out
+
+# ==============================================================================
+# UI HELPERS
+# ==============================================================================
+def click_notifications_button(fb: FBController) -> bool:
+    """
+    Bấm vào nút "Thông báo" trên Facebook top bar.
+    Lưu ý: không dùng selector theo class (x...) vì thay đổi liên tục, ưu tiên aria-label/role.
+    """
+    if not fb or not getattr(fb, "page", None):
+        return False
+
+    page = fb.page
+
+    # Ưu tiên button role + name bắt đầu bằng "Thông báo"
+    try:
+        btn = page.get_by_role("button", name=re.compile(r"^Thông báo", re.IGNORECASE)).first
+        if btn:
+            btn.click(timeout=3000)
+            return True
+    except Exception:
+        pass
+
+    # Fallback: query selector theo aria-label
+    try:
+        el = page.query_selector('div[role="button"][aria-label^="Thông báo"]')
+        if el:
+            el.click()
+            return True
+    except Exception:
+        pass
+
+    # Fallback cuối: tìm text "Số thông báo chưa đọc" (nằm trong badge)
+    try:
+        badge = page.get_by_text("Số thông báo chưa đọc", exact=False).first
+        if badge:
+            badge.click(timeout=3000)
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
+def _get_notifications_panel_locator(page):
+    """
+    Trả về locator của panel Thông báo (ưu tiên scope trong dialog/popup).
+    """
+    # Thường notifications mở ra dưới dạng dialog có aria-label bắt đầu bằng "Thông báo"
+    try:
+        panel = page.locator('div[role="dialog"][aria-label^="Thông báo"]').first
+        if panel and panel.count() > 0:
+            return panel
+    except Exception:
+        pass
+
+    # Fallback: tìm dialog có chứa text "Thông báo"
+    try:
+        panel = page.locator('div[role="dialog"]').filter(has_text=re.compile(r"Thông báo", re.IGNORECASE)).first
+        if panel and panel.count() > 0:
+            return panel
+    except Exception:
+        pass
+
+    # Fallback cuối: không tìm thấy dialog, trả về toàn trang (kém an toàn nhưng còn hơn fail)
+    return page
+
+
+def click_random_notification_in_open_panel(fb: FBController) -> bool:
+    """
+    Giả định panel Thông báo đã mở.
+    Chỉ tìm link thông báo bên trong panel, chọn ngẫu nhiên 1 cái và click.
+    """
+    if not fb or not getattr(fb, "page", None):
+        return False
+
+    page = fb.page
+    panel = _get_notifications_panel_locator(page)
+
+    try:
+        # Đúng theo snippet bạn đưa: listitem -> a role=link
+        links = panel.locator('div[role="listitem"] a[role="link"]')
+        count = links.count()
+        if count <= 0:
+            print("⚠️ Không tìm thấy thông báo nào có link trong panel.")
+            return False
+
+        def _is_skip_href(href: Optional[str]) -> bool:
+            if not href:
+                return True
+            h = str(href).strip()
+            if not h:
+                return True
+            # bỏ qua link trỏ về trang notifications
+            if h == "/notifications/" or h.startswith("/notifications/?"):
+                return True
+            if "facebook.com/notifications/" in h:
+                return True
+            return False
+
+        # thử chọn vài lần để tránh rơi vào /notifications/
+        max_tries = min(10, count)
+        for _ in range(max_tries):
+            idx = random.randint(0, count - 1)
+            link = links.nth(idx)
+            href = None
+            try:
+                href = link.get_attribute("href")
+            except Exception:
+                href = None
+            if _is_skip_href(href):
+                continue
+
+            print(f"🔔 Đã chọn thông báo #{idx + 1}/{count}: {href or '(no href)'}")
+            link.click(timeout=5000)
+            return True
+
+        print("⚠️ Không tìm thấy link thông báo hợp lệ (đã bỏ qua /notifications/).")
+        return False
+    except Exception as e:
+        print(f"❌ Lỗi click_random_notification_in_open_panel: {e}")
+        return False
+
+
+def open_notifications_click_random_then_back(fb: FBController, wait_seconds: Optional[int] = None) -> bool:
+    """
+    Flow đầy đủ:
+    - mở Thông báo
+    - click ngẫu nhiên 1 thông báo trong panel
+    - đợi 10–15s (hoặc wait_seconds)
+    - bấm Back (giống nút quay lại trên Chrome)
+    """
+    if not fb or not getattr(fb, "page", None):
+        return False
+
+    page = fb.page
+
+    if not click_notifications_button(fb):
+        print("⚠️ Không mở được panel Thông báo.")
+        return False
+
+    # Chờ panel render (cố định 5s theo yêu cầu) rồi mới click 1 thông báo bất kỳ
+    try:
+        page.wait_for_timeout(5000)
+    except Exception:
+        time.sleep(5)
+
+    if not click_random_notification_in_open_panel(fb):
+        return False
+
+    # Đợi rồi quay lại
+    delay = int(wait_seconds) if wait_seconds is not None else random.randint(10, 15)
+    print(f"⏳ Đợi {delay}s rồi Back...")
+    try:
+        page.wait_for_timeout(delay * 1000)
+    except Exception:
+        time.sleep(delay)
+
+    try:
+        page.go_back(timeout=0)
+        return True
+    except Exception:
+        # Fallback: Alt+Left
+        try:
+            page.keyboard.press("Alt+ArrowLeft")
+            return True
+        except Exception as e:
+            print(f"❌ Không Back được: {e}")
+            return False
+
+
+def test_click_notifications(profile_id: str) -> bool:
+    """
+    Test nhanh: mở profile -> vào facebook.com -> click nút Thông báo -> chờ vài giây rồi thoát.
+    Dùng để kiểm tra selector click có đúng không.
+    """
+    fb = None
+    ok = False
+    try:
+        print(f"🧪 [TEST] Mở profile: {profile_id}")
+        ws_url = connect_profile(profile_id)
+        fb = FBController(ws_url)
+        fb.profile_id = profile_id
+        fb.connect()
+
+        try:
+            fb.goto("https://www.facebook.com/")
+            fb.page.wait_for_timeout(1500)
+        except Exception:
+            time.sleep(1.5)
+
+        ok = click_notifications_button(fb)
+        print(f"🧪 [TEST] Click Thông báo: {'OK' if ok else 'FAIL'}")
+
+        try:
+            fb.page.wait_for_timeout(3000)
+        except Exception:
+            time.sleep(3)
+
+        return ok
+    except Exception as e:
+        print(f"❌ [TEST] Lỗi test_click_notifications: {e}")
+        return False
+    finally:
+        # cleanup giống các luồng khác
+        try:
+            if fb:
+                try:
+                    if getattr(fb, "page", None):
+                        try:
+                            fb.page.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    if getattr(fb, "browser", None) and getattr(fb.browser, "contexts", None):
+                        for ctx in list(fb.browser.contexts):
+                            try:
+                                ctx.close()
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                try:
+                    if getattr(fb, "browser", None):
+                        try:
+                            fb.browser.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    if getattr(fb, "play", None):
+                        try:
+                            fb.play.stop()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        finally:
+            try:
+                stop_profile(profile_id)
+            except Exception:
+                pass
+
+
+def test_notifications_random_click_then_back(profile_id: str) -> bool:
+    """
+    Test nhanh:
+    - vào FB
+    - mở Thông báo
+    - click random 1 thông báo
+    - đợi 10–15s
+    - back
+    """
+    fb = None
+    try:
+        print(f"🧪 [TEST] Mở profile: {profile_id}")
+        ws_url = connect_profile(profile_id)
+        fb = FBController(ws_url)
+        fb.profile_id = profile_id
+        fb.connect()
+
+        fb.goto("https://www.facebook.com/")
+        try:
+            fb.page.wait_for_timeout(1500)
+        except Exception:
+            time.sleep(1.5)
+
+        ok = open_notifications_click_random_then_back(fb)
+        print(f"🧪 [TEST] Flow notifications->random->back: {'OK' if ok else 'FAIL'}")
+        try:
+            fb.page.wait_for_timeout(1500)
+        except Exception:
+            time.sleep(1.5)
+        return ok
+    except Exception as e:
+        print(f"❌ [TEST] Lỗi test_notifications_random_click_then_back: {e}")
+        return False
+    finally:
+        try:
+            if fb:
+                try:
+                    if getattr(fb, "page", None):
+                        try:
+                            fb.page.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    if getattr(fb, "browser", None) and getattr(fb.browser, "contexts", None):
+                        for ctx in list(fb.browser.contexts):
+                            try:
+                                ctx.close()
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                try:
+                    if getattr(fb, "browser", None):
+                        try:
+                            fb.browser.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    if getattr(fb, "play", None):
+                        try:
+                            fb.play.stop()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        finally:
+            try:
+                stop_profile(profile_id)
+            except Exception:
+                pass
 
 # ==============================================================================
 # CLASS CONTROLLER MỚI (CHỈ LIKE, KHÔNG SHARE/SAVE)
@@ -1344,14 +2944,25 @@ class SearchBotController(FBController):
             # 1. Expand nội dung (để check keyword cho chuẩn)
             self.page.evaluate(JS_EXPAND_SCRIPT, post_handle)
 
-            # 2. Check keyword
-            has_keyword = self.page.evaluate(
+            required_locations: list[str] = getattr(self, "required_locations", []) or []
+            # 2) Dùng đúng hàm có sẵn của browser.py (JS_CHECK_AND_HIGHLIGHT_SCOPED)
+            # - has_job_keyword: có ít nhất 1 keyword mặc định (job_keywords) trong NỘI DUNG BÀI
+            # - has_location_term: có ít nhất 1 cụm text user nhập (required_locations) trong NỘI DUNG BÀI
+            # => CHỈ LIKE KHI (job_keyword) AND (location_term)
+            has_job_keyword = self.page.evaluate(
                 JS_CHECK_AND_HIGHLIGHT_SCOPED,
                 [post_handle, self.job_keywords]
             )
+            # Nếu user không nhập text (feed mode), thì bỏ qua điều kiện location (coi như pass)
+            has_location_term = True if not required_locations else self.page.evaluate(
+                JS_CHECK_AND_HIGHLIGHT_SCOPED,
+                [post_handle, required_locations]
+            )
+
+            has_keyword = bool(has_job_keyword and has_location_term)
 
             if not has_keyword:
-                print("❌ Không có keyword -> Bỏ qua")
+                print("❌ Không đạt điều kiện (cần keyword mặc định + có 1 trong text nhập) -> Bỏ qua")
                 self.mark_post_as_processed(post_handle)
                 
                 # Đẩy bài viết lên để bot không bị kẹt
@@ -1363,7 +2974,7 @@ class SearchBotController(FBController):
                 
                 return False
 
-            print("✅ Phát hiện bài có Keyword phù hợp!")
+            print("✅ Bài đạt điều kiện (keyword mặc định + text nhập)!")
 
             # 3. THỰC HIỆN LIKE (Quan trọng nhất)
             self.like_current_post(post_handle)
@@ -1414,7 +3025,7 @@ def feed_and_like(profile_id: str, filter_text: str, duration_minutes: int = 30)
 # ==============================================================================
 # HÀM CHẠY CHUNG (CORE LOGIC)
 # ==============================================================================
-def _run_bot_logic(profile_id, url, keywords_str, duration_minutes):
+def _run_bot_logic(profile_id, url, raw_text, duration_minutes):
     try:
         # 1. Kết nối
         print(f"🚀 Đang mở profile: {profile_id}")
@@ -1425,14 +3036,25 @@ def _run_bot_logic(profile_id, url, keywords_str, duration_minutes):
         fb.profile_id = profile_id
         fb.connect()
 
-        # 2. Inject Keywords
-        # Bot sẽ chỉ dừng lại Like nếu bài viết chứa các từ này
-        if keywords_str:
-            new_keywords = [keywords_str] + keywords_str.split()
-            fb.job_keywords.extend(new_keywords)
-            # Lọc trùng và từ quá ngắn
-            fb.job_keywords = list(set([k for k in fb.job_keywords if len(k) > 1]))
-            print(f"✅ Filter Keywords: {fb.job_keywords}")
+        # 2. Setup filter rules
+        # - Feed: cho phép raw_text rỗng => không lọc location, chỉ dùng job_keywords mặc định
+        # - Nếu user có nhập raw_text nhưng parse ra rỗng (vd chỉ nhập "tuyển dụng") thì coi như sai input
+        raw_text_str = str(raw_text or "").strip()
+        if not raw_text_str:
+            locations = []
+        else:
+            # text nhập chỉ dùng làm "location terms" (OR), tách theo dấu phẩy
+            locations = _parse_location_terms(raw_text_str, strip_terms=getattr(fb, "job_keywords", []))
+            if not locations:
+                print("⚠️ Không có địa điểm hợp lệ từ input. Hãy nhập dạng: 'bắc ninh , bắc giang'")
+                return
+
+        fb.required_locations = locations
+        if locations:
+            print(f"✅ Filter location (OR): {locations}")
+        else:
+            print("✅ Filter location: (none) -> chỉ dùng keyword mặc định")
+        print(f"✅ Filter job keywords (default): {getattr(fb, 'job_keywords', [])}")
         
         # 3. Chạy Bot
         bot = SimpleBot(fb)
@@ -1445,22 +3067,58 @@ def _run_bot_logic(profile_id, url, keywords_str, duration_minutes):
         print(f"❌ Lỗi Runner: {e}")
     finally:
         print("🛑 Kết thúc.")
+        # Đóng sạch tab/context playwright + stop NST (giống join group / cookie)
+        try:
+            if 'fb' in locals() and fb:
+                try:
+                    if getattr(fb, "page", None):
+                        try:
+                            fb.page.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    if getattr(fb, "browser", None) and getattr(fb.browser, "contexts", None):
+                        for ctx in list(fb.browser.contexts):
+                            try:
+                                ctx.close()
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                try:
+                    if getattr(fb, "browser", None):
+                        try:
+                            fb.browser.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    if getattr(fb, "play", None):
+                        try:
+                            fb.play.stop()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        finally:
+            try:
+                stop_profile(profile_id)
+            except Exception:
+                pass
 
 if __name__ == "__main__":
     # --- TEST ---
     TEST_ID = "621e1f5d-0c42-481e-9ddd-7abaafce68ed"
-    
-    print("--- CHỌN CHẾ ĐỘ ---")
-    print("1. Search & Like (Vào trang tìm kiếm)")
-    print("2. Feed & Like (Lướt trang chủ)")
-    mode = input("Nhập 1 hoặc 2: ")
-    
-    text = "bắc ninh bắc giang"
-    
-    if mode == "1":
-        search_and_like(TEST_ID, text, duration_minutes=15)
-    elif mode == "2":
-        feed_and_like(TEST_ID, text, duration_minutes=15)
+
+    # Chạy test tạm: mở FB -> Thông báo -> click random -> đợi -> Back
+    test_notifications_random_click_then_back(TEST_ID)
+    # if mode == "1":
+    #     search_and_like(TEST_ID, text, duration_minutes=15)
+    # elif mode == "2":
+    #     feed_and_like(TEST_ID, text, duration_minutes=15)
 --- END FILE: core\search_worker.py ---
 
 --- START FILE: core\settings.py ---
@@ -1468,7 +3126,7 @@ import json
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Any
+from typing import List, Any, Dict
 
 # Đường dẫn cố định để đọc cấu hình
 SETTINGS_PATH = Path(__file__).resolve().parent.parent / "config" / "settings.json"
@@ -1495,7 +3153,13 @@ def _coerce_positive_int(value: Any, default: int) -> int:
 
 
 def _parse_profile_ids(value: Any) -> List[str]:
-    if isinstance(value, list):
+    """
+    Trả về danh sách profile_id.
+    Hỗ trợ cả format cũ (list/string) và format mới (dict {id: {...}}).
+    """
+    if isinstance(value, dict):
+        items = value.keys()
+    elif isinstance(value, list):
         items = value
     elif isinstance(value, str):
         items = value.split(",")
@@ -1505,12 +3169,26 @@ def _parse_profile_ids(value: Any) -> List[str]:
     return [str(item).strip() for item in items if str(item).strip()]
 
 
+def _parse_profile_configs(value: Any) -> Dict[str, Any]:
+    """
+    Lưu lại toàn bộ cấu hình profile (cookie, access_token, ...)
+    để có thể dùng về sau.
+    """
+    if isinstance(value, dict):
+        return {str(k).strip(): v for k, v in value.items() if str(k).strip()}
+
+    # Fallback cho format cũ: chỉ tạo map rỗng từ danh sách id
+    ids = _parse_profile_ids(value)
+    return {pid: {} for pid in ids}
+
+
 @dataclass
 class Settings:
     api_key: str
     headless: bool = False
     target_url: str = "https://facebook.com"
     profile_ids: List[str] = field(default_factory=list)
+    profile_configs: Dict[str, Any] = field(default_factory=dict)
     run_minutes: int = 30
     rest_minutes: int = 120
 
@@ -1535,6 +3213,7 @@ def get_settings() -> Settings:
         headless=_parse_bool(raw.get("HEADLESS", False)),
         target_url=str(raw.get("TARGET_URL", "https://facebook.com")),
         profile_ids=_parse_profile_ids(raw.get("PROFILE_IDS", [])),
+        profile_configs=_parse_profile_configs(raw.get("PROFILE_IDS", {})),
         run_minutes=_coerce_positive_int(raw.get("RUN_MINUTES", 30), 30),
         rest_minutes=_coerce_positive_int(raw.get("REST_MINUTES", 120), 120),
     )
@@ -1544,6 +3223,7 @@ def reload_settings() -> Settings:
     """Xóa cache và đọc lại settings.json (dùng khi file đổi nội dung)."""
     get_settings.cache_clear()
     return get_settings()
+
 
 
 --- END FILE: core\settings.py ---
@@ -3044,12 +4724,6 @@ def clean_profile_list(raw):
 }
 --- END FILE: data\987870664956102_posts_2025-12-8_to_2025-12-14.json ---
 
---- START FILE: data\cookies\621e1f5d-0c42-481e-9ddd-7abaafce68ed.json ---
-{
-  "621e1f5d-0c42-481e-9ddd-7abaafce68ed": "sb=HNY6aQAFB_tf42A4id6xhZpQ; ps_l=1; ps_n=1; datr=G9Y6adLzWpqwDfxsQ9kDerdz; c_user=100044138143352; fr=1sdSEslpqAyTeQJRg.AWeLdihbYi9PheTAWcCtXqkOj14kq5-UnCHZnytZwgfk7y22lH0.BpQA9M..AAA.0.0.BpQBaX.AWf-QZQSNIhM_08BBmvspf2nY9M; xs=46%3A14pMRvXIIAuMgQ%3A2%3A1765698119%3A-1%3A-1%3A%3AAcx4Q2xf_Z48p7fK-6DplMRlaF9HHUbLt8q1DksDmgQ; wd=1920x911;"
-}
---- END FILE: data\cookies\621e1f5d-0c42-481e-9ddd-7abaafce68ed.json ---
-
 --- START FILE: data\post_ids\031ca13d-e8fa-400c-a603-df57a2806788.json ---
 [
   {
@@ -3096,82 +4770,7 @@ def clean_profile_list(raw):
 --- END FILE: data\post_ids\031ca13d-e8fa-400c-a603-df57a2806788.json ---
 
 --- START FILE: data\post_ids\621e1f5d-0c42-481e-9ddd-7abaafce68ed.json ---
-[
-  {
-    "post_id": "834712089308596",
-    "flag": "green"
-  },
-  {
-    "post_id": "1436375725164718",
-    "flag": "green"
-  },
-  {
-    "id": "1302779741890507",
-    "flag": "xanh",
-    "text": "Bán Laptop sinh viên - Hỗ trợ trả góp Laptop đồ hoạ Dell Precision 5550, Nguyên Zin 100%, Đẹp 99%, Dòng máy trạm vỏ nhôm cao cấp của nhà Dell Chuyên dựng phim đồ họa 3D render CAM CAD Autodesk Revit Game giải trí Xem thêm",
-    "owning_profile": {
-      "__typename": "User",
-      "name": "Tuyển dụng HD SAISON",
-      "id": "100064754795833"
-    }
-  },
-  {
-    "id": "1288495153315513",
-    "flag": "xanh",
-    "text": "CHỦ ĐỘNG TÀI CHÍNH – VỮNG VÀNG TƯƠNG LAI 💫 🎯 Tự do tài chính không đến từ việc có bao nhiêu tiền, mà từ cách chúng ta kiểm soát cuộc sống: chủ động, có mục tiêu và sẵn sàng trước bất trắc. Khi quản lý tốt dòng tiền, bạn có thể lựa chọn cách sống mình mong muốn – vững vàng chăm lo cho gia đình, đầu tư cho tương lai, hay tự do theo đuổi đam mê.. 👉 Chỉ với 3 bước đơn giản, bạn sẽ tạo nên nền tảng tài chính vững chắc cho bạn và gia đình ✨ Bước 1: Đánh giá tình hình tài chính hiện tại – liệt kê thu nhập, chi tiêu để hiểu “sức khỏe tài chính” của bản thân. ✨ Bước 2: Lập kế hoạch chi tiêu, tiết kiệm phù hợp với mục tiêu – cân bằng giữa nhu cầu hiện tại và tầm nhìn dài hạn. ✨ Bước 3: Chọn giải pháp tài chính toàn diện – vừa bảo vệ trước rủi ro, vừa tích lũy tài sản cho tương lai. Bảo hiểm Liên kết đơn vị An Phát Đầu Tư Thịnh Vượng từ Dai-ichi Life Việt Nam - giải pháp tài chính thông minh giúp bạn: 🔹 Bảo vệ toàn diện: Giá trị bảo vệ cao, đồng thời miễn phí bảo vệ thêm một người thân trước rủi ro Tử vong do Tai nạn. 🔹 Đầu tư linh hoạt: Tự do lựa chọn và điều chỉnh danh mục đầu tư với 05 Quỹ liên kết đơn vị, gia tăng giá trị đầu tư với 2 khoản thưởng định kỳ hấp dẫn. 👉 Mỗi quyết định tài chính đúng đắn hôm nay sẽ là nền tảng vững chắc cho một tương lai thịnh vượng mai sau. 📍 Tìm hiểu thêm về Bảo hiểm Liên kết đơn vị An Phát Đầu Tư Thịnh Vượng tại: https://tinyurl.com/ilp2fbpost2 #DaiichiLifeVietNam #KetNoiTrieuYeuThuong #BaoHiemNhanTho #AnPhatDauTuThinhVuong #KeHoachTaiChinh #AnTamToanDien #ChonDauTu #TronBaoVe",
-    "owning_profile": {
-      "__typename": "User",
-      "name": "Dai-ichi Life Việt Nam",
-      "id": "100064651214139"
-    }
-  },
-  {
-    "id": "884189837467511",
-    "flag": "xanh",
-    "text": "Mẹ muốn khởi động nhẹ nhàng? Muốn tăng tốc? Hay muốn bứt phá? 🚀 Nutifood Shop Online luôn có một con đường dành riêng cho mẹ: 🔹 GÓI VÀNG – BẮT ĐẦU thử sức an toàn 🔹 GÓI BẠCH KIM – PHÁT TRIỂN chuyên nghiệp hơn 🔹 GÓI KIM CƯƠNG – BỨT PHÁ thu nhập Chọn gói phù hợp, nhận ngay bộ sản phẩm uy tín, đa dạng dành cho mọi gia đình từ trẻ nhỏ đến người lớn, hệ thống CSKH tự động 24/7 vô cùng tiện lời giúp mẹ thêm phần vững vàng ở bước đầu làm chủ 💪 👉 Đăng ký ngay tại phần bình luận để nhận thêm tư vấn chi tiết! #NutifoodShopOnline #LamMeDaGioiLamChuKhoGi",
-    "owning_profile": {
-      "__typename": "User",
-      "name": "Nutifood - Ngôi Nhà Dinh Dưỡng",
-      "id": "100076295079138"
-    }
-  },
-  {
-    "id": "101620679431321",
-    "flag": "xanh",
-    "text": "[TH TRUEMART] TUYỂN DỤNG NHÂN VIÊN BÁN HÀNG TẠI TP. HỒ CHÍ MINH 📍 Địa điểm: … Xem thêm",
-    "owning_profile": {
-      "__typename": "User",
-      "name": "TH True Mart tuyển dụng",
-      "id": "100087385844583"
-    }
-  },
-  {
-    "id": "2100679304014618",
-    "flag": "vàng",
-    "text": "Team mình cần tuyển các vị trí sau: TTS Content: lương 5 triệu, yêu cầu sinh viên năm cuối, có hỗ trợ dấu mộc Nhân viên Seeding: lương cứng 8-11 triệu, yêu cầu từ 6 tháng kinh nghiệm trở lên Công việc: viết bài - nghĩ idea - bắt trend mỗi ngày - seeding đa nền tảng cho thương hiệu lên độ phủ Làm việc tại Nguyễn Huy Tưởng - Thanh Xuân Ứng tuyển gửi CV về mail: phamthuthaohr.0203@gmail.com ib/z.l: 0982745036",
-    "owning_profile": {
-      "__typename": "User",
-      "name": "Thu Thảo",
-      "id": "100086145870368"
-    }
-  },
-  {
-    "id": "1880500019220235",
-    "flag": "vàng",
-    "text": "",
-    "owning_profile": {}
-  },
-  {
-    "id": "2423883404674379",
-    "flag": "vàng",
-    "text": "📍 [Thanh xuân – Hà Nội ] BÊN MÌNH ĐANG CẦN TUYỂN CHUYÊN VIÊN MKT ADS Số lượng : 2 -Thu nhập : 15 – 20 triệu( 10tr lương cứng) + % doanh thu+ thưởng ngày , tuần, tháng,+ phụ cấp -Môi trường trẻ, thoải mái, không drama -Cơ hội thăng tiến đang chờ bạn * Thời gian làm việc : Từ 08h40 đến 17h30 từ thứ 2 đến sáng thứ 7, trưa nghỉ từ 12h đến 13h30. Được nghỉ giữa giờ từ 15h-15h30 Nghỉ chiều thứ 7, chủ nhật + 1 ngày bất kì trong tháng có lương. 😍 Điều kiện ứng tuyển : - Trên 4th kinh nghiệm với FB Ads( có kinh nghiệm chạy chuyển đổi) - Chủ động, có trách nhiệm với công việc - Mong muốn đồng hành lâu dài 💡 Quyền lợi: - Môi trường trẻ trung + thưởng hấp dẫn - Cơ chế thăng tiến rõ ràng - Lễ, Tết, liên hoan, du lịch và các phúc lợi khác theo đúng quy định 📞 QUAN TÂM INBOX MÌNH NHẬN JD NHÉ",
-    "owning_profile": {
-      "__typename": "User",
-      "name": "Dang Cam Ly",
-      "id": "100020561268374"
-    }
-  }
-]
+[FILE QUÁ LỚN - ĐÃ BỎ QUA NỘI DUNG]: 520305 bytes
 --- END FILE: data\post_ids\621e1f5d-0c42-481e-9ddd-7abaafce68ed.json ---
 
 --- START FILE: data\results\all_results_summary.json ---
