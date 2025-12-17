@@ -3,11 +3,19 @@ import json
 import urllib.parse  # Cần cái này để mã hóa User-Agent có dấu cách
 from typing import Optional, Any
 
-from core.settings import get_settings
+from core.settings import reload_settings
 
-settings = get_settings()
-API_KEY = settings.api_key
-HEADLESS = settings.headless
+def _get_runtime_settings():
+    """
+    NST API key/headless có thể đổi trong lúc backend đang chạy.
+    Vì get_settings() có cache, dùng reload_settings() để lấy giá trị mới nhất.
+    """
+    try:
+        return reload_settings()
+    except Exception:
+        # fallback: vẫn cố đọc cache nếu reload lỗi
+        from core.settings import get_settings
+        return get_settings()
 NST_BASE_URL = "http://127.0.0.1:8848/api/v2"
 
 
@@ -35,17 +43,23 @@ def stop_profile(profile_id: str) -> bool:
     if not pid:
         return False
 
+    cfg = _get_runtime_settings()
+    api_key = str(getattr(cfg, "api_key", "") or "").strip()
     candidates = [
-        ("POST", f"/browsers/stop/{pid}?x-api-key={API_KEY}"),
-        ("GET", f"/browsers/stop/{pid}?x-api-key={API_KEY}"),
-        ("POST", f"/browser/stop/{pid}?x-api-key={API_KEY}"),
-        ("GET", f"/browser/stop/{pid}?x-api-key={API_KEY}"),
-        ("POST", f"/stop/{pid}?x-api-key={API_KEY}"),
-        ("GET", f"/stop/{pid}?x-api-key={API_KEY}"),
-        ("POST", f"/close/{pid}?x-api-key={API_KEY}"),
-        ("GET", f"/close/{pid}?x-api-key={API_KEY}"),
-        ("POST", f"/disconnect/{pid}?x-api-key={API_KEY}"),
-        ("GET", f"/disconnect/{pid}?x-api-key={API_KEY}"),
+        ("POST", f"/browsers/stop/{pid}?x-api-key={api_key}"),
+        ("GET", f"/browsers/stop/{pid}?x-api-key={api_key}"),
+        ("POST", f"/browsers/close/{pid}?x-api-key={api_key}"),
+        ("GET", f"/browsers/close/{pid}?x-api-key={api_key}"),
+        ("POST", f"/browser/stop/{pid}?x-api-key={api_key}"),
+        ("GET", f"/browser/stop/{pid}?x-api-key={api_key}"),
+        ("POST", f"/browser/close/{pid}?x-api-key={api_key}"),
+        ("GET", f"/browser/close/{pid}?x-api-key={api_key}"),
+        ("POST", f"/stop/{pid}?x-api-key={api_key}"),
+        ("GET", f"/stop/{pid}?x-api-key={api_key}"),
+        ("POST", f"/close/{pid}?x-api-key={api_key}"),
+        ("GET", f"/close/{pid}?x-api-key={api_key}"),
+        ("POST", f"/disconnect/{pid}?x-api-key={api_key}"),
+        ("GET", f"/disconnect/{pid}?x-api-key={api_key}"),
     ]
 
     for method, path in candidates:
@@ -62,10 +76,13 @@ def stop_profile(profile_id: str) -> bool:
     return False
 
 def connect_profile(profile_id: str):
+    cfg = _get_runtime_settings()
+    api_key = str(getattr(cfg, "api_key", "") or "").strip()
+    headless = bool(getattr(cfg, "headless", False))
     # Cấu hình chuẩn theo JS mẫu: Dùng fingerprint để fake User-Agent
     # KHÔNG dùng 'args' để tránh bị hiện UI
     config = {
-        "headless": HEADLESS,
+        "headless": headless,
         "autoClose": True,
         "fingerprint": {
             # User-Agent xịn để qua mặt Facebook
@@ -78,9 +95,9 @@ def connect_profile(profile_id: str):
     # Mã hóa config thành chuỗi an toàn cho URL (vì User-Agent có dấu cách)
     encoded_config = urllib.parse.quote(json.dumps(config))
 
-    url = f"http://127.0.0.1:8848/api/v2/connect/{profile_id}?x-api-key={API_KEY}&config={encoded_config}"
+    url = f"http://127.0.0.1:8848/api/v2/connect/{profile_id}?x-api-key={api_key}&config={encoded_config}"
 
-    print(f"🚀 Mở profile {profile_id} (headless={HEADLESS})")
+    print(f"🚀 Mở profile {profile_id} (headless={headless})")
 
     # Thử kết nối
     try:

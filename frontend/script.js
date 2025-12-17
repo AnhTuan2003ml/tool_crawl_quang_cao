@@ -3,6 +3,7 @@ const stopBtn = document.getElementById('stopBtn');
 const backendRunBtn = document.getElementById('backendRunBtn');
 const runMinutesInput = document.getElementById('runMinutes');
 const intervalInput = document.getElementById('interval');
+const stopAllBtn = document.getElementById('stopAllBtn');
 const tbody = document.querySelector('#listTable tbody');
 const emptyState = document.getElementById('emptyState');
 const rowCount = document.getElementById('rowCount');
@@ -44,6 +45,7 @@ let profileState = {
   selected: {}, // { [profileId]: true/false } (frontend-only)
 };
 let addRowEl = null; // Row tạm để nhập profile mới
+let joinGroupPollTimer = null;
 
 stopBtn.disabled = true;
 
@@ -168,6 +170,25 @@ function showToast(message, type = 'success', ms = 1600) {
     el.classList.remove('show');
     setTimeout(() => el.remove(), 220);
   }, ms);
+}
+
+function setButtonLoading(btn, isLoading, loadingText) {
+  if (!btn) return;
+  if (isLoading) {
+    if (!btn.dataset.origText) {
+      btn.dataset.origText = btn.textContent || '';
+    }
+    btn.disabled = true;
+    btn.classList.add('btn-loading');
+    if (loadingText) btn.textContent = loadingText;
+  } else {
+    btn.disabled = false;
+    btn.classList.remove('btn-loading');
+    if (btn.dataset.origText) {
+      btn.textContent = btn.dataset.origText;
+      delete btn.dataset.origText;
+    }
+  }
 }
 
 // (Preview settings.json đã bị bỏ khỏi UI)
@@ -629,7 +650,8 @@ if (autoJoinGroupBtn) {
       return;
     }
 
-    autoJoinGroupBtn.disabled = true;
+    // Spinner + thông báo
+    setButtonLoading(autoJoinGroupBtn, true, 'Đang auto join...');
     try {
       const res = await callBackend('/groups/join', {
         method: 'POST',
@@ -638,10 +660,31 @@ if (autoJoinGroupBtn) {
       const started = res && Array.isArray(res.started) ? res.started.length : 0;
       const skipped = res && Array.isArray(res.skipped) ? res.skipped.length : 0;
       showToast(`Đã chạy auto join group: started=${started}, skipped=${skipped}`, 'success', 2200);
+
+      // Poll đến khi hoàn tất (running không còn các profile đã chọn)
+      if (joinGroupPollTimer) clearInterval(joinGroupPollTimer);
+      joinGroupPollTimer = setInterval(async () => {
+        try {
+          const st = await callBackendNoAlert('/groups/join/status', { method: 'GET' });
+          const running = (st && Array.isArray(st.running)) ? st.running : [];
+          const still = selected.filter((pid) => running.includes(pid));
+          if (still.length === 0) {
+            clearInterval(joinGroupPollTimer);
+            joinGroupPollTimer = null;
+            setButtonLoading(autoJoinGroupBtn, false);
+            showToast('✅ Auto join group: Hoàn thành', 'success', 2000);
+          }
+        } catch (e) {
+          // Nếu lỗi poll thì dừng poll để không spam
+          clearInterval(joinGroupPollTimer);
+          joinGroupPollTimer = null;
+          setButtonLoading(autoJoinGroupBtn, false);
+          showToast('Không lấy được trạng thái auto join (kiểm tra FastAPI).', 'error');
+        }
+      }, 1500);
     } catch (e) {
       showToast('Không chạy được auto join group (kiểm tra FastAPI).', 'error');
-    } finally {
-      autoJoinGroupBtn.disabled = false;
+      setButtonLoading(autoJoinGroupBtn, false);
     }
   });
 }
@@ -649,7 +692,7 @@ if (autoJoinGroupBtn) {
 if (stopJoinGroupBtn) {
   stopJoinGroupBtn.addEventListener('click', async () => {
     if (!confirm('Dừng auto join group cho TẤT CẢ profile đang chạy?')) return;
-    stopJoinGroupBtn.disabled = true;
+    setButtonLoading(stopJoinGroupBtn, true, 'Đang dừng...');
     try {
       const res = await callBackend('/groups/join/stop', { method: 'POST', body: JSON.stringify({}) });
       const stopped = res && Array.isArray(res.stopped) ? res.stopped.length : 0;
@@ -657,7 +700,37 @@ if (stopJoinGroupBtn) {
     } catch (e) {
       showToast('Không dừng được auto join (kiểm tra FastAPI).', 'error');
     } finally {
-      stopJoinGroupBtn.disabled = false;
+      setButtonLoading(stopJoinGroupBtn, false);
+      if (joinGroupPollTimer) {
+        clearInterval(joinGroupPollTimer);
+        joinGroupPollTimer = null;
+      }
+      setButtonLoading(autoJoinGroupBtn, false);
+    }
+  });
+}
+
+if (stopAllBtn) {
+  stopAllBtn.addEventListener('click', async () => {
+    if (!confirm('Dừng TẤT CẢ tác vụ (auto join group / bot chạy nền / ...)?')) return;
+    setButtonLoading(stopAllBtn, true, 'Đang dừng tất cả...');
+    try {
+      const res = await callBackend('/jobs/stop-all', { method: 'POST' });
+      const botStopped = res && res.stopped ? Boolean(res.stopped.bot) : false;
+      const joinStopped = res && res.stopped && Array.isArray(res.stopped.join_groups) ? res.stopped.join_groups.length : 0;
+      const nstOk = res && Array.isArray(res.nst_stop_ok) ? res.nst_stop_ok.length : 0;
+      const nstAttempted = res && Array.isArray(res.nst_stop_attempted) ? res.nst_stop_attempted.length : 0;
+      showToast(`Đã dừng tất cả: bot=${botStopped ? 'OK' : 'NO'}, join_groups=${joinStopped}, NST=${nstOk}/${nstAttempted}`, 'success', 2600);
+    } catch (e) {
+      showToast('Không dừng được tất cả (kiểm tra FastAPI).', 'error');
+    } finally {
+      setButtonLoading(stopAllBtn, false);
+      if (joinGroupPollTimer) {
+        clearInterval(joinGroupPollTimer);
+        joinGroupPollTimer = null;
+      }
+      setButtonLoading(autoJoinGroupBtn, false);
+      setButtonLoading(stopJoinGroupBtn, false);
     }
   });
 }

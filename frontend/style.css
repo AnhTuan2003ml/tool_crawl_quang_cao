@@ -264,6 +264,27 @@ button {
   overflow       : hidden;
 }
 
+/* Loading state (spinner) */
+.btn-loading {
+  opacity: 0.9;
+  cursor: not-allowed;
+}
+
+.btn-loading::after {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  border-top-color: rgba(255, 255, 255, 1);
+  animation: btnSpin 0.9s linear infinite;
+}
+
+@keyframes btnSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 button::before {
   content      : '';
   position     : absolute;

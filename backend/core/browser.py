@@ -700,20 +700,26 @@ class FBController:
         """
         Mở tab mới -> Soi Code -> Tìm chữ "post_id" đầu tiên -> Trả về ngay.
         """
-        print(f"⛔ [BLOCKING] Soi source nhanh: {url}")
+        print(f"⛔ [BLOCKING] Tạm dừng để soi source URL: {url}")
+        new_page = None
         found_id = None
         
         try:
-            # Dùng APIRequestContext của page để lấy source (nhanh, giữ cookie)
-            resp = self.page.request.get(url, timeout=20000)
-            if not resp or resp.status != 200:
-                print(f"    -> ⚠️ Request thất bại hoặc status != 200 (status={getattr(resp, 'status', None)})")
-                return None
-
-            content = resp.text()
+            context = self.page.context
+            # 1. Mở tab mới
+            new_page = context.new_page()
             
-            # TÌM KIẾM CHÍNH XÁC "post_id"
-            # re.search sẽ trả về kết quả đầu tiên tìm được.
+            # 2. Truy cập view-source (Treo bot ở đây chờ tải xong mới chạy tiếp)
+            target = f"view-source:{url}"
+            print("    -> Đang tải source code (Chờ DOMContentLoaded)...")
+            new_page.goto(target, wait_until='domcontentloaded', timeout=20000)
+            
+            # 3. Lấy toàn bộ HTML
+            content = new_page.content()
+            
+            # 4. TÌM KIẾM CHÍNH XÁC "post_id"
+            # re.search mặc định sẽ quét từ trên xuống dưới và trả về kết quả ĐẦU TIÊN nó thấy.
+            # Đúng ý Sếp: Thấy cái đầu là chốt luôn.
             
             # Pattern 1: Dạng chuẩn "post_id":"12345"
             match = re.search(r'"post_id":"(\d+)"', content)
@@ -733,6 +739,11 @@ class FBController:
 
         except Exception as e:
             print(f"    -> ❌ Lỗi khi soi source: {e}")
+        finally:
+            # 5. Đóng tab ngay lập tức
+            if new_page: 
+                new_page.close()
+                print("    -> Đã đóng tab soi code. Quay lại tab chính...")
                 
         return found_id
     
@@ -765,7 +776,19 @@ class FBController:
             if not box: return False # Element chưa render
 
             viewport = self.page.viewport_size
-            vh = viewport['height']
+            vh = None
+            try:
+                if viewport and isinstance(viewport, dict):
+                    vh = viewport.get('height')
+            except Exception:
+                vh = None
+
+            # Fallback: đôi khi connect qua CDP => viewport_size = None
+            if not vh:
+                try:
+                    vh = self.page.evaluate("() => window.innerHeight") or 800
+                except Exception:
+                    vh = 800
             
             # Tọa độ Y của element so với đỉnh màn hình hiện tại
             element_y = box['y']
@@ -791,6 +814,7 @@ class FBController:
             
             return True
         except Exception as e:
+            # Log nhẹ để không spam, lỗi thường do viewport null / element detach
             print(f"⚠️ Lỗi tính toán cuộn: {e}")
             return False
 

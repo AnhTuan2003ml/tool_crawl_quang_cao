@@ -513,6 +513,110 @@ def stop_auto_join_groups(payload: Optional[JoinGroupsStopRequest] = Body(None))
 
     return {"status": "ok", "stopped": stopped, "not_running": not_running}
 
+
+@app.get("/groups/join/status")
+def join_groups_status() -> dict:
+    """Trạng thái join-groups đang chạy."""
+    with _join_groups_lock:
+        _prune_join_group_processes()
+        running = []
+        for pid, proc in _join_groups_processes.items():
+            try:
+                if proc.is_alive():
+                    running.append(pid)
+            except Exception:
+                pass
+    return {"running": running}
+
+
+@app.get("/jobs/status")
+def jobs_status() -> dict:
+    """Trạng thái chung (để UI hiển thị/diagnose)."""
+    is_bot_running = bool(runner_process and runner_process.is_alive())
+    with _join_groups_lock:
+        _prune_join_group_processes()
+        join_running = []
+        for pid, proc in _join_groups_processes.items():
+            try:
+                if proc.is_alive():
+                    join_running.append(pid)
+            except Exception:
+                pass
+    return {
+        "bot_running": is_bot_running,
+        "bot_pid": runner_process.pid if is_bot_running else None,
+        "join_groups_running": join_running,
+    }
+
+
+@app.post("/jobs/stop-all")
+def stop_all_jobs() -> dict:
+    """
+    Dừng tất cả tác vụ nền (dùng chung cho auto join group + sau này nuôi acc).
+    """
+    global runner_process
+
+    stopped = {
+        "bot": False,
+        "join_groups": [],
+    }
+
+    # 1) stop bot runner
+    try:
+        if runner_process and runner_process.is_alive():
+            runner_process.terminate()
+            runner_process.join(timeout=5)
+            stopped["bot"] = True
+    except Exception:
+        pass
+    finally:
+        runner_process = None
+
+    # 2) stop join groups processes
+    join_to_stop: list[str] = []
+    with _join_groups_lock:
+        _prune_join_group_processes()
+        join_to_stop = list(_join_groups_processes.keys())
+        for pid in join_to_stop:
+            proc = _join_groups_processes.get(pid)
+            try:
+                if proc and proc.is_alive():
+                    proc.terminate()
+                    proc.join(timeout=5)
+            except Exception:
+                pass
+            _join_groups_processes.pop(pid, None)
+        stopped["join_groups"] = join_to_stop
+
+    # 3) Best-effort: tắt toàn bộ tab/browser NST theo tất cả PROFILE_IDS trong settings.json
+    # (đúng yêu cầu: "Dừng" = tắt toàn bộ tab NST + trạng thái hoạt động)
+    nst_attempted: list[str] = []
+    nst_ok: list[str] = []
+    try:
+        raw = _read_settings_raw()
+        profiles = raw.get("PROFILE_IDS") or {}
+        if isinstance(profiles, dict):
+            nst_attempted = [str(k).strip() for k in profiles.keys() if str(k).strip()]
+    except Exception:
+        nst_attempted = []
+
+    # Ưu tiên stop các profile đang join trước, rồi stop phần còn lại
+    ordered = []
+    seen = set()
+    for pid in (join_to_stop + nst_attempted):
+        if pid and pid not in seen:
+            seen.add(pid)
+            ordered.append(pid)
+
+    for pid in ordered:
+        try:
+            if stop_profile(pid):
+                nst_ok.append(pid)
+        except Exception:
+            pass
+
+    return {"status": "ok", "stopped": stopped, "nst_stop_attempted": ordered, "nst_stop_ok": nst_ok}
+
 @app.delete("/settings/profiles/{profile_id}")
 def delete_profile(profile_id: str) -> dict:
     pid = _norm_profile_id(profile_id)
