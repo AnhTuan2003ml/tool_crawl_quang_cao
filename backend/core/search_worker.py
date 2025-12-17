@@ -20,7 +20,7 @@ from core.scraper import SimpleBot
 # "HÀNH VI NGƯỜI THẬT": thi thoảng mở Thông báo rồi Back (8–15 phút/lần)
 # ==============================================================================
 def _random_notification_interval_seconds() -> int:
-    return random.randint(8 , 15 )
+    return random.randint(12 * 60 , 15 * 60 )
 
 
 def click_notifications_button(fb: FBController) -> bool:
@@ -309,12 +309,20 @@ class SearchBotController(FBController):
 
             print("✅ Bài đạt điều kiện (keyword mặc định + text nhập)!")
 
-            # 3. THỰC HIỆN LIKE (Quan trọng nhất)
-            self.like_current_post(post_handle)
+            # Like theo xác suất giống người dùng:
+            # - Với mỗi bài "đúng", random 1 tỉ lệ trong khoảng 40%..60%
+            # - Sau đó roll để quyết định có Like hay không
+            p = random.uniform(0.40, 0.60)
+            roll = random.random()
+            should_like = roll < p
+            print(f"🎲 [LikeProb] p={p:.2f} roll={roll:.2f} -> {'LIKE' if should_like else 'SKIP'}")
+            if should_like:
+                # like_current_post tự bỏ qua nếu bài đã Like
+                self.like_current_post(post_handle)
 
             # 4. Đánh dấu đã xử lý (Để bot lướt tiếp bài sau)
             self.mark_post_as_processed(post_handle)
-            
+
             return True
 
         except Exception as e:
@@ -378,9 +386,10 @@ def _run_bot_logic(profile_id, url, raw_text, duration_minutes):
         else:
             # text nhập chỉ dùng làm "location terms" (OR), tách theo dấu phẩy
             locations = _parse_location_terms(raw_text_str, strip_terms=getattr(fb, "job_keywords", []))
+            # Nếu user chỉ nhập keyword (vd: "tuyển dụng") thì locations có thể rỗng sau khi strip.
+            # Khi đó: không lọc location, vẫn chạy bình thường theo job_keywords mặc định.
             if not locations:
-                print("⚠️ Không có địa điểm hợp lệ từ input. Hãy nhập dạng: 'bắc ninh , bắc giang'")
-                return
+                print("ℹ️ Không có location từ input -> chỉ dùng keyword mặc định để lọc.")
 
         fb.required_locations = locations
         if locations:
