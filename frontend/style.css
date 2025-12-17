@@ -581,7 +581,9 @@ tbody tr.filtered-out {
 #settingsView .profile-id-input {
   height       : 34px;
   padding      : 6px 10px;
-  width        : 64%;
+  flex         : 1;
+  /* ăn toàn bộ phần còn lại */
+  min-width    : 0;
   font-size    : 13px;
   border       : 1px solid var(--border);
   border-radius: 10px;
@@ -612,6 +614,12 @@ tbody tr.filtered-out {
   gap           : 10px;
 }
 
+.profile-row-wrap {
+  display       : flex;
+  flex-direction: column;
+  gap           : 8px;
+}
+
 .profile-row {
   display      : flex;
   align-items  : center;
@@ -621,6 +629,59 @@ tbody tr.filtered-out {
   border       : 1px solid var(--border);
   border-radius: 10px;
 }
+
+.profile-select {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile-select-cb {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.group-panel {
+  padding      : 10px 12px;
+  background   : #f9fafb;
+  border       : 1px dashed var(--border);
+  border-radius: 10px;
+}
+
+.group-panel-header {
+  font-size    : 12px;
+  font-weight  : 700;
+  color        : var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.group-textarea {
+  width        : 100%;
+  min-height   : 120px;
+  resize       : vertical;
+  padding      : 10px;
+  border       : 1px solid var(--border);
+  border-radius: 10px;
+  font-size    : 12px;
+  background   : #ffffff;
+  color        : var(--text-primary);
+  outline      : none;
+}
+
+.group-textarea:focus {
+  border-color: var(--primary);
+  box-shadow  : 0 0 0 4px rgba(99, 102, 241, 0.1);
+}
+
+.group-panel-actions {
+  display        : flex;
+  gap            : 8px;
+  justify-content: flex-end;
+  margin-top     : 8px;
+}
+
 
 .profile-row .profile-id {
   flex       : 1 1 40%;

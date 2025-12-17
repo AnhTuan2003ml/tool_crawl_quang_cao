@@ -5,7 +5,10 @@
   "PROFILE_IDS": {
     "621e1f5d-0c42-481e-9ddd-7abaafce68ed": {
       "access_token": "EAAAAAYsX7TsBPkK1ZBRjlt5wPp0ZBTRmXixZCJr0OAtEG2JQ2di0i1mtCIsuGvriF2cLviSV5GOl2taLMWi3K5SJb3bg5yxOOBPGMxkBadOT1mwkVjf2UujZB012zzVUiQYpD9fDzvUtB1KtT4ZB8DHDwJLmikXoB6K7OzXRdfj3as5gc9SFQK2vNNB2fUmPZBvMrUeNC06jP0Oi9Ra5r44pSBBYvSm2iJUDoKK6EVAqbmhAZDZD",
-      "cookie": "sb=HNY6aQAFB_tf42A4id6xhZpQ; ps_l=1; ps_n=1; datr=G9Y6adLzWpqwDfxsQ9kDerdz; c_user=100044138143352; fr=1L07xspZ598Fq3TXd.AWfUQBqwQDVNpNZlalR0PrKxDbJ4_MBVBE7plvG3RNLbEcO7R8s.BpQXqk..AAA.0.0.BpQXzp.AWdWQfgojLVqNmdrIgtCbSq1bo8; xs=46%3A14pMRvXIIAuMgQ%3A2%3A1765698119%3A-1%3A-1%3A%3AAcwuTrmDafgNChqMEo8NH5vwT3gqV9OODn0xoQerGoQ; wd=929x883;"
+      "cookie": "sb=HNY6aQAFB_tf42A4id6xhZpQ; ps_l=1; ps_n=1; datr=G9Y6adLzWpqwDfxsQ9kDerdz; c_user=100044138143352; fr=1Nh8kJ3Z5jCI4t3oW.AWdEzBycyrD9AKb_VHvkxvyEOUeFyKJm_0ftA29pwFnTHzY593w.BpQkXG..AAA.0.0.BpQkXp.AWcbkDouPqNMruBdEAARUbMKMW8; xs=46%3A14pMRvXIIAuMgQ%3A2%3A1765698119%3A-1%3A-1%3A%3AAcy9tLj9sWdp-GAT1UWQpNjIehJSX5E_ORapS3hYW-s; wd=929x883;",
+      "groups": [
+        "https://www.facebook.com/groups/tuyendungkisuIT"
+      ]
     }
   },
   "RUN_MINUTES": 30,

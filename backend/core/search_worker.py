@@ -132,7 +132,8 @@ def _run_bot_logic(profile_id, url, keywords_str, duration_minutes):
 if __name__ == "__main__":
     # --- TEST ---
     TEST_ID = "621e1f5d-0c42-481e-9ddd-7abaafce68ed"
-    
+    "3013041542259942",
+    "1884004131909284"
     print("--- CHỌN CHẾ ĐỘ ---")
     print("1. Search & Like (Vào trang tìm kiếm)")
     print("2. Feed & Like (Lướt trang chủ)")

@@ -3,6 +3,7 @@ import os
 import json
 import time
 import random
+import re
 
 # --- SETUP ĐƯỜNG DẪN ĐỂ IMPORT CORE ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -10,6 +11,7 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
 from core.nst import connect_profile
+from core.nst import stop_profile
 from core.browser import FBController
 
 class GroupJoiner(FBController):
@@ -17,7 +19,25 @@ class GroupJoiner(FBController):
     Class chuyên dụng để đi xin vào nhóm
     """
     def join_group(self, group_id):
-        url = f"https://www.facebook.com/groups/{group_id}"
+        raw = str(group_id or "").strip()
+        if not raw:
+            print("⚠️ group rỗng, bỏ qua")
+            return False
+
+        # Hỗ trợ lưu group dưới dạng full URL / hoặc facebook.com/... không có scheme
+        if re.match(r"^https?://", raw, flags=re.IGNORECASE):
+            url = raw
+        elif raw.lower().startswith("facebook.com/") or raw.lower().startswith("www.facebook.com/"):
+            url = "https://" + raw
+        elif "/groups/" in raw:
+            # Trường hợp người dùng dán path có /groups/ nhưng thiếu domain
+            if raw.startswith("/"):
+                url = "https://www.facebook.com" + raw
+            else:
+                url = "https://www.facebook.com/" + raw.lstrip("/")
+        else:
+            # Fallback: coi là group_id
+            url = f"https://www.facebook.com/groups/{raw}"
         print(f"\n🚀 Đang truy cập nhóm: {group_id}")
         print(f"🔗 Link: {url}")
         
@@ -79,6 +99,93 @@ class GroupJoiner(FBController):
             print(f"❌ Lỗi khi xử lý nhóm {group_id}: {e}")
             return False
 
+def run_batch_join_from_list(profile_id, group_ids):
+    """
+    Chạy join group cho 1 profile với danh sách group truyền trực tiếp (list).
+    Dùng cho API (đa luồng/đa process).
+    """
+    try:
+        items = list(group_ids or [])
+    except Exception:
+        items = []
+
+    # Clean
+    cleaned = []
+    for gid in items:
+        s = str(gid or "").strip()
+        if s:
+            cleaned.append(s)
+
+    if not cleaned:
+        print("⚠️ Danh sách group rỗng.")
+        return
+
+    print(f"📋 Tìm thấy {len(cleaned)} nhóm cần tham gia.")
+
+    # 2. Kết nối Profile
+    try:
+        print(f"🔌 Đang kết nối profile {profile_id}...")
+        ws_url = connect_profile(profile_id)
+        fb = GroupJoiner(ws_url)
+        fb.profile_id = profile_id
+        fb.connect()
+        
+        # 3. Chạy vòng lặp
+        for idx, gid in enumerate(cleaned):
+            fb.join_group(gid)
+            
+            # Nghỉ ngẫu nhiên (trừ khi là group cuối)
+            if idx < len(cleaned) - 1:
+                sleep_time = random.uniform(10, 20) 
+                print(f"💤 Nghỉ {sleep_time:.1f}s trước khi qua nhóm tiếp theo...")
+                time.sleep(sleep_time)
+            
+    except Exception as e:
+        print(f"❌ Lỗi kết nối/browser: {e}")
+    finally:
+        print("🏁 Hoàn tất danh sách.")
+        # Đóng sạch tab/context playwright + stop NST profile (best-effort)
+        try:
+            if 'fb' in locals() and fb:
+                try:
+                    if getattr(fb, "page", None):
+                        try:
+                            fb.page.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    if getattr(fb, "browser", None) and getattr(fb.browser, "contexts", None):
+                        for ctx in list(fb.browser.contexts):
+                            try:
+                                ctx.close()
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                try:
+                    if getattr(fb, "browser", None):
+                        try:
+                            fb.browser.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    if getattr(fb, "play", None):
+                        try:
+                            fb.play.stop()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        finally:
+            try:
+                stop_profile(profile_id)
+            except Exception:
+                pass
+
 def run_batch_join(profile_id, json_file_path):
     # 1. Đọc file JSON
     try:
@@ -95,28 +202,7 @@ def run_batch_join(profile_id, json_file_path):
         print(f"❌ Lỗi đọc file JSON: {e}")
         return
 
-    # 2. Kết nối Profile
-    try:
-        print(f"🔌 Đang kết nối profile {profile_id}...")
-        ws_url = connect_profile(profile_id)
-        fb = GroupJoiner(ws_url)
-        fb.profile_id = profile_id
-        fb.connect()
-        
-        # 3. Chạy vòng lặp
-        for gid in group_ids:
-            fb.join_group(gid)
-            
-            # Nghỉ ngẫu nhiên
-            sleep_time = random.uniform(10, 20) 
-            print(f"💤 Nghỉ {sleep_time:.1f}s trước khi qua nhóm tiếp theo...")
-            time.sleep(sleep_time)
-            
-    except Exception as e:
-        print(f"❌ Lỗi kết nối/browser: {e}")
-    finally:
-        print("🏁 Hoàn tất danh sách.")
-        # fb.browser.close() 
+    run_batch_join_from_list(profile_id, group_ids)
 
 if __name__ == "__main__":
     # --- CẤU HÌNH ---

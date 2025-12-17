@@ -24,6 +24,9 @@ const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
 const profileList = document.getElementById('profileList');
 // (Preview settings.json đã bị bỏ khỏi UI)
 const addProfileRowBtn = document.getElementById('addProfileRowBtn');
+const autoJoinGroupBtn = document.getElementById('autoJoinGroupBtn');
+const stopJoinGroupBtn = document.getElementById('stopJoinGroupBtn');
+const feedAccountSettingBtn = document.getElementById('feedAccountSettingBtn');
 
 const API_BASE = 'http://localhost:8000';
 const SETTINGS_STORAGE_KEY = 'profileSettings';
@@ -37,7 +40,8 @@ let loadedPostIds = new Set(); // Lưu các post_id đã load để tránh trùn
 let postsLoaded = false; // Đã load dữ liệu quản lý post hay chưa
 let profileState = {
   apiKey: '',
-  profiles: {}, // { [profileId]: { cookie: '', access_token: '' } }
+  profiles: {}, // { [profileId]: { cookie: '', access_token: '', groups: string[] } }
+  selected: {}, // { [profileId]: true/false } (frontend-only)
 };
 let addRowEl = null; // Row tạm để nhập profile mới
 
@@ -107,11 +111,14 @@ async function tryLoadProfileStateFromBackend() {
         nextProfiles[key] = {
           cookie: (cfg && cfg.cookie) ? String(cfg.cookie) : '',
           access_token: (cfg && (cfg.access_token || cfg.accessToken)) ? String(cfg.access_token || cfg.accessToken) : '',
+          groups: (cfg && Array.isArray(cfg.groups)) ? cfg.groups.map((x) => String(x || '').trim()).filter(Boolean) : [],
         };
       });
     }
 
     profileState.profiles = nextProfiles;
+    // giữ selected nếu có
+    if (!profileState.selected || typeof profileState.selected !== 'object') profileState.selected = {};
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(profileState));
     return true;
   } catch (err) {
@@ -135,6 +142,7 @@ async function loadProfileState() {
       profileState = {
         apiKey: parsed.apiKey || '',
         profiles: parsed.profiles || {},
+        selected: parsed.selected || {},
       };
     }
   } catch (err) {
@@ -189,8 +197,20 @@ function setProfileListEmptyStateIfNeeded() {
 
 function buildProfileRow(initialPid, initialInfo) {
   let currentPid = initialPid;
+  const wrap = document.createElement('div');
+  wrap.className = 'profile-row-wrap';
+
   const row = document.createElement('div');
   row.className = 'profile-row';
+
+  const selectWrap = document.createElement('div');
+  selectWrap.className = 'profile-select';
+
+  const selectCb = document.createElement('input');
+  selectCb.type = 'checkbox';
+  selectCb.className = 'profile-select-cb';
+  selectCb.title = 'Chọn profile';
+  selectCb.checked = Boolean(profileState.selected && profileState.selected[currentPid]);
 
   const pidInput = document.createElement('input');
   pidInput.className = 'profile-id-input';
@@ -213,7 +233,71 @@ function buildProfileRow(initialPid, initialInfo) {
   const groupBtn = document.createElement('button');
   groupBtn.type = 'button';
   groupBtn.className = 'btn-primary';
-  groupBtn.textContent = 'Thêm group';
+  groupBtn.textContent = 'Groups';
+
+  // ===== Group editor panel (div) =====
+  const groupPanel = document.createElement('div');
+  groupPanel.className = 'group-panel';
+  groupPanel.style.display = 'none';
+
+  const groupPanelHeader = document.createElement('div');
+  groupPanelHeader.className = 'group-panel-header';
+  groupPanelHeader.textContent = 'Danh sách group (mỗi dòng 1 group)';
+
+  const groupTextarea = document.createElement('textarea');
+  groupTextarea.className = 'group-textarea';
+  groupTextarea.placeholder = 'Dán group ở đây...\nVD:\nhttps://www.facebook.com/groups/tuyendungkisuIT\n3013041542259942';
+
+  const groupPanelActions = document.createElement('div');
+  groupPanelActions.className = 'group-panel-actions';
+
+  const groupSaveBtn = document.createElement('button');
+  groupSaveBtn.type = 'button';
+  groupSaveBtn.className = 'btn-success';
+  groupSaveBtn.textContent = 'Lưu groups';
+
+  const groupCloseBtn = document.createElement('button');
+  groupCloseBtn.type = 'button';
+  groupCloseBtn.className = 'btn-secondary';
+  groupCloseBtn.textContent = 'Đóng';
+
+  groupPanelActions.appendChild(groupSaveBtn);
+  groupPanelActions.appendChild(groupCloseBtn);
+  groupPanel.appendChild(groupPanelHeader);
+  groupPanel.appendChild(groupTextarea);
+  groupPanel.appendChild(groupPanelActions);
+
+  function getLocalGroups(pid) {
+    const info = profileState.profiles[pid] || {};
+    const gs = info.groups;
+    if (Array.isArray(gs)) return gs.map((x) => String(x || '').trim()).filter(Boolean);
+    return [];
+  }
+
+  function setLocalGroups(pid, groups) {
+    if (!profileState.profiles[pid]) profileState.profiles[pid] = { cookie: '', access_token: '', groups: [] };
+    profileState.profiles[pid].groups = Array.isArray(groups) ? groups : [];
+  }
+
+  function updateGroupBtnLabel() {
+    const count = getLocalGroups(currentPid).length;
+    groupBtn.textContent = count > 0 ? `Groups (${count})` : 'Groups';
+  }
+  // init label from initialInfo/profileState
+  if (initialInfo && Array.isArray(initialInfo.groups)) {
+    setLocalGroups(currentPid, initialInfo.groups);
+  } else if (!profileState.profiles[currentPid]?.groups) {
+    // ensure field exists
+    setLocalGroups(currentPid, getLocalGroups(currentPid));
+  }
+  updateGroupBtnLabel();
+
+  selectCb.addEventListener('change', () => {
+    if (!profileState.selected || typeof profileState.selected !== 'object') profileState.selected = {};
+    if (selectCb.checked) profileState.selected[currentPid] = true;
+    else delete profileState.selected[currentPid];
+    saveProfileState();
+  });
 
   const cookieBtn = document.createElement('button');
   cookieBtn.type = 'button';
@@ -225,8 +309,67 @@ function buildProfileRow(initialPid, initialInfo) {
   tokenBtn.className = 'btn-success';
   tokenBtn.textContent = initialInfo?.access_token ? 'Cập nhật token' : 'Lấy access_token';
 
-  groupBtn.addEventListener('click', () => {
-    showToast('Chưa có API cho "Thêm group".', 'error');
+  groupBtn.addEventListener('click', async () => {
+    const isOpen = groupPanel.style.display !== 'none';
+    if (isOpen) {
+      groupPanel.style.display = 'none';
+      return;
+    }
+
+    // mở panel + load groups từ backend để textarea đúng dữ liệu hiện tại
+    groupBtn.disabled = true;
+    try {
+      const settings = await callBackendNoAlert('/settings', { method: 'GET' });
+      const profiles = (settings && (settings.PROFILE_IDS || settings.profile_ids)) || {};
+      const cfg = (profiles && typeof profiles === 'object') ? profiles[currentPid] : null;
+      const rawGroups = cfg && typeof cfg === 'object' ? cfg.groups : null;
+      const groups = Array.isArray(rawGroups) ? rawGroups.map((x) => String(x || '').trim()).filter(Boolean) : [];
+      setLocalGroups(currentPid, groups);
+      saveProfileState();
+      updateGroupBtnLabel();
+      groupTextarea.value = groups.join('\n');
+      groupPanel.style.display = 'block';
+      groupTextarea.focus();
+    } catch (e) {
+      // fallback: hiện theo local nếu backend lỗi
+      const groups = getLocalGroups(currentPid);
+      groupTextarea.value = groups.join('\n');
+      groupPanel.style.display = 'block';
+      showToast('Không load được groups từ backend, đang dùng dữ liệu local.', 'error');
+    } finally {
+      groupBtn.disabled = false;
+    }
+  });
+
+  groupCloseBtn.addEventListener('click', () => {
+    groupPanel.style.display = 'none';
+  });
+
+  groupSaveBtn.addEventListener('click', async () => {
+    const nextGroups = String(groupTextarea.value || '')
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    groupSaveBtn.disabled = true;
+    try {
+      // replace (đè lên cái cũ)
+      const res = await callBackend(`/settings/profiles/${encodeURIComponent(currentPid)}/groups`, {
+        method: 'PUT',
+        body: JSON.stringify({ groups: nextGroups }),
+      });
+      const saved = (res && Array.isArray(res.groups)) ? res.groups : nextGroups;
+      setLocalGroups(currentPid, saved);
+      saveProfileState();
+      updateGroupBtnLabel();
+      showToast(`Đã lưu groups: ${saved.length}`, 'success');
+      // Lưu xong thì đóng textarea panel
+      groupPanel.style.display = 'none';
+    } catch (e) {
+      showToast('Không lưu được groups (kiểm tra FastAPI).', 'error');
+    } finally {
+      groupSaveBtn.disabled = false;
+    }
   });
 
   saveBtn.addEventListener('click', async () => {
@@ -240,7 +383,7 @@ function buildProfileRow(initialPid, initialInfo) {
     // normalize hiển thị để tránh dính space
     if (pidInput.value !== nextPid) pidInput.value = nextPid;
 
-    const cur = profileState.profiles[currentPid] || { cookie: '', access_token: '' };
+    const cur = profileState.profiles[currentPid] || { cookie: '', access_token: '', groups: [] };
     saveBtn.disabled = true;
     try {
       if (nextPid !== currentPid) {
@@ -256,12 +399,24 @@ function buildProfileRow(initialPid, initialInfo) {
             access_token: cur.access_token || '',
           }),
         });
+        // copy groups sang profile mới (tránh mất)
+        await callBackend(`/settings/profiles/${encodeURIComponent(nextPid)}/groups`, {
+          method: 'PUT',
+          body: JSON.stringify({ groups: Array.isArray(cur.groups) ? cur.groups : [] }),
+        });
         await callBackend(`/settings/profiles/${encodeURIComponent(currentPid)}`, { method: 'DELETE' });
 
         delete profileState.profiles[currentPid];
         profileState.profiles[nextPid] = { ...cur };
+        // chuyển checkbox selection sang key mới
+        if (profileState.selected && profileState.selected[currentPid]) {
+          delete profileState.selected[currentPid];
+          profileState.selected[nextPid] = true;
+        }
         currentPid = nextPid;
         pidInput.value = currentPid;
+        selectCb.checked = Boolean(profileState.selected && profileState.selected[currentPid]);
+        updateGroupBtnLabel();
       } else {
         await callBackend(`/settings/profiles/${encodeURIComponent(currentPid)}`, {
           method: 'PUT',
@@ -340,9 +495,13 @@ function buildProfileRow(initialPid, initialInfo) {
   actions.appendChild(cookieBtn);
   actions.appendChild(tokenBtn);
 
+  selectWrap.appendChild(selectCb);
+  row.appendChild(selectWrap);
   row.appendChild(pidInput);
   row.appendChild(actions);
-  return row;
+  wrap.appendChild(row);
+  wrap.appendChild(groupPanel);
+  return wrap;
 }
 
 function renderProfileList() {
@@ -394,7 +553,7 @@ function showAddProfileRow() {
     })
       .then(() => {
         if (!profileState.profiles[value]) {
-          profileState.profiles[value] = { cookie: '', access_token: '' };
+          profileState.profiles[value] = { cookie: '', access_token: '', groups: [] };
         }
         saveProfileState();
         // Thêm row mới mà không render lại toàn bộ (tránh nháy)
@@ -454,6 +613,53 @@ if (saveApiKeyBtn) {
 
 if (addProfileRowBtn) {
   addProfileRowBtn.addEventListener('click', showAddProfileRow);
+}
+
+if (feedAccountSettingBtn) {
+  feedAccountSettingBtn.addEventListener('click', () => {
+    showToast('Nuôi acc: để tạm (chưa làm).', 'success');
+  });
+}
+
+if (autoJoinGroupBtn) {
+  autoJoinGroupBtn.addEventListener('click', async () => {
+    const selected = Object.keys(profileState.selected || {}).filter((pid) => profileState.selected[pid]);
+    if (selected.length === 0) {
+      showToast('Chọn (tick) ít nhất 1 profile để auto join group.', 'error');
+      return;
+    }
+
+    autoJoinGroupBtn.disabled = true;
+    try {
+      const res = await callBackend('/groups/join', {
+        method: 'POST',
+        body: JSON.stringify({ profile_ids: selected }),
+      });
+      const started = res && Array.isArray(res.started) ? res.started.length : 0;
+      const skipped = res && Array.isArray(res.skipped) ? res.skipped.length : 0;
+      showToast(`Đã chạy auto join group: started=${started}, skipped=${skipped}`, 'success', 2200);
+    } catch (e) {
+      showToast('Không chạy được auto join group (kiểm tra FastAPI).', 'error');
+    } finally {
+      autoJoinGroupBtn.disabled = false;
+    }
+  });
+}
+
+if (stopJoinGroupBtn) {
+  stopJoinGroupBtn.addEventListener('click', async () => {
+    if (!confirm('Dừng auto join group cho TẤT CẢ profile đang chạy?')) return;
+    stopJoinGroupBtn.disabled = true;
+    try {
+      const res = await callBackend('/groups/join/stop', { method: 'POST', body: JSON.stringify({}) });
+      const stopped = res && Array.isArray(res.stopped) ? res.stopped.length : 0;
+      showToast(`Đã dừng auto join: ${stopped} profile`, 'success', 2200);
+    } catch (e) {
+      showToast('Không dừng được auto join (kiểm tra FastAPI).', 'error');
+    } finally {
+      stopJoinGroupBtn.disabled = false;
+    }
+  });
 }
 
 function getTypeColorClass(type) {
