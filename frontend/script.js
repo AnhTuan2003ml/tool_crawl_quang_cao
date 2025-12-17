@@ -26,7 +26,7 @@ const profileList = document.getElementById('profileList');
 // (Preview settings.json đã bị bỏ khỏi UI)
 const addProfileRowBtn = document.getElementById('addProfileRowBtn');
 const autoJoinGroupBtn = document.getElementById('autoJoinGroupBtn');
-const stopJoinGroupBtn = document.getElementById('stopJoinGroupBtn');
+const stopAllSettingBtn = document.getElementById('stopAllSettingBtn');
 const feedAccountSettingBtn = document.getElementById('feedAccountSettingBtn');
 
 const API_BASE = 'http://localhost:8000';
@@ -689,50 +689,37 @@ if (autoJoinGroupBtn) {
   });
 }
 
-if (stopJoinGroupBtn) {
-  stopJoinGroupBtn.addEventListener('click', async () => {
-    if (!confirm('Dừng auto join group cho TẤT CẢ profile đang chạy?')) return;
-    setButtonLoading(stopJoinGroupBtn, true, 'Đang dừng...');
-    try {
-      const res = await callBackend('/groups/join/stop', { method: 'POST', body: JSON.stringify({}) });
-      const stopped = res && Array.isArray(res.stopped) ? res.stopped.length : 0;
-      showToast(`Đã dừng auto join: ${stopped} profile`, 'success', 2200);
-    } catch (e) {
-      showToast('Không dừng được auto join (kiểm tra FastAPI).', 'error');
-    } finally {
-      setButtonLoading(stopJoinGroupBtn, false);
-      if (joinGroupPollTimer) {
-        clearInterval(joinGroupPollTimer);
-        joinGroupPollTimer = null;
-      }
-      setButtonLoading(autoJoinGroupBtn, false);
+async function handleStopAll() {
+  if (!confirm('Dừng TẤT CẢ tác vụ và tắt toàn bộ tab NST?')) return;
+  // stop-all có thể bấm từ left panel hoặc từ setting header
+  const btns = [stopAllBtn, stopAllSettingBtn].filter(Boolean);
+  btns.forEach((b) => setButtonLoading(b, true, 'Đang dừng tất cả...'));
+  try {
+    const res = await callBackend('/jobs/stop-all', { method: 'POST' });
+    const botStopped = res && res.stopped ? Boolean(res.stopped.bot) : false;
+    const joinStopped = res && res.stopped && Array.isArray(res.stopped.join_groups) ? res.stopped.join_groups.length : 0;
+    const nstOk = res && Array.isArray(res.nst_stop_ok) ? res.nst_stop_ok.length : 0;
+    const nstAttempted = res && Array.isArray(res.nst_stop_attempted) ? res.nst_stop_attempted.length : 0;
+      const nstAll = res && typeof res.nst_stop_all_ok === 'boolean' ? res.nst_stop_all_ok : false;
+      showToast(`Đã dừng tất cả: bot=${botStopped ? 'OK' : 'NO'}, join_groups=${joinStopped}, NST=${nstOk}/${nstAttempted}${nstAll ? ' +ALL' : ''}`, 'success', 2800);
+  } catch (e) {
+    showToast('Không dừng được tất cả (kiểm tra FastAPI).', 'error');
+  } finally {
+    btns.forEach((b) => setButtonLoading(b, false));
+    if (joinGroupPollTimer) {
+      clearInterval(joinGroupPollTimer);
+      joinGroupPollTimer = null;
     }
-  });
+    setButtonLoading(autoJoinGroupBtn, false);
+  }
 }
 
 if (stopAllBtn) {
-  stopAllBtn.addEventListener('click', async () => {
-    if (!confirm('Dừng TẤT CẢ tác vụ (auto join group / bot chạy nền / ...)?')) return;
-    setButtonLoading(stopAllBtn, true, 'Đang dừng tất cả...');
-    try {
-      const res = await callBackend('/jobs/stop-all', { method: 'POST' });
-      const botStopped = res && res.stopped ? Boolean(res.stopped.bot) : false;
-      const joinStopped = res && res.stopped && Array.isArray(res.stopped.join_groups) ? res.stopped.join_groups.length : 0;
-      const nstOk = res && Array.isArray(res.nst_stop_ok) ? res.nst_stop_ok.length : 0;
-      const nstAttempted = res && Array.isArray(res.nst_stop_attempted) ? res.nst_stop_attempted.length : 0;
-      showToast(`Đã dừng tất cả: bot=${botStopped ? 'OK' : 'NO'}, join_groups=${joinStopped}, NST=${nstOk}/${nstAttempted}`, 'success', 2600);
-    } catch (e) {
-      showToast('Không dừng được tất cả (kiểm tra FastAPI).', 'error');
-    } finally {
-      setButtonLoading(stopAllBtn, false);
-      if (joinGroupPollTimer) {
-        clearInterval(joinGroupPollTimer);
-        joinGroupPollTimer = null;
-      }
-      setButtonLoading(autoJoinGroupBtn, false);
-      setButtonLoading(stopJoinGroupBtn, false);
-    }
-  });
+  stopAllBtn.addEventListener('click', handleStopAll);
+}
+
+if (stopAllSettingBtn) {
+  stopAllSettingBtn.addEventListener('click', handleStopAll);
 }
 
 function getTypeColorClass(type) {

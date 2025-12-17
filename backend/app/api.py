@@ -6,6 +6,7 @@ import os
 import tempfile
 import threading
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,7 +14,7 @@ from pydantic import BaseModel
 
 from core.runner import AppRunner
 from core.settings import SETTINGS_PATH
-from core.nst import connect_profile, stop_profile
+from core.nst import connect_profile, stop_profile, stop_all_browsers
 from core.browser import FBController
 
 app = FastAPI(title="NST Tool API", version="1.0.0")
@@ -41,6 +42,76 @@ def _run_join_groups_worker(profile_id: str, groups: list[str]) -> None:
         run_batch_join_from_list(profile_id, groups)
     except Exception as exc:
         print(f"❌ Join groups worker lỗi ({profile_id}): {exc}")
+
+
+def _close_fb_controller_best_effort(fb: Optional[FBController], profile_id: str) -> None:
+    """
+    Đóng sạch tab/context playwright + yêu cầu NST stop (giống logic trong cookie fetch).
+    """
+    try:
+        if fb and getattr(fb, "page", None):
+            try:
+                fb.page.close()
+            except Exception:
+                pass
+    except Exception:
+        pass
+    try:
+        if fb and getattr(fb, "browser", None) and getattr(fb.browser, "contexts", None):
+            for ctx in list(fb.browser.contexts):
+                try:
+                    ctx.close()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    try:
+        if fb and getattr(fb, "browser", None):
+            try:
+                fb.browser.close()
+            except Exception:
+                pass
+    except Exception:
+        pass
+    try:
+        if fb and getattr(fb, "play", None):
+            try:
+                fb.play.stop()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # Best-effort: yêu cầu NST stop/close browser instance của profile
+    try:
+        stop_profile(profile_id)
+    except Exception:
+        pass
+
+
+def _force_close_nst_tabs_for_profile(profile_id: str) -> dict:
+    """
+    Force đóng tab NST theo đúng kiểu cookie:
+    connect -> attach CDP -> close page/context/browser/play -> stop_profile
+    """
+    pid = _norm_profile_id(profile_id)
+    if not pid:
+        return {"profile_id": profile_id, "ok": False, "reason": "empty_profile_id"}
+
+    fb: Optional[FBController] = None
+    connected = False
+    try:
+        ws = connect_profile(pid)
+        fb = FBController(ws)
+        fb.profile_id = pid
+        fb.connect()
+        connected = True
+        return {"profile_id": pid, "ok": True, "connected": True}
+    except Exception as exc:
+        # Nếu connect fail vẫn cố stop_profile ở finally
+        return {"profile_id": pid, "ok": False, "connected": connected, "reason": str(exc)}
+    finally:
+        _close_fb_controller_best_effort(fb, pid)
 
 
 def _norm_profile_id(value: str) -> str:
@@ -588,10 +659,9 @@ def stop_all_jobs() -> dict:
             _join_groups_processes.pop(pid, None)
         stopped["join_groups"] = join_to_stop
 
-    # 3) Best-effort: tắt toàn bộ tab/browser NST theo tất cả PROFILE_IDS trong settings.json
+    # 3) Force đóng toàn bộ tab NST theo tất cả PROFILE_IDS trong settings.json
     # (đúng yêu cầu: "Dừng" = tắt toàn bộ tab NST + trạng thái hoạt động)
     nst_attempted: list[str] = []
-    nst_ok: list[str] = []
     try:
         raw = _read_settings_raw()
         profiles = raw.get("PROFILE_IDS") or {}
@@ -608,14 +678,42 @@ def stop_all_jobs() -> dict:
             seen.add(pid)
             ordered.append(pid)
 
-    for pid in ordered:
-        try:
-            if stop_profile(pid):
-                nst_ok.append(pid)
-        except Exception:
-            pass
+    results: list[dict] = []
+    # Chạy song song nhẹ để nhanh hơn nhưng không quá nặng (mỗi worker có playwright)
+    max_workers = 3 if len(ordered) >= 3 else max(1, len(ordered))
+    try:
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            futs = [ex.submit(_force_close_nst_tabs_for_profile, pid) for pid in ordered]
+            for fut in as_completed(futs):
+                try:
+                    results.append(fut.result())
+                except Exception as exc:
+                    results.append({"ok": False, "reason": str(exc)})
+    except Exception as exc:
+        # Fallback: chạy tuần tự nếu threadpool lỗi
+        results = []
+        for pid in ordered:
+            try:
+                results.append(_force_close_nst_tabs_for_profile(pid))
+            except Exception as e:
+                results.append({"profile_id": pid, "ok": False, "reason": str(e)})
 
-    return {"status": "ok", "stopped": stopped, "nst_stop_attempted": ordered, "nst_stop_ok": nst_ok}
+    # 4) Fallback: cố gắng gọi endpoint "stop/close all" của NST (nếu bản NST hỗ trợ)
+    nst_stop_all_ok = False
+    try:
+        nst_stop_all_ok = bool(stop_all_browsers())
+    except Exception:
+        nst_stop_all_ok = False
+
+    nst_ok = [r.get("profile_id") for r in results if r.get("ok") and r.get("profile_id")]
+    return {
+        "status": "ok",
+        "stopped": stopped,
+        "nst_stop_attempted": ordered,
+        "nst_stop_ok": nst_ok,
+        "nst_stop_all_ok": nst_stop_all_ok,
+        "nst_force_close_results": results,
+    }
 
 @app.delete("/settings/profiles/{profile_id}")
 def delete_profile(profile_id: str) -> dict:

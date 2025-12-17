@@ -16,22 +16,28 @@ def _get_runtime_settings():
         # fallback: vẫn cố đọc cache nếu reload lỗi
         from core.settings import get_settings
         return get_settings()
-NST_BASE_URL = "http://127.0.0.1:8848/api/v2"
+NST_BASE_URLS = [
+    "http://127.0.0.1:8848/api/v2",
+    "http://127.0.0.1:8848/api/v1",
+    "http://127.0.0.1:8848/api",
+]
 
 
-def _nst_request(method: str, path: str, timeout: int = 15) -> Optional[Any]:
+def _nst_request(method: str, path: str, timeout: int = 15, headers: Optional[dict] = None) -> Optional[Any]:
     """
     Gọi NST local API. Trả về JSON nếu parse được, None nếu lỗi.
     """
-    url = f"{NST_BASE_URL}{path}"
-    try:
-        resp = requests.request(method, url, timeout=timeout)
+    for base in NST_BASE_URLS:
+        url = f"{base}{path}"
         try:
-            return resp.json()
+            resp = requests.request(method, url, timeout=timeout, headers=headers)
+            try:
+                return resp.json()
+            except Exception:
+                return {"status_code": resp.status_code, "text": resp.text}
         except Exception:
-            return {"status_code": resp.status_code, "text": resp.text}
-    except Exception:
-        return None
+            continue
+    return None
 
 
 def stop_profile(profile_id: str) -> bool:
@@ -45,7 +51,10 @@ def stop_profile(profile_id: str) -> bool:
 
     cfg = _get_runtime_settings()
     api_key = str(getattr(cfg, "api_key", "") or "").strip()
+    hdr = {"x-api-key": api_key} if api_key else None
+    # Thử cả kiểu query param và header (một số bản NST chỉ nhận header)
     candidates = [
+        # query
         ("POST", f"/browsers/stop/{pid}?x-api-key={api_key}"),
         ("GET", f"/browsers/stop/{pid}?x-api-key={api_key}"),
         ("POST", f"/browsers/close/{pid}?x-api-key={api_key}"),
@@ -60,10 +69,25 @@ def stop_profile(profile_id: str) -> bool:
         ("GET", f"/close/{pid}?x-api-key={api_key}"),
         ("POST", f"/disconnect/{pid}?x-api-key={api_key}"),
         ("GET", f"/disconnect/{pid}?x-api-key={api_key}"),
+        # header (không query)
+        ("POST", f"/browsers/stop/{pid}"),
+        ("GET", f"/browsers/stop/{pid}"),
+        ("POST", f"/browsers/close/{pid}"),
+        ("GET", f"/browsers/close/{pid}"),
+        ("POST", f"/browser/stop/{pid}"),
+        ("GET", f"/browser/stop/{pid}"),
+        ("POST", f"/browser/close/{pid}"),
+        ("GET", f"/browser/close/{pid}"),
+        ("POST", f"/stop/{pid}"),
+        ("GET", f"/stop/{pid}"),
+        ("POST", f"/close/{pid}"),
+        ("GET", f"/close/{pid}"),
+        ("POST", f"/disconnect/{pid}"),
+        ("GET", f"/disconnect/{pid}"),
     ]
 
     for method, path in candidates:
-        data = _nst_request(method, path)
+        data = _nst_request(method, path, headers=hdr)
         if not data:
             continue
         # heuristic success: err==False or code==0 or status ok
@@ -73,6 +97,41 @@ def stop_profile(profile_id: str) -> bool:
             return True
         if data.get("code") in (0, 200):
             return True
+    return False
+
+
+def stop_all_browsers() -> bool:
+    """
+    Best-effort: đóng toàn bộ browser/tab NST (một số bản hỗ trợ endpoint stop/close all).
+    """
+    cfg = _get_runtime_settings()
+    api_key = str(getattr(cfg, "api_key", "") or "").strip()
+    hdr = {"x-api-key": api_key} if api_key else None
+
+    candidates = [
+        ("POST", f"/browsers/stop-all?x-api-key={api_key}"),
+        ("POST", f"/browsers/close-all?x-api-key={api_key}"),
+        ("POST", f"/browsers/stopAll?x-api-key={api_key}"),
+        ("POST", f"/browsers/closeAll?x-api-key={api_key}"),
+        ("POST", f"/stop-all?x-api-key={api_key}"),
+        ("POST", f"/close-all?x-api-key={api_key}"),
+        ("POST", "/browsers/stop-all"),
+        ("POST", "/browsers/close-all"),
+        ("POST", "/stop-all"),
+        ("POST", "/close-all"),
+    ]
+
+    for method, path in candidates:
+        data = _nst_request(method, path, headers=hdr)
+        if not data:
+            continue
+        if isinstance(data, dict):
+            if data.get("err") is False:
+                return True
+            if str(data.get("status")).lower() in {"ok", "success", "stopped", "closed"}:
+                return True
+            if data.get("code") in (0, 200):
+                return True
     return False
 
 def connect_profile(profile_id: str):
@@ -95,6 +154,7 @@ def connect_profile(profile_id: str):
     # Mã hóa config thành chuỗi an toàn cho URL (vì User-Agent có dấu cách)
     encoded_config = urllib.parse.quote(json.dumps(config))
 
+    # Connect vẫn ưu tiên v2 vì đang dùng ổn định
     url = f"http://127.0.0.1:8848/api/v2/connect/{profile_id}?x-api-key={api_key}&config={encoded_config}"
 
     print(f"🚀 Mở profile {profile_id} (headless={headless})")
