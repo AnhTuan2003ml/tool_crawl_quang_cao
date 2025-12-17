@@ -8,6 +8,15 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
+  <!-- Splash Screen -->
+  <div id="splashScreen" class="splash-screen">
+    <div class="splash-content">
+      <h1 class="splash-title">HỆ THỐNG ADS FACEBOOK</h1>
+      <p class="splash-subtitle">Giải pháp tự động hóa – quản lý & scale quảng cáo</p>
+      <button id="splashStartBtn" class="splash-btn">Bắt đầu</button>
+    </div>
+  </div>
+
   <div class="container">
     <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
     <header class="header">
@@ -110,23 +119,58 @@
         <!-- View: Danh sách quét -->
         <div id="scanView">
           <div class="filter-container">
-            <div class="filter-label">🔍 Lọc theo màu:</div>
-            <div class="filter-buttons">
-              <button class="filter-btn filter-all active" data-filter="all">
-                <span>Tất cả</span>
-              </button>
-              <button class="filter-btn filter-green" data-filter="type-green">
-                <span class="filter-dot filter-dot-green"></span>
-                <span>Xanh (type1)</span>
-              </button>
-              <button class="filter-btn filter-yellow" data-filter="type-yellow">
-                <span class="filter-dot filter-dot-yellow"></span>
-                <span>Vàng (type2)</span>
-              </button>
-              <button class="filter-btn filter-red" data-filter="type-red">
-                <span class="filter-dot filter-dot-red"></span>
-                <span>Đỏ (type3)</span>
-              </button>
+            <div class="filter-group">
+              <div class="filter-label">🔍 Lọc theo màu:</div>
+              <div class="filter-buttons">
+                <button class="filter-btn filter-all active" data-filter="all">
+                  <span>Tất cả</span>
+                </button>
+                <button class="filter-btn filter-green" data-filter="type-green">
+                  <span class="filter-dot filter-dot-green"></span>
+                  <span>Xanh (type1)</span>
+                </button>
+                <button class="filter-btn filter-yellow" data-filter="type-yellow">
+                  <span class="filter-dot filter-dot-yellow"></span>
+                  <span>Vàng (type2)</span>
+                </button>
+                <button class="filter-btn filter-red" data-filter="type-red">
+                  <span class="filter-dot filter-dot-red"></span>
+                  <span>Đỏ (type3)</span>
+                </button>
+              </div>
+            </div>
+            <div class="filter-group">
+              <div class="filter-label">📊 Lọc theo:</div>
+              <div class="filter-buttons">
+                <button class="filter-btn filter-react" data-filter-react="has">
+                  <span>✓ Có React</span>
+                </button>
+                <button class="filter-btn filter-react" data-filter-react="none">
+                  <span>✗ Không React</span>
+                </button>
+                <button class="filter-btn filter-comment" data-filter-comment="has">
+                  <span>💬 Có Comment</span>
+                </button>
+                <button class="filter-btn filter-comment" data-filter-comment="none">
+                  <span>✗ Không Comment</span>
+                </button>
+              </div>
+            </div>
+            <div class="filter-group">
+              <div class="filter-label">⏰ Lọc theo thời gian:</div>
+              <div class="time-filter-compact">
+                <div class="time-filter-inline">
+                  <input type="datetime-local" id="timeFilterFrom" class="time-filter-input-compact" placeholder="Từ" />
+                  <span class="time-filter-separator">→</span>
+                  <input type="datetime-local" id="timeFilterTo" class="time-filter-input-compact" placeholder="Đến" />
+                  <button id="applyTimeFilterBtn" class="time-filter-btn-compact time-filter-apply-compact" title="Áp dụng">
+                    <span>✓</span>
+                  </button>
+                  <button id="clearTimeFilterBtn" class="time-filter-btn-compact time-filter-clear-compact" title="Xóa">
+                    <span>✗</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
           <div class="table-container">

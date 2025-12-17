@@ -1,3 +1,25 @@
+// Splash Screen
+const splashScreen = document.getElementById('splashScreen');
+const splashStartBtn = document.getElementById('splashStartBtn');
+
+// Thêm class splash-active khi trang load để ẩn container
+if (splashScreen) {
+  document.body.classList.add('splash-active');
+}
+
+// Ẩn splash screen khi click nút "Bắt đầu"
+if (splashStartBtn) {
+  splashStartBtn.addEventListener('click', () => {
+    if (splashScreen) {
+      splashScreen.classList.add('hidden');
+      // Cho phép hiển thị container và scroll sau khi ẩn splash
+      setTimeout(() => {
+        document.body.classList.remove('splash-active');
+      }, 600); // Đợi animation hoàn thành
+    }
+  });
+}
+
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
 const backendRunBtn = document.getElementById('backendRunBtn');
@@ -871,6 +893,13 @@ function appendRow({ id, userId, name, react, comment, time, type }) {
   // Comment: nếu có comment thì hiển thị icon con mắt, click mới xem nội dung
   const hasComment = !!comment;
   const commentDisplay = hasComment ? '<button class="comment-eye-btn" type="button" title="Xem comment">👁</button>' : '';
+  
+  // Lưu timestamp để sắp xếp
+  const timestamp = parseTime(time || '');
+  tr.dataset.timestamp = timestamp;
+  tr.dataset.hasReact = react ? 'true' : 'false';
+  tr.dataset.hasComment = hasComment ? 'true' : 'false';
+  
   tr.innerHTML = `
     <td>${postIdDisplay}</td>
     <td>${userIdDisplay}</td>
@@ -888,17 +917,40 @@ function appendRow({ id, userId, name, react, comment, time, type }) {
   if (hasComment) {
     const commentCell = tr.children[4]; // cột Comment
     commentCell.dataset.comment = comment;
+    commentCell.dataset.showingText = 'false'; // Trạng thái: false = đang hiển thị icon, true = đang hiển thị text
+    
     const eyeBtn = commentCell.querySelector('.comment-eye-btn');
     if (eyeBtn) {
-      eyeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
+      // Hàm toggle giữa icon và text
+      const toggleComment = (e) => {
+        if (e) e.stopPropagation();
         const text = commentCell.dataset.comment || '';
         if (!text) return;
 
-        // Khi click lần đầu: thay icon bằng nội dung comment
-        // Nếu muốn cho phép thu gọn lại, có thể toggle, nhưng hiện tại chỉ hiển thị ra luôn
-        commentCell.textContent = text;
-      });
+        const isShowingText = commentCell.dataset.showingText === 'true';
+        
+        if (isShowingText) {
+          // Đang hiển thị text → chuyển về icon
+          commentCell.innerHTML = '<button class="comment-eye-btn" type="button" title="Xem comment">👁</button>';
+          commentCell.dataset.showingText = 'false';
+          // Gắn lại event listener cho icon mới
+          const newEyeBtn = commentCell.querySelector('.comment-eye-btn');
+          if (newEyeBtn) {
+            newEyeBtn.addEventListener('click', toggleComment);
+          }
+        } else {
+          // Đang hiển thị icon → chuyển sang text
+          commentCell.innerHTML = `<span class="comment-text" style="cursor: pointer; color: var(--text-primary);">${text}</span>`;
+          commentCell.dataset.showingText = 'true';
+          // Gắn event listener cho text để click lại sẽ hiện icon
+          const commentText = commentCell.querySelector('.comment-text');
+          if (commentText) {
+            commentText.addEventListener('click', toggleComment);
+          }
+        }
+      };
+      
+      eyeBtn.addEventListener('click', toggleComment);
     }
   }
 
@@ -1489,37 +1541,184 @@ document.addEventListener('click', (e) => {
     closeHelpTooltip();
   }
 });
-// ==== Bộ lọc màu sắc ====
+// ==== Bộ lọc màu sắc, React, Comment và Sắp xếp ====
 
-const filterButtons = document.querySelectorAll('.filter-btn');
-let currentFilter = 'all';
+const filterButtons = document.querySelectorAll('.filter-btn[data-filter]');
+const reactFilterButtons = document.querySelectorAll('.filter-btn[data-filter-react]');
+const commentFilterButtons = document.querySelectorAll('.filter-btn[data-filter-comment]');
+const timeFilterFrom = document.getElementById('timeFilterFrom');
+const timeFilterTo = document.getElementById('timeFilterTo');
+const applyTimeFilterBtn = document.getElementById('applyTimeFilterBtn');
+const clearTimeFilterBtn = document.getElementById('clearTimeFilterBtn');
 
-function applyFilter(filterType) {
-  currentFilter = filterType;
+// Sử dụng Set để lưu các filter đã chọn (cho phép nhiều lựa chọn)
+let selectedTypeFilters = new Set(['all']);
+let selectedReactFilters = new Set(); // Không có "all", rỗng = hiển thị tất cả
+let selectedCommentFilters = new Set(); // Không có "all", rỗng = hiển thị tất cả
+let timeFilterFromValue = null; // Thời gian bắt đầu
+let timeFilterToValue = null; // Thời gian kết thúc
+
+function toggleTypeFilter(filterType) {
+  if (filterType === 'all') {
+    // Nếu click "Tất cả", bỏ chọn tất cả và chỉ chọn "Tất cả"
+    selectedTypeFilters.clear();
+    selectedTypeFilters.add('all');
+  } else {
+    // Bỏ "all" nếu chọn filter cụ thể
+    selectedTypeFilters.delete('all');
+    
+    // Toggle filter
+    if (selectedTypeFilters.has(filterType)) {
+      selectedTypeFilters.delete(filterType);
+    } else {
+      selectedTypeFilters.add(filterType);
+    }
+    
+    // Nếu không còn filter nào được chọn, tự động chọn "all"
+    if (selectedTypeFilters.size === 0) {
+      selectedTypeFilters.add('all');
+    }
+  }
+  applyAllFilters();
+}
+
+function toggleReactFilter(reactFilter) {
+  // Toggle filter (không có "all" nữa)
+  if (selectedReactFilters.has(reactFilter)) {
+    selectedReactFilters.delete(reactFilter);
+  } else {
+    selectedReactFilters.add(reactFilter);
+  }
+  applyAllFilters();
+}
+
+function toggleCommentFilter(commentFilter) {
+  // Toggle filter (không có "all" nữa)
+  if (selectedCommentFilters.has(commentFilter)) {
+    selectedCommentFilters.delete(commentFilter);
+  } else {
+    selectedCommentFilters.add(commentFilter);
+  }
+  applyAllFilters();
+}
+
+function applyAllFilters() {
   const rows = tbody.querySelectorAll('tr');
   
   rows.forEach((row) => {
-    const typeCell = row.querySelector('.type-cell');
-    if (!typeCell) {
-      row.classList.remove('filtered-out');
-      return;
+    let shouldShow = true;
+    
+    // Filter theo màu (Type) - có thể chọn nhiều
+    if (!selectedTypeFilters.has('all')) {
+      const typeCell = row.querySelector('.type-cell');
+      let matchesType = false;
+      
+      selectedTypeFilters.forEach(filterType => {
+        if (typeCell && typeCell.classList.contains(filterType)) {
+          matchesType = true;
+        }
+      });
+      
+      if (!matchesType) {
+        shouldShow = false;
+      }
     }
     
-    if (filterType === 'all') {
+    // Filter theo React - nếu Set rỗng thì hiển thị tất cả
+    if (shouldShow && selectedReactFilters.size > 0) {
+      const reactCell = row.querySelector('td:nth-child(4)'); // Cột React
+      const hasReact = reactCell && reactCell.textContent.trim() === '✓';
+      let matchesReact = false;
+      
+      selectedReactFilters.forEach(reactFilter => {
+        if (reactFilter === 'has' && hasReact) {
+          matchesReact = true;
+        } else if (reactFilter === 'none' && !hasReact) {
+          matchesReact = true;
+        }
+      });
+      
+      if (!matchesReact) {
+        shouldShow = false;
+      }
+    }
+    
+    // Filter theo Comment - nếu Set rỗng thì hiển thị tất cả
+    if (shouldShow && selectedCommentFilters.size > 0) {
+      const commentCell = row.querySelector('td:nth-child(5)'); // Cột Comment
+      const hasComment = commentCell && commentCell.querySelector('.comment-eye-btn');
+      let matchesComment = false;
+      
+      selectedCommentFilters.forEach(commentFilter => {
+        if (commentFilter === 'has' && hasComment) {
+          matchesComment = true;
+        } else if (commentFilter === 'none' && !hasComment) {
+          matchesComment = true;
+        }
+      });
+      
+      if (!matchesComment) {
+        shouldShow = false;
+      }
+    }
+    
+    // Filter theo thời gian
+    if (shouldShow && (timeFilterFromValue || timeFilterToValue)) {
+      const timeCell = row.querySelector('td:nth-child(6)'); // Cột Time
+      const timeStr = timeCell ? timeCell.textContent.trim() : '';
+      
+      if (timeStr) {
+        // Parse timestamp từ row hoặc từ text
+        let rowTimestamp = row.dataset.timestamp ? parseInt(row.dataset.timestamp) : 0;
+        if (!rowTimestamp) {
+          rowTimestamp = parseTime(timeStr);
+          row.dataset.timestamp = rowTimestamp; // Lưu lại
+        }
+        
+        // So sánh với khoảng thời gian đã chọn
+        if (timeFilterFromValue && rowTimestamp < timeFilterFromValue) {
+          shouldShow = false;
+        }
+        if (timeFilterToValue && rowTimestamp > timeFilterToValue) {
+          shouldShow = false;
+        }
+      } else {
+        // Nếu không có thời gian và có filter thời gian thì ẩn
+        shouldShow = false;
+      }
+    }
+    
+    if (shouldShow) {
       row.classList.remove('filtered-out');
     } else {
-      // Kiểm tra xem cell có class tương ứng với filter không
-      if (typeCell.classList.contains(filterType)) {
-        row.classList.remove('filtered-out');
-      } else {
-        row.classList.add('filtered-out');
-      }
+      row.classList.add('filtered-out');
     }
   });
   
-  // Cập nhật trạng thái active của các nút
+  // Cập nhật trạng thái active của các nút filter màu
   filterButtons.forEach((btn) => {
-    if (btn.dataset.filter === filterType) {
+    const filterType = btn.dataset.filter;
+    if (selectedTypeFilters.has(filterType)) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+  
+  // Cập nhật trạng thái active của các nút filter React
+  reactFilterButtons.forEach((btn) => {
+    const reactFilter = btn.dataset.filterReact;
+    if (selectedReactFilters.has(reactFilter)) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+  
+  // Cập nhật trạng thái active của các nút filter Comment
+  commentFilterButtons.forEach((btn) => {
+    const commentFilter = btn.dataset.filterComment;
+    if (selectedCommentFilters.has(commentFilter)) {
       btn.classList.add('active');
     } else {
       btn.classList.remove('active');
@@ -1535,13 +1734,163 @@ function applyFilter(filterType) {
   }
 }
 
-// Thêm event listener cho các nút filter
+// Áp dụng filter theo thời gian
+function applyTimeFilter() {
+  const fromValue = timeFilterFrom ? timeFilterFrom.value : '';
+  const toValue = timeFilterTo ? timeFilterTo.value : '';
+  
+  // Chuyển đổi từ datetime-local format (YYYY-MM-DDTHH:mm) sang timestamp
+  if (fromValue) {
+    timeFilterFromValue = new Date(fromValue).getTime();
+  } else {
+    timeFilterFromValue = null;
+  }
+  
+  if (toValue) {
+    // Thêm 1 ngày và trừ 1ms để bao gồm cả ngày cuối
+    const toDate = new Date(toValue);
+    toDate.setHours(23, 59, 59, 999);
+    timeFilterToValue = toDate.getTime();
+  } else {
+    timeFilterToValue = null;
+  }
+  
+  // Áp dụng filter
+  applyAllFilters();
+  
+  // Cập nhật trạng thái nút
+  if (applyTimeFilterBtn) {
+    if (timeFilterFromValue || timeFilterToValue) {
+      applyTimeFilterBtn.classList.add('active');
+    } else {
+      applyTimeFilterBtn.classList.remove('active');
+    }
+  }
+}
+
+// Xóa filter thời gian
+function clearTimeFilter() {
+  if (timeFilterFrom) timeFilterFrom.value = '';
+  if (timeFilterTo) timeFilterTo.value = '';
+  timeFilterFromValue = null;
+  timeFilterToValue = null;
+  
+  // Áp dụng lại filter
+  applyAllFilters();
+  
+  // Cập nhật trạng thái nút
+  if (applyTimeFilterBtn) {
+    applyTimeFilterBtn.classList.remove('active');
+  }
+}
+
+// Hàm parse time từ string sang Date object
+function parseTime(timeStr) {
+  if (!timeStr) return 0;
+  
+  // Thử parse các format thời gian phổ biến
+  // Format: "HH:mm:ss" hoặc "HH:mm" hoặc "dd/MM/yyyy HH:mm:ss"
+  const now = new Date();
+  
+  // Nếu có format đầy đủ với ngày
+  if (timeStr.includes('/')) {
+    const parts = timeStr.split(' ');
+    if (parts.length >= 2) {
+      const datePart = parts[0].split('/');
+      const timePart = parts[1].split(':');
+      if (datePart.length === 3 && timePart.length >= 2) {
+        const year = parseInt(datePart[2]);
+        const month = parseInt(datePart[1]) - 1;
+        const day = parseInt(datePart[0]);
+        const hour = parseInt(timePart[0]);
+        const minute = parseInt(timePart[1]);
+        const second = timePart[2] ? parseInt(timePart[2]) : 0;
+        return new Date(year, month, day, hour, minute, second).getTime();
+      }
+    }
+  }
+  
+  // Nếu chỉ có giờ:phút:giây
+  if (timeStr.includes(':')) {
+    const parts = timeStr.split(':');
+    if (parts.length >= 2) {
+      const hour = parseInt(parts[0]) || 0;
+      const minute = parseInt(parts[1]) || 0;
+      const second = parts[2] ? parseInt(parts[2]) : 0;
+      const date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, second);
+      return date.getTime();
+    }
+  }
+  
+  // Fallback: thử parse trực tiếp
+  const parsed = Date.parse(timeStr);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+// Khởi tạo: set trạng thái active cho các nút "Tất cả"
+function initializeFilters() {
+  applyAllFilters();
+}
+
+// Thêm event listener cho các nút filter màu
 filterButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
     const filterType = btn.dataset.filter;
-    applyFilter(filterType);
+    if (filterType) {
+      toggleTypeFilter(filterType);
+    }
   });
 });
+
+// Thêm event listener cho các nút filter React
+reactFilterButtons.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const reactFilter = btn.dataset.filterReact;
+    if (reactFilter) {
+      toggleReactFilter(reactFilter);
+    }
+  });
+});
+
+// Thêm event listener cho các nút filter Comment
+commentFilterButtons.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const commentFilter = btn.dataset.filterComment;
+    if (commentFilter) {
+      toggleCommentFilter(commentFilter);
+    }
+  });
+});
+
+// Thêm event listener cho filter thời gian
+if (applyTimeFilterBtn) {
+  applyTimeFilterBtn.addEventListener('click', () => {
+    applyTimeFilter();
+  });
+}
+
+if (clearTimeFilterBtn) {
+  clearTimeFilterBtn.addEventListener('click', () => {
+    clearTimeFilter();
+  });
+}
+
+// Cho phép áp dụng filter khi nhấn Enter trong input
+if (timeFilterFrom) {
+  timeFilterFrom.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      applyTimeFilter();
+    }
+  });
+}
+
+if (timeFilterTo) {
+  timeFilterTo.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      applyTimeFilter();
+    }
+  });
+}
 
 // ==== Tabs: Danh sách quét / Quản lý post / Setting profile ====
 const tabConfig = {
@@ -1586,3 +1935,5 @@ try {
 }
 switchTab(initialTab);
 loadProfileState();
+// Khởi tạo filter với trạng thái mặc định
+initializeFilters();
