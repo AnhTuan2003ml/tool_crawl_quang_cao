@@ -202,6 +202,36 @@
                   <button id="feedAccountSettingBtn" class="btn-secondary" type="button">Nuôi acc</button>
                 </div>
               </div>
+              <div id="feedConfigPanel" class="feed-panel" style="display:none;">
+                <div class="feed-panel-row">
+                  <label class="feed-radio">
+                    <input type="radio" name="feedMode" value="feed" checked />
+                    <span>Feed</span>
+                  </label>
+                  <label class="feed-radio">
+                    <input type="radio" name="feedMode" value="search" />
+                    <span>Search</span>
+                  </label>
+                  <div class="feed-duration">
+                    <span class="feed-label">Chạy (phút)</span> 
+                    <input id="feedRunMinutesInput" type="number" min="1" value="30" />
+                  </div>
+                  <div class="feed-duration">
+                    <span class="feed-label">Thời gian lặp lại (phút)</span>
+                    <input id="feedRestMinutesInput" type="number" min="0" value="120" />
+                  </div>
+                </div>
+                <div class="feed-panel-row">
+                  <textarea id="feedTextInput" placeholder="Nhập text. VD: bắc ninh , bắc giang  |  hoặc: tuyển dụng bắc ninh , bắc giang"></textarea>
+                </div>
+                <div class="feed-panel-row feed-panel-actions">
+                  <button id="feedStartBtn" class="btn-success" type="button">Chạy</button>
+                  <button id="feedCancelBtn" class="btn-secondary" type="button">Hủy</button>
+                </div>
+                <p class="hint">
+                  Rule like: bài phải có (tuyển dụng/tuyển gấp/tuyển nhân viên) <b>và</b> có (bắc ninh <b>hoặc</b> bắc giang).
+                </p>
+              </div>
 
               <div id="profileList" class="profile-list empty-state-box">
                 <p class="muted">Chưa có profile nào</p>

@@ -562,6 +562,77 @@ tbody tr.filtered-out {
   gap           : 12px;
 }
 
+.feed-panel {
+  padding      : 12px;
+  border       : 1px dashed var(--border);
+  border-radius: 10px;
+  background   : #ffffff;
+}
+
+.feed-panel-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.feed-panel-row:last-child {
+  margin-bottom: 0;
+}
+
+.feed-radio {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.feed-duration {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.feed-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+#feedDurationInput {
+  width: 70px;
+  height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+#feedTextInput {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.feed-panel-actions {
+  justify-content: flex-end;
+}
+
+.feed-panel-actions button {
+  width: auto;
+  min-width: 90px;
+  height: 32px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
 .setting-card-header {
   display        : flex;
   justify-content: space-between;

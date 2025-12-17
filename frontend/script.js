@@ -28,6 +28,12 @@ const addProfileRowBtn = document.getElementById('addProfileRowBtn');
 const autoJoinGroupBtn = document.getElementById('autoJoinGroupBtn');
 const stopAllSettingBtn = document.getElementById('stopAllSettingBtn');
 const feedAccountSettingBtn = document.getElementById('feedAccountSettingBtn');
+const feedConfigPanel = document.getElementById('feedConfigPanel');
+const feedTextInput = document.getElementById('feedTextInput');
+const feedRunMinutesInput = document.getElementById('feedRunMinutesInput');
+const feedRestMinutesInput = document.getElementById('feedRestMinutesInput');
+const feedStartBtn = document.getElementById('feedStartBtn');
+const feedCancelBtn = document.getElementById('feedCancelBtn');
 
 const API_BASE = 'http://localhost:8000';
 const SETTINGS_STORAGE_KEY = 'profileSettings';
@@ -46,6 +52,7 @@ let profileState = {
 };
 let addRowEl = null; // Row tạm để nhập profile mới
 let joinGroupPollTimer = null;
+let feedPollTimer = null;
 
 stopBtn.disabled = true;
 
@@ -638,7 +645,96 @@ if (addProfileRowBtn) {
 
 if (feedAccountSettingBtn) {
   feedAccountSettingBtn.addEventListener('click', () => {
-    showToast('Nuôi acc: để tạm (chưa làm).', 'success');
+    if (!feedConfigPanel) {
+      showToast('Thiếu UI feedConfigPanel.', 'error');
+      return;
+    }
+    feedConfigPanel.style.display = (feedConfigPanel.style.display === 'none' || !feedConfigPanel.style.display) ? 'block' : 'none';
+  });
+}
+
+if (feedCancelBtn && feedConfigPanel) {
+  feedCancelBtn.addEventListener('click', () => {
+    feedConfigPanel.style.display = 'none';
+  });
+}
+
+if (feedStartBtn) {
+  feedStartBtn.addEventListener('click', async () => {
+    const selected = Object.keys(profileState.selected || {}).filter((pid) => profileState.selected[pid]);
+    if (selected.length === 0) {
+      showToast('Chọn (tick) ít nhất 1 profile để nuôi acc.', 'error');
+      return;
+    }
+
+    const modeEl = document.querySelector('input[name="feedMode"]:checked');
+    const mode = modeEl ? String(modeEl.value || 'feed') : 'feed';
+    const text = String(feedTextInput?.value || '').trim();
+    const runMinutes = parseInt(String(feedRunMinutesInput?.value || '30').trim(), 10);
+    const restMinutes = parseInt(String(feedRestMinutesInput?.value || '0').trim(), 10);
+
+    // Feed: cho phép text rỗng (quét theo keyword mặc định). Search: bắt buộc có text.
+    if (!text && mode === 'search') {
+      showToast('Search cần nhập text.', 'error');
+      return;
+    }
+    if (!runMinutes || runMinutes <= 0) {
+      showToast('Chạy (phút) không hợp lệ.', 'error');
+      return;
+    }
+    if (!Number.isFinite(restMinutes) || restMinutes < 0) {
+      showToast('Nghỉ (phút) không hợp lệ.', 'error');
+      return;
+    }
+
+    setButtonLoading(feedStartBtn, true, 'Đang chạy...');
+    setButtonLoading(feedAccountSettingBtn, true, 'Đang nuôi acc...');
+    try {
+      const res = await callBackend('/feed/start', {
+        method: 'POST',
+        body: JSON.stringify({
+          profile_ids: selected,
+          mode,
+          text,
+          run_minutes: runMinutes,
+          rest_minutes: restMinutes,
+        }),
+      });
+      const started = res && Array.isArray(res.started) ? res.started.length : 0;
+      const skipped = res && Array.isArray(res.skipped) ? res.skipped.length : 0;
+      const loopText = (restMinutes > 0) ? ` (loop: ${runMinutes}p / nghỉ ${restMinutes}p)` : '';
+      showToast(`Đã chạy nuôi acc (${mode})${loopText}: started=${started}, skipped=${skipped}`, 'success', 2600);
+      if (feedConfigPanel) feedConfigPanel.style.display = 'none';
+
+      // Nếu chạy vòng lặp (restMinutes > 0) thì coi như chạy liên tục -> không poll "hoàn thành"
+      if (restMinutes <= 0) {
+        if (feedPollTimer) clearInterval(feedPollTimer);
+        feedPollTimer = setInterval(async () => {
+          try {
+            const st = await callBackendNoAlert('/feed/status', { method: 'GET' });
+            const running = (st && Array.isArray(st.running)) ? st.running : [];
+            const still = selected.filter((pid) => running.includes(pid));
+            if (still.length === 0) {
+              clearInterval(feedPollTimer);
+              feedPollTimer = null;
+              setButtonLoading(feedStartBtn, false);
+              setButtonLoading(feedAccountSettingBtn, false);
+              showToast('✅ Nuôi acc: Hoàn thành', 'success', 2000);
+            }
+          } catch (e) {
+            clearInterval(feedPollTimer);
+            feedPollTimer = null;
+            setButtonLoading(feedStartBtn, false);
+            setButtonLoading(feedAccountSettingBtn, false);
+            showToast('Không lấy được trạng thái nuôi acc (kiểm tra FastAPI).', 'error');
+          }
+        }, 4000);
+      }
+    } catch (e) {
+      setButtonLoading(feedStartBtn, false);
+      setButtonLoading(feedAccountSettingBtn, false);
+      showToast('Không chạy được nuôi acc (kiểm tra FastAPI).', 'error');
+    }
   });
 }
 
@@ -681,7 +777,7 @@ if (autoJoinGroupBtn) {
           setButtonLoading(autoJoinGroupBtn, false);
           showToast('Không lấy được trạng thái auto join (kiểm tra FastAPI).', 'error');
         }
-      }, 1500);
+      }, 4000);
     } catch (e) {
       showToast('Không chạy được auto join group (kiểm tra FastAPI).', 'error');
       setButtonLoading(autoJoinGroupBtn, false);
@@ -710,7 +806,14 @@ async function handleStopAll() {
       clearInterval(joinGroupPollTimer);
       joinGroupPollTimer = null;
     }
+    if (feedPollTimer) {
+      clearInterval(feedPollTimer);
+      feedPollTimer = null;
+    }
     setButtonLoading(autoJoinGroupBtn, false);
+    setButtonLoading(feedAccountSettingBtn, false);
+    setButtonLoading(feedStartBtn, false);
+    if (feedConfigPanel) feedConfigPanel.style.display = 'none';
   }
 }
 
@@ -1239,9 +1342,16 @@ function setBackendStatus(message, isOnline = false) {
 
 async function callBackend(path, options = {}) {
   const url = `${API_BASE}${path}`;
+  const method = (options.method || 'POST').toUpperCase();
+  const headers = { ...(options.headers || {}) };
+  // Chỉ set Content-Type khi có body => tránh preflight OPTIONS spam cho GET /status
+  if (options.body != null && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+
   const res = await fetch(url, {
-    method: options.method || 'POST',
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    method,
+    headers,
     ...options,
   });
 

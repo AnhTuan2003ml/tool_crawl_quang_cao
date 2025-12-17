@@ -220,7 +220,7 @@ class FBController:
         self.captured_response_id = None # ID từ Response (Ưu tiên)
         
         self.job_keywords = [
-            "tuyển dụng", "tuyển nhân viên", "tuyển gấp", "việc làm", 
+            "tuyển dụng", "tuyển nhân viên", "tuyển gấp", "việc làm", "tuyển",
             "lương", "phỏng vấn", "hồ sơ",
             "full-time", "part-time", "thực tập", "kế toán", "may mặc", "kcn" ,"Ứng viên " , "Ứng tuyển"
         ]

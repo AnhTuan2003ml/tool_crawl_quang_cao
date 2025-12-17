@@ -33,6 +33,8 @@ runner_process: Optional[Process] = None
 _settings_lock = threading.Lock()
 _join_groups_lock = threading.Lock()
 _join_groups_processes: Dict[str, Process] = {}
+_feed_lock = threading.Lock()
+_feed_processes: Dict[str, Process] = {}
 
 
 def _run_join_groups_worker(profile_id: str, groups: list[str]) -> None:
@@ -42,6 +44,36 @@ def _run_join_groups_worker(profile_id: str, groups: list[str]) -> None:
         run_batch_join_from_list(profile_id, groups)
     except Exception as exc:
         print(f"❌ Join groups worker lỗi ({profile_id}): {exc}")
+
+
+def _run_feed_worker(profile_id: str, mode: str, text: str, run_minutes: int, rest_minutes: int) -> None:
+    """
+    Worker chạy nuôi acc (feed/search & like) cho 1 profile theo vòng lặp:
+    chạy run_minutes -> tắt -> nghỉ rest_minutes -> lặp lại.
+    Nếu rest_minutes <= 0 thì chỉ chạy 1 lần.
+    """
+    try:
+        from core.search_worker import feed_and_like, search_and_like
+        m = str(mode or "feed").strip().lower()
+        run_m = int(run_minutes or 0)
+        rest_m = int(rest_minutes or 0)
+        if run_m <= 0:
+            run_m = 30
+
+        while True:
+            if m == "search":
+                search_and_like(profile_id, text or "", duration_minutes=run_m)
+            else:
+                feed_and_like(profile_id, text or "", duration_minutes=run_m)
+
+            if rest_m <= 0:
+                break
+
+            # nghỉ rồi chạy lại (process có thể bị terminate bởi stop-all)
+            import time as _t
+            _t.sleep(rest_m * 60)
+    except Exception as exc:
+        print(f"❌ Feed worker lỗi ({profile_id}): {exc}")
 
 
 def _close_fb_controller_best_effort(fb: Optional[FBController], profile_id: str) -> None:
@@ -305,6 +337,20 @@ class JoinGroupsStopRequest(BaseModel):
     profile_ids: Optional[list[str]] = None
 
 
+class FeedStartRequest(BaseModel):
+    profile_ids: list[str]
+    mode: str = "feed"  # "feed" | "search"
+    text: str = ""      # input text (địa điểm, hoặc query search)
+    # backward-compat: giữ field cũ nếu frontend cũ còn gọi
+    filter_text: str = ""
+    run_minutes: int = 30
+    rest_minutes: int = 0
+
+
+class FeedStopRequest(BaseModel):
+    profile_ids: Optional[list[str]] = None
+
+
 @app.put("/settings/api-key")
 def update_api_key(payload: ApiKeyPayload) -> dict:
     with _settings_lock:
@@ -473,6 +519,18 @@ def _prune_join_group_processes() -> None:
         _join_groups_processes.pop(pid, None)
 
 
+def _prune_feed_processes() -> None:
+    dead = []
+    for pid, proc in list(_feed_processes.items()):
+        try:
+            if not proc.is_alive():
+                dead.append(pid)
+        except Exception:
+            dead.append(pid)
+    for pid in dead:
+        _feed_processes.pop(pid, None)
+
+
 @app.post("/groups/join")
 def auto_join_groups(payload: JoinGroupsRequest) -> dict:
     """
@@ -600,6 +658,103 @@ def join_groups_status() -> dict:
     return {"running": running}
 
 
+@app.get("/feed/status")
+def feed_status() -> dict:
+    """Trạng thái nuôi acc (feed) đang chạy."""
+    with _feed_lock:
+        _prune_feed_processes()
+        running: list[str] = []
+        for pid, proc in _feed_processes.items():
+            try:
+                if proc.is_alive():
+                    running.append(pid)
+            except Exception:
+                pass
+    return {"running": running}
+
+
+@app.post("/feed/start")
+def feed_start(payload: FeedStartRequest) -> dict:
+    """Chạy nuôi acc (feed & like) cho các profile đã chọn (mỗi profile 1 process)."""
+    if not payload.profile_ids:
+        raise HTTPException(status_code=400, detail="profile_ids rỗng")
+
+    pids = [_norm_profile_id(x) for x in payload.profile_ids]
+    pids = [p for p in pids if p]
+    if not pids:
+        raise HTTPException(status_code=400, detail="profile_ids không hợp lệ")
+
+    run_minutes = int(payload.run_minutes or 0)
+    if run_minutes <= 0:
+        raise HTTPException(status_code=400, detail="run_minutes phải > 0")
+    rest_minutes = int(payload.rest_minutes or 0)
+    if rest_minutes < 0:
+        raise HTTPException(status_code=400, detail="rest_minutes phải >= 0")
+
+    started: list[str] = []
+    skipped: list[dict] = []
+    mode = str(payload.mode or "feed").strip().lower()
+    text = str(payload.text or "").strip()
+    # backward-compat
+    if not text and getattr(payload, "filter_text", None):
+        text = str(payload.filter_text or "").strip()
+    # Cho phép text rỗng nếu mode=feed (sẽ chỉ filter theo keyword mặc định)
+    if not text and mode == "search":
+        raise HTTPException(status_code=400, detail="text rỗng (search cần text)")
+
+    with _feed_lock:
+        _prune_feed_processes()
+        for pid in pids:
+            existing = _feed_processes.get(pid)
+            if existing and existing.is_alive():
+                skipped.append({"profile_id": pid, "reason": "already_running"})
+                continue
+
+            proc = Process(
+                target=_run_feed_worker,
+                args=(pid, mode, text, run_minutes, rest_minutes),
+                daemon=True,
+            )
+            proc.start()
+            _feed_processes[pid] = proc
+            started.append(pid)
+
+    return {"status": "ok", "started": started, "skipped": skipped, "running": list(_feed_processes.keys())}
+
+
+@app.post("/feed/stop")
+def feed_stop(payload: Optional[FeedStopRequest] = Body(None)) -> dict:
+    """Dừng nuôi acc (feed) theo list profile_ids hoặc dừng tất cả nếu không truyền."""
+    target: Optional[list[str]] = None
+    if payload and payload.profile_ids is not None:
+        target = [_norm_profile_id(x) for x in (payload.profile_ids or [])]
+        target = [p for p in target if p]
+
+    stopped: list[str] = []
+    with _feed_lock:
+        _prune_feed_processes()
+        keys = list(_feed_processes.keys())
+        to_stop = keys if target is None else [p for p in target if p in _feed_processes]
+        for pid in to_stop:
+            proc = _feed_processes.get(pid)
+            try:
+                if proc and proc.is_alive():
+                    proc.terminate()
+                    proc.join(timeout=5)
+            except Exception:
+                pass
+            _feed_processes.pop(pid, None)
+            stopped.append(pid)
+
+    for pid in stopped:
+        try:
+            stop_profile(pid)
+        except Exception:
+            pass
+
+    return {"status": "ok", "stopped": stopped}
+
+
 @app.get("/jobs/status")
 def jobs_status() -> dict:
     """Trạng thái chung (để UI hiển thị/diagnose)."""
@@ -613,10 +768,20 @@ def jobs_status() -> dict:
                     join_running.append(pid)
             except Exception:
                 pass
+    with _feed_lock:
+        _prune_feed_processes()
+        feed_running = []
+        for pid, proc in _feed_processes.items():
+            try:
+                if proc.is_alive():
+                    feed_running.append(pid)
+            except Exception:
+                pass
     return {
         "bot_running": is_bot_running,
         "bot_pid": runner_process.pid if is_bot_running else None,
         "join_groups_running": join_running,
+        "feed_running": feed_running,
     }
 
 
@@ -630,6 +795,7 @@ def stop_all_jobs() -> dict:
     stopped = {
         "bot": False,
         "join_groups": [],
+        "feed": [],
     }
 
     # 1) stop bot runner
@@ -659,8 +825,25 @@ def stop_all_jobs() -> dict:
             _join_groups_processes.pop(pid, None)
         stopped["join_groups"] = join_to_stop
 
-    # 3) Force đóng toàn bộ tab NST theo tất cả PROFILE_IDS trong settings.json
-    # (đúng yêu cầu: "Dừng" = tắt toàn bộ tab NST + trạng thái hoạt động)
+    # 2b) stop feed processes
+    feed_to_stop: list[str] = []
+    with _feed_lock:
+        _prune_feed_processes()
+        feed_to_stop = list(_feed_processes.keys())
+        for pid in feed_to_stop:
+            proc = _feed_processes.get(pid)
+            try:
+                if proc and proc.is_alive():
+                    proc.terminate()
+                    proc.join(timeout=5)
+            except Exception:
+                pass
+            _feed_processes.pop(pid, None)
+        stopped["feed"] = feed_to_stop
+
+    # 3) Đóng tab NST mà KHÔNG mở profile mới:
+    # - gọi stop_profile(pid) (best-effort, không connect)
+    # - gọi stop_all_browsers() (nếu bản NST hỗ trợ)
     nst_attempted: list[str] = []
     try:
         raw = _read_settings_raw()
@@ -670,33 +853,21 @@ def stop_all_jobs() -> dict:
     except Exception:
         nst_attempted = []
 
-    # Ưu tiên stop các profile đang join trước, rồi stop phần còn lại
+    # Ưu tiên stop các profile đang join/feed trước, rồi stop phần còn lại
     ordered = []
     seen = set()
-    for pid in (join_to_stop + nst_attempted):
+    for pid in (join_to_stop + feed_to_stop + nst_attempted):
         if pid and pid not in seen:
             seen.add(pid)
             ordered.append(pid)
 
-    results: list[dict] = []
-    # Chạy song song nhẹ để nhanh hơn nhưng không quá nặng (mỗi worker có playwright)
-    max_workers = 3 if len(ordered) >= 3 else max(1, len(ordered))
-    try:
-        with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            futs = [ex.submit(_force_close_nst_tabs_for_profile, pid) for pid in ordered]
-            for fut in as_completed(futs):
-                try:
-                    results.append(fut.result())
-                except Exception as exc:
-                    results.append({"ok": False, "reason": str(exc)})
-    except Exception as exc:
-        # Fallback: chạy tuần tự nếu threadpool lỗi
-        results = []
-        for pid in ordered:
-            try:
-                results.append(_force_close_nst_tabs_for_profile(pid))
-            except Exception as e:
-                results.append({"profile_id": pid, "ok": False, "reason": str(e)})
+    nst_ok: list[str] = []
+    for pid in ordered:
+        try:
+            if stop_profile(pid):
+                nst_ok.append(pid)
+        except Exception:
+            pass
 
     # 4) Fallback: cố gắng gọi endpoint "stop/close all" của NST (nếu bản NST hỗ trợ)
     nst_stop_all_ok = False
@@ -705,14 +876,14 @@ def stop_all_jobs() -> dict:
     except Exception:
         nst_stop_all_ok = False
 
-    nst_ok = [r.get("profile_id") for r in results if r.get("ok") and r.get("profile_id")]
     return {
         "status": "ok",
         "stopped": stopped,
         "nst_stop_attempted": ordered,
         "nst_stop_ok": nst_ok,
         "nst_stop_all_ok": nst_stop_all_ok,
-        "nst_force_close_results": results,
+        # giữ field này để frontend cũ không bị crash
+        "nst_force_close_results": [],
     }
 
 @app.delete("/settings/profiles/{profile_id}")
