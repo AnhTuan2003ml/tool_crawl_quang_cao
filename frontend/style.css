@@ -35,23 +35,23 @@ body.splash-active {
 
 /* Splash Screen */
 .splash-screen {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%);
+  position       : fixed;
+  top            : 0;
+  left           : 0;
+  width          : 100%;
+  height         : 100%;
+  background     : linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%);
   background-size: 400% 400%;
-  animation: gradientShift 15s ease infinite;
-  display: flex;
-  align-items: center;
+  animation      : gradientShift 15s ease infinite;
+  display        : flex;
+  align-items    : center;
   justify-content: center;
-  z-index: 10000;
-  transition: opacity 0.6s ease, visibility 0.6s ease;
+  z-index        : 10000;
+  transition     : opacity 0.6s ease, visibility 0.6s ease;
 }
 
 .splash-screen.hidden {
-  opacity: 0;
+  opacity   : 0;
   visibility: hidden;
 }
 
@@ -59,9 +59,11 @@ body.splash-active {
   0% {
     background-position: 0% 50%;
   }
+
   50% {
     background-position: 100% 50%;
   }
+
   100% {
     background-position: 0% 50%;
   }
@@ -69,57 +71,58 @@ body.splash-active {
 
 .splash-content {
   text-align: center;
-  animation: fadeInUp 0.8s ease-out;
+  animation : fadeInUp 0.8s ease-out;
 }
 
 .splash-title {
-  font-size: 48px;
-  font-weight: 700;
-  color: white;
-  margin: 0 0 16px 0;
-  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  font-size     : 48px;
+  font-weight   : 700;
+  color         : white;
+  margin        : 0 0 16px 0;
+  text-shadow   : 0 4px 20px rgba(0, 0, 0, 0.3);
   letter-spacing: 2px;
-  animation: titleGlow 2s ease-in-out infinite alternate;
+  animation     : titleGlow 2s ease-in-out infinite alternate;
 }
 
 @keyframes titleGlow {
   from {
     text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 30px rgba(255, 255, 255, 0.2);
   }
+
   to {
     text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 40px rgba(255, 255, 255, 0.4);
   }
 }
 
 .splash-subtitle {
-  font-size: 18px;
-  color: rgba(255, 255, 255, 0.9);
-  margin: 0 0 40px 0;
+  font-size  : 18px;
+  color      : rgba(255, 255, 255, 0.9);
+  margin     : 0 0 40px 0;
   font-weight: 400;
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
 }
 
 .splash-btn {
-  padding: 16px 48px;
-  font-size: 18px;
-  font-weight: 600;
-  color: white;
-  background: rgba(255, 255, 255, 0.2);
+  padding        : 16px 48px;
+  font-size      : 18px;
+  font-weight    : 600;
+  color          : white;
+  background     : rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(10px);
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  border         : 2px solid rgba(255, 255, 255, 0.3);
+  border-radius  : 50px;
+  cursor         : pointer;
+  transition     : all 0.3s ease;
+  box-shadow     : 0 8px 32px rgba(0, 0, 0, 0.2);
+  text-transform : uppercase;
+  letter-spacing : 1px;
 }
 
 .splash-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background  : rgba(255, 255, 255, 0.3);
   border-color: rgba(255, 255, 255, 0.5);
-  transform: translateY(-3px) scale(1.05);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+  transform   : translateY(-3px) scale(1.05);
+  box-shadow  : 0 12px 40px rgba(0, 0, 0, 0.3);
 }
 
 .splash-btn:active {
@@ -128,7 +131,7 @@ body.splash-active {
 
 /* Ẩn container khi splash đang hiển thị */
 body.splash-active .container {
-  opacity: 0;
+  opacity       : 0;
   pointer-events: none;
 }
 
@@ -370,22 +373,27 @@ button {
 /* Loading state (spinner) */
 .btn-loading {
   opacity: 0.9;
-  cursor: not-allowed;
+  cursor : not-allowed;
 }
 
 .btn-loading::after {
-  content: "";
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.55);
+  content         : "";
+  width           : 14px;
+  height          : 14px;
+  border-radius   : 50%;
+  border          : 2px solid rgba(255, 255, 255, 0.55);
   border-top-color: rgba(255, 255, 255, 1);
-  animation: btnSpin 0.9s linear infinite;
+  animation       : btnSpin 0.9s linear infinite;
 }
 
 @keyframes btnSpin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 button::before {
@@ -512,20 +520,20 @@ button:active {
 
 /* Filter Container */
 .filter-container {
-  margin-bottom: 16px;
-  padding      : 12px 16px;
-  background   : #f9fafb;
-  border-radius: 10px;
-  border       : 1px solid var(--border);
-  display      : flex;
+  margin-bottom : 16px;
+  padding       : 12px 16px;
+  background    : #f9fafb;
+  border-radius : 10px;
+  border        : 1px solid var(--border);
+  display       : flex;
   flex-direction: column;
-  gap          : 12px;
+  gap           : 12px;
 }
 
 .filter-group {
-  display      : flex;
+  display       : flex;
   flex-direction: column;
-  gap          : 8px;
+  gap           : 8px;
 }
 
 .filter-group:not(:last-child) {
@@ -539,64 +547,64 @@ button:active {
 }
 
 .time-filter-inline {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  border: 1.5px solid var(--border);
+  display      : inline-flex;
+  align-items  : center;
+  gap          : 5px;
+  background   : linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border       : 1.5px solid var(--border);
   border-radius: 8px;
-  padding: 5px 7px;
-  max-width: fit-content;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-  transition: all 0.3s ease;
+  padding      : 5px 7px;
+  max-width    : fit-content;
+  box-shadow   : 0 2px 6px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition   : all 0.3s ease;
 }
 
 .time-filter-inline:hover {
   border-color: var(--primary);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06);
+  box-shadow  : 0 4px 12px rgba(99, 102, 241, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06);
 }
 
 .time-filter-input-compact {
-  width: 135px;
-  padding: 6px 8px;
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  width        : 135px;
+  padding      : 6px 8px;
+  border       : 1px solid rgba(99, 102, 241, 0.2);
   border-radius: 6px;
-  font-size: 12px;
-  background: white;
-  color: var(--text-primary);
-  transition: all 0.25s ease;
-  font-family: inherit;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  font-size    : 12px;
+  background   : white;
+  color        : var(--text-primary);
+  transition   : all 0.25s ease;
+  font-family  : inherit;
+  box-shadow   : 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .time-filter-input-compact:hover {
   border-color: var(--primary);
-  box-shadow: 0 2px 4px rgba(99, 102, 241, 0.15);
-  transform: translateY(-1px);
+  box-shadow  : 0 2px 4px rgba(99, 102, 241, 0.15);
+  transform   : translateY(-1px);
 }
 
 .time-filter-input-compact:focus {
-  outline: none;
+  outline     : none;
   border-color: var(--primary);
-  background: white;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1), 0 2px 6px rgba(99, 102, 241, 0.2);
-  transform: translateY(-1px);
+  background  : white;
+  box-shadow  : 0 0 0 3px rgba(99, 102, 241, 0.1), 0 2px 6px rgba(99, 102, 241, 0.2);
+  transform   : translateY(-1px);
 }
 
 .time-filter-input-compact::placeholder {
-  color: #9ca3af;
-  font-size: 11px;
+  color     : #9ca3af;
+  font-size : 11px;
   font-style: italic;
 }
 
 .time-filter-separator {
-  color: var(--primary);
-  font-size: 12px;
+  color      : var(--primary);
+  font-size  : 12px;
   font-weight: 700;
-  padding: 0 2px;
+  padding    : 0 2px;
   flex-shrink: 0;
-  opacity: 0.6;
-  transition: opacity 0.2s ease;
+  opacity    : 0.6;
+  transition : opacity 0.2s ease;
 }
 
 .time-filter-inline:hover .time-filter-separator {
@@ -604,30 +612,30 @@ button:active {
 }
 
 .time-filter-btn-compact {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: none;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.25s ease;
-  display: flex;
-  align-items: center;
+  width          : 28px;
+  height         : 28px;
+  padding        : 0;
+  border         : none;
+  border-radius  : 6px;
+  font-size      : 13px;
+  font-weight    : 700;
+  cursor         : pointer;
+  transition     : all 0.25s ease;
+  display        : flex;
+  align-items    : center;
   justify-content: center;
-  flex-shrink: 0;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  flex-shrink    : 0;
+  box-shadow     : 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .time-filter-apply-compact {
   background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
-  color: white;
+  color     : white;
 }
 
 .time-filter-apply-compact:hover {
   background: linear-gradient(135deg, #059669 0%, var(--success) 100%);
-  transform: translateY(-2px) scale(1.05);
+  transform : translateY(-2px) scale(1.05);
   box-shadow: 0 4px 8px rgba(16, 185, 129, 0.4);
 }
 
@@ -638,13 +646,16 @@ button:active {
 .time-filter-apply-compact.active {
   background: linear-gradient(135deg, #047857 0%, #059669 100%);
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.3), 0 4px 12px rgba(16, 185, 129, 0.4);
-  animation: pulseSuccess 2s ease-in-out infinite;
+  animation : pulseSuccess 2s ease-in-out infinite;
 }
 
 @keyframes pulseSuccess {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.3), 0 4px 12px rgba(16, 185, 129, 0.4);
   }
+
   50% {
     box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.4), 0 6px 16px rgba(16, 185, 129, 0.5);
   }
@@ -652,16 +663,16 @@ button:active {
 
 .time-filter-clear-compact {
   background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
+  color     : var(--text-secondary);
+  border    : 1px solid var(--border);
 }
 
 .time-filter-clear-compact:hover {
-  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
-  color: var(--danger);
+  background  : linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  color       : var(--danger);
   border-color: var(--danger);
-  transform: translateY(-2px) scale(1.05);
-  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.2);
+  transform   : translateY(-2px) scale(1.05);
+  box-shadow  : 0 4px 8px rgba(239, 68, 68, 0.2);
 }
 
 .time-filter-clear-compact:active {
@@ -673,7 +684,7 @@ button:active {
   .time-filter-inline {
     flex-wrap: wrap;
   }
-  
+
   .time-filter-input-compact {
     min-width: 120px;
   }
@@ -833,9 +844,9 @@ tbody tr.filtered-out {
 }
 
 .feed-panel-row {
-  display: flex;
-  gap: 10px;
-  align-items: center;
+  display      : flex;
+  gap          : 10px;
+  align-items  : center;
   margin-bottom: 10px;
 }
 
@@ -844,44 +855,44 @@ tbody tr.filtered-out {
 }
 
 .feed-radio {
-  display: inline-flex;
-  gap: 6px;
+  display    : inline-flex;
+  gap        : 6px;
   align-items: center;
-  font-size: 13px;
+  font-size  : 13px;
   font-weight: 600;
-  color: var(--text-primary);
+  color      : var(--text-primary);
 }
 
 .feed-duration {
   margin-left: auto;
-  display: inline-flex;
-  gap: 6px;
+  display    : inline-flex;
+  gap        : 6px;
   align-items: center;
 }
 
 .feed-label {
-  font-size: 12px;
-  color: var(--text-secondary);
+  font-size  : 12px;
+  color      : var(--text-secondary);
   font-weight: 700;
 }
 
 #feedDurationInput {
-  width: 70px;
-  height: 32px;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
+  width        : 70px;
+  height       : 32px;
+  padding      : 6px 10px;
+  border       : 1px solid var(--border);
   border-radius: 10px;
-  font-size: 13px;
+  font-size    : 13px;
 }
 
 #feedTextInput {
-  width: 100%;
-  min-height: 64px;
-  resize: vertical;
-  padding: 10px;
-  border: 1px solid var(--border);
+  width        : 100%;
+  min-height   : 64px;
+  resize       : vertical;
+  padding      : 10px;
+  border       : 1px solid var(--border);
   border-radius: 10px;
-  font-size: 13px;
+  font-size    : 13px;
 }
 
 .feed-panel-actions {
@@ -889,10 +900,10 @@ tbody tr.filtered-out {
 }
 
 .feed-panel-actions button {
-  width: auto;
+  width    : auto;
   min-width: 90px;
-  height: 32px;
-  padding: 6px 12px;
+  height   : 32px;
+  padding  : 6px 12px;
   font-size: 13px;
 }
 
@@ -986,14 +997,14 @@ tbody tr.filtered-out {
 }
 
 .profile-select {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
+  flex           : 0 0 auto;
+  display        : flex;
+  align-items    : center;
   justify-content: center;
 }
 
 .profile-select-cb {
-  width: 16px;
+  width : 16px;
   height: 16px;
   cursor: pointer;
 }
@@ -1451,8 +1462,8 @@ tbody tr:last-child td {
 }
 
 .btn-secondary {
-  background: #f3f4f6;
-  color     : var(--text-primary);
+  background: rgb(0, 192, 0);
+  color     : white;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
@@ -1793,17 +1804,17 @@ td:nth-child(5) {
   }
 
   .splash-title {
-    font-size: 32px;
+    font-size     : 32px;
     letter-spacing: 1px;
   }
 
   .splash-subtitle {
-    font-size: 16px;
+    font-size    : 16px;
     margin-bottom: 30px;
   }
 
   .splash-btn {
-    padding: 14px 36px;
+    padding  : 14px 36px;
     font-size: 16px;
   }
 }

@@ -760,8 +760,11 @@ class FBController:
                 continue
 
             try:
-                print(f"   ➜ Gọi get_id(profile_id={pid}, post_id={post_id})")
-                get_id_from_url(pid, post_id)
+                # Worker `get_id_from_url(url, profile_id)` cần URL chứ không phải post_id.
+                # Tạo link giả lập giống `save_post_id()` để worker parse tiếp.
+                target_url = f"https://www.facebook.com/{post_id}"
+                print(f"   ➜ Gọi get_id_from_url(url={target_url}, profile_id={pid})")
+                get_id_from_url(target_url, pid)
             except Exception as e:
                 print(f"   ❌ Lỗi get_id với profile {pid}: {e}")
                 
