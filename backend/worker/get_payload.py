@@ -5,14 +5,45 @@ from pathlib import Path
 
 # ====== ĐƯỜNG DẪN THEO PROJECT ROOT ======
 BASE_DIR = Path(__file__).resolve().parents[2]  # Thư mục gốc project
-COOKIES_JSON_FILE = BASE_DIR / "backend" / "config" / "cookies.json"
+SETTINGS_JSON_FILE = BASE_DIR / "backend" / "config" / "settings.json"
 PAYLOAD_TXT_FILE = BASE_DIR / "backend" / "config" / "payload.txt"
+
+
+def _normalize_cookie(cookie: str | None) -> str | None:
+    if cookie is None:
+        return None
+    cookie = str(cookie).strip()
+    if not cookie:
+        return None
+    # Loại bỏ ký tự xuống dòng và khoảng trắng thừa
+    return " ".join(cookie.split())
+
+
+def _read_settings_profile_config(profile_id: str) -> dict | None:
+    """
+    Đọc PROFILE_IDS[profile_id] từ backend/config/settings.json.
+    Trả về dict config hoặc None nếu không có.
+    """
+    try:
+        if not SETTINGS_JSON_FILE.exists():
+            return None
+        with open(SETTINGS_JSON_FILE, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        profiles = raw.get("PROFILE_IDS")
+        if not isinstance(profiles, dict):
+            return None
+        cfg = profiles.get(profile_id)
+        return cfg if isinstance(cfg, dict) else None
+    except Exception:
+        return None
 
 
 def get_cookies_by_profile_id(profile_id):
     """
-    Lấy cookies từ cookies.json dựa trên profile_id
-    Hỗ trợ cả format cũ (string) và format mới (object với cookie và access_token)
+    Lấy cookies theo profile_id.
+
+    Ưu tiên đọc từ backend/config/settings.json:
+      PROFILE_IDS[profile_id].cookie
     
     Args:
         profile_id (str): Profile ID (ví dụ: "031ca13d-e8fa-400c-a603-df57a2806788")
@@ -20,41 +51,23 @@ def get_cookies_by_profile_id(profile_id):
     Returns:
         str: Cookie string hoặc None nếu không tìm thấy
     """
-    try:
-        with open(COOKIES_JSON_FILE, "r", encoding="utf-8") as f:
-            cookies_data = json.load(f)
-        
-        if profile_id in cookies_data:
-            profile_data = cookies_data[profile_id]
-            
-            # Hỗ trợ format mới (object)
-            if isinstance(profile_data, dict):
-                cookie = profile_data.get("cookie", "").strip()
-            # Hỗ trợ format cũ (string)
-            elif isinstance(profile_data, str):
-                cookie = profile_data.strip()
-            else:
-                print(f"❌ Format không hợp lệ cho profile_id '{profile_id}'")
-                return None
-            
-            # Loại bỏ ký tự xuống dòng và khoảng trắng thừa
-            cookie = " ".join(cookie.split())
+    # 1) ƯU TIÊN: settings.json
+    cfg = _read_settings_profile_config(profile_id)
+    if cfg is not None:
+        cookie = _normalize_cookie(cfg.get("cookie"))
+        if cookie:
             return cookie
-        else:
-            print(f"❌ Không tìm thấy profile_id '{profile_id}' trong {COOKIES_JSON_FILE}")
-            print(f"   Các profile_id có sẵn: {list(cookies_data.keys())}")
-            return None
-    except FileNotFoundError:
-        print(f"❌ Không tìm thấy file {COOKIES_JSON_FILE}!")
-        return None
-    except Exception as e:
-        print(f"❌ Lỗi khi đọc {COOKIES_JSON_FILE}: {e}")
-        return None
+
+    print(f"❌ Không tìm thấy cookie trong {SETTINGS_JSON_FILE} cho profile_id='{profile_id}'")
+    return None
 
 
 def get_access_token_by_profile_id(profile_id):
     """
-    Lấy access_token từ cookies.json dựa trên profile_id
+    Lấy access_token theo profile_id.
+
+    Ưu tiên đọc từ backend/config/settings.json:
+      PROFILE_IDS[profile_id].access_token
     
     Args:
         profile_id (str): Profile ID (ví dụ: "031ca13d-e8fa-400c-a603-df57a2806788")
@@ -62,34 +75,15 @@ def get_access_token_by_profile_id(profile_id):
     Returns:
         str: Access token hoặc None nếu không tìm thấy
     """
-    try:
-        with open(COOKIES_JSON_FILE, "r", encoding="utf-8") as f:
-            cookies_data = json.load(f)
-        
-        if profile_id in cookies_data:
-            profile_data = cookies_data[profile_id]
-            
-            # Chỉ hỗ trợ format mới (object)
-            if isinstance(profile_data, dict):
-                access_token = profile_data.get("access_token", "").strip()
-                if access_token:
-                    return access_token
-                else:
-                    return None
-            # Format cũ (string) không có access_token
-            else:
-                print(f"⚠️ Profile_id '{profile_id}' đang dùng format cũ, không có access_token")
-                return None
-        else:
-            print(f"❌ Không tìm thấy profile_id '{profile_id}' trong {COOKIES_JSON_FILE}")
-            print(f"   Các profile_id có sẵn: {list(cookies_data.keys())}")
-            return None
-    except FileNotFoundError:
-        print(f"❌ Không tìm thấy file {COOKIES_JSON_FILE}!")
-        return None
-    except Exception as e:
-        print(f"❌ Lỗi khi đọc {COOKIES_JSON_FILE}: {e}")
-        return None
+    # 1) ƯU TIÊN: settings.json
+    cfg = _read_settings_profile_config(profile_id)
+    if cfg is not None:
+        access_token = str(cfg.get("access_token") or "").strip()
+        if access_token:
+            return access_token
+
+    print(f"❌ Không tìm thấy access_token trong {SETTINGS_JSON_FILE} cho profile_id='{profile_id}'")
+    return None
 
 
 def get_base_headers(cookie):
