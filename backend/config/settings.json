@@ -9,6 +9,36 @@
       "groups": [
         "https://www.facebook.com/groups/tuyendungkisuIT"
       ]
+    },
+    "a": {
+      "cookie": "",
+      "access_token": "",
+      "groups": []
+    },
+    "ac": {
+      "cookie": "",
+      "access_token": "",
+      "groups": []
+    },
+    "cac": {
+      "cookie": "",
+      "access_token": "",
+      "groups": []
+    },
+    "âcccac": {
+      "cookie": "",
+      "access_token": "",
+      "groups": []
+    },
+    "cấcc": {
+      "cookie": "",
+      "access_token": "",
+      "groups": []
+    },
+    "các": {
+      "cookie": "",
+      "access_token": "",
+      "groups": []
     }
   },
   "RUN_MINUTES": 30,

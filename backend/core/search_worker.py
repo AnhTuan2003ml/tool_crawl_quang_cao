@@ -318,11 +318,11 @@ class SearchBotController(FBController):
             print(f"🎲 [LikeProb] p={p:.2f} roll={roll:.2f} -> {'LIKE' if should_like else 'SKIP'}")
             if should_like:
                 # like_current_post tự bỏ qua nếu bài đã Like
-                self.like_current_post(post_handle)
+            self.like_current_post(post_handle)
 
             # 4. Đánh dấu đã xử lý (Để bot lướt tiếp bài sau)
             self.mark_post_as_processed(post_handle)
-
+            
             return True
 
         except Exception as e:
