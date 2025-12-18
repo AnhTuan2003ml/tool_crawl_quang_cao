@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
   <link rel="stylesheet" href="style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
+
 <body>
   <!-- Splash Screen -->
   <div id="splashScreen" class="splash-screen">
@@ -32,12 +34,6 @@
           <h3>⚙️ Điều khiển</h3>
         </div>
         <div class="panel-body">
-        <div class="field">
-          <button id="backendRunBtn" class="btn-primary">
-            <span class="btn-icon">🚀</span>
-            <span>Chạy backend (FastAPI)</span>
-          </button>
-        </div>
           <div class="field">
             <button id="startBtn" class="btn-primary">
               <span class="btn-icon">▶️</span>
@@ -77,32 +73,21 @@
             </label>
             <input id="postCount" type="number" min="0" value="0" placeholder="Nhập số bài viết" />
           </div>
-          <div class="field">
-            <button id="feedAccountBtn" class="btn-primary">
-              <span class="btn-icon">🌱</span>
-              <span>Nuôi acc</span>
-            </button>
-          </div>
-          <div class="field">
-            <button id="addGroupDataBtn" class="btn-primary">
-              <span class="btn-icon">➕</span>
-              <span>Thêm data nhóm</span>
-            </button>
-          </div>
+
           <div class="field">
             <button id="exportExcelBtn" class="btn-success">
               <span class="btn-icon">📊</span>
               <span>Xuất file Excel</span>
             </button>
           </div>
-          
-        <div class="status-line">
-          <span id="statusDot" class="status-dot"></span>
-          <div class="status-text-group">
-            <div class="status-label">Trạng thái backend</div>
-            <div id="backendStatus" class="status-text">Chưa khởi động</div>
+
+          <div class="status-line">
+            <span id="statusDot" class="status-dot"></span>
+            <div class="status-text-group">
+              <div class="status-label">Trạng thái backend</div>
+              <div id="backendStatus" class="status-text">Chưa khởi động</div>
+            </div>
           </div>
-        </div>
         </div>
       </div>
 
@@ -163,7 +148,8 @@
                   <input type="datetime-local" id="timeFilterFrom" class="time-filter-input-compact" placeholder="Từ" />
                   <span class="time-filter-separator">→</span>
                   <input type="datetime-local" id="timeFilterTo" class="time-filter-input-compact" placeholder="Đến" />
-                  <button id="applyTimeFilterBtn" class="time-filter-btn-compact time-filter-apply-compact" title="Áp dụng">
+                  <button id="applyTimeFilterBtn" class="time-filter-btn-compact time-filter-apply-compact"
+                    title="Áp dụng">
                     <span>✓</span>
                   </button>
                   <button id="clearTimeFilterBtn" class="time-filter-btn-compact time-filter-clear-compact" title="Xóa">
@@ -224,7 +210,7 @@
               <div class="setting-card-header">
                 <div>
                   <h4>API Key</h4>
-                 
+
                 </div>
               </div>
               <div class="inline-field">
@@ -241,9 +227,11 @@
                   <p class="muted">Thêm profile_id và thao tác nhanh</p>
                 </div>
                 <div class="setting-card-actions">
+                  <button id="scanPostsSettingBtn" class="btn-success" type="button">Quét bài viết</button>
+                  <button id="scanGroupSettingBtn" class="btn-yellow" type="button">Quét theo group</button>
                   <button id="autoJoinGroupBtn" class="btn-primary" type="button">Auto join group</button>
-                  <button id="feedAccountSettingBtn" class="btn-secondary" type="button">Nuôi acc</button>
-                  <button id="stopAllSettingBtn" class="btn-danger" type="button">Dừng tất cả</button>s
+                  <button id="feedAccountSettingBtn" class="btn-nuoiacc" type="button">Nuôi acc</button>
+                  <button id="stopAllSettingBtn" class="btn-danger" type="button">Dừng tất cả</button>
                 </div>
               </div>
               <div id="feedConfigPanel" class="feed-panel" style="display:none;">
@@ -257,7 +245,7 @@
                     <span>Search</span>
                   </label>
                   <div class="feed-duration">
-                    <span class="feed-label">Chạy (phút)</span> 
+                    <span class="feed-label">Chạy (phút)</span>
                     <input id="feedRunMinutesInput" type="number" min="1" value="30" />
                   </div>
                   <div class="feed-duration">
@@ -266,15 +254,73 @@
                   </div>
                 </div>
                 <div class="feed-panel-row">
-                  <textarea id="feedTextInput" placeholder="Nhập text. VD: bắc ninh , bắc giang  |  hoặc: tuyển dụng bắc ninh , bắc giang"></textarea>
+                  <textarea id="feedTextInput"
+                    placeholder="Nhập text. VD: bắc ninh , bắc giang  |  hoặc: tuyển dụng bắc ninh , bắc giang"></textarea>
                 </div>
                 <div class="feed-panel-row feed-panel-actions">
                   <button id="feedStartBtn" class="btn-success" type="button">Chạy</button>
                   <button id="feedCancelBtn" class="btn-secondary" type="button">Hủy</button>
                 </div>
                 <p class="hint">
-                  Rule like: bài phải có (tuyển dụng/tuyển gấp/tuyển nhân viên) <b>và</b> có (bắc ninh <b>hoặc</b> bắc giang).
+                  Rule like: bài phải có (tuyển dụng/tuyển gấp/tuyển nhân viên) <b>và</b> có (bắc ninh <b>hoặc</b> bắc
+                  giang).
                 </p>
+              </div>
+
+              <!-- Panel: Quét bài viết (dùng core/browser.py: scan + like + share + bắt id) -->
+              <div id="scanConfigPanel" class="feed-panel" style="display:none;">
+                <div class="feed-panel-row">
+                  <label class="feed-radio">
+                    <input type="radio" name="scanMode" value="feed" checked />
+                    <span>Feed</span>
+                  </label>
+                  <label class="feed-radio">
+                    <input type="radio" name="scanMode" value="search" />
+                    <span>Search</span>
+                  </label>
+                  <div class="feed-duration">
+                    <span class="feed-label">Chạy (phút)</span>
+                    <input id="scanRunMinutesInput" type="number" min="1" value="30" />
+                  </div>
+                  <div class="feed-duration">
+                    <span class="feed-label">Thời gian lặp lại (phút)</span>
+                    <input id="scanRestMinutesInput" type="number" min="0" value="120" />
+                  </div>
+                </div>
+                <div class="feed-panel-row">
+                  <textarea id="scanTextInput"
+                    placeholder="Nhập text. VD: bắc ninh , bắc giang  |  hoặc: tuyển dụng bắc ninh , bắc giang"></textarea>
+                </div>
+                <div class="feed-panel-row feed-panel-actions">
+                  <button id="scanStartBtn" class="btn-success" type="button">Chạy</button>
+                  <button id="scanCancelBtn" class="btn-secondary" type="button">Hủy</button>
+                </div>
+                <p class="hint">
+                  Rule scan: bài phải có keyword mặc định (tuyển dụng/lương/...) <b>và</b> có ít nhất 1 cụm từ trong
+                  text
+                  nhập (nếu có).
+                </p>
+              </div>
+
+              <!-- Panel: Quét theo group (UI only - chưa nối API) -->
+              <div id="groupScanPanel" class="feed-panel" style="display:none;">
+                <div class="feed-panel-row">
+                  <div class="feed-duration feed-duration-left">
+                    <span class="feed-label">Số bài viết theo dõi</span>
+                    <input id="groupScanPostCountInput" type="number" min="0" value="0" placeholder="VD: 100" />
+                  </div>
+                </div>
+                <div class="feed-panel-row">
+                  <textarea id="groupScanUrlInput"
+                    placeholder="Nhập URL group (mỗi dòng 1 URL). VD:
+https://www.facebook.com/groups/tuyendungkisuIT
+https://www.facebook.com/groups/abc123"></textarea>
+                </div>
+                <div class="feed-panel-row feed-panel-actions">
+                  <button id="groupScanStartBtn" class="btn-success" type="button">Chạy</button>
+                  <button id="groupScanCancelBtn" class="btn-secondary" type="button">Đóng</button>
+                </div>
+                <p class="hint">Chỉ UI để nhập URL group. (Chưa nối API / chưa chạy gì)</p>
               </div>
 
               <div id="profileList" class="profile-list empty-state-box">
@@ -304,13 +350,13 @@
       <div class="tooltip-item">
         <span class="tooltip-dot tooltip-green"></span>
         <div>
-          <strong>Xanh (type1):</strong> data ưu tiên , data đối thủ 
+          <strong>Xanh (type1):</strong> data ưu tiên , data đối thủ
         </div>
       </div>
       <div class="tooltip-item">
         <span class="tooltip-dot tooltip-yellow"></span>
         <div>
-          <strong>Vàng (type2):</strong> data ưu tiên , data đối thủ 
+          <strong>Vàng (type2):</strong> data ưu tiên , data đối thủ
         </div>
       </div>
       <div class="tooltip-item">
@@ -334,4 +380,5 @@
 
   <script src="script.js"></script>
 </body>
+
 </html>

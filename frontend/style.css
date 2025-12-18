@@ -870,6 +870,10 @@ tbody tr.filtered-out {
   align-items: center;
 }
 
+.feed-duration-left {
+  margin-left: 0;
+}
+
 .feed-label {
   font-size  : 12px;
   color      : var(--text-secondary);
@@ -893,6 +897,18 @@ tbody tr.filtered-out {
   border       : 1px solid var(--border);
   border-radius: 10px;
   font-size    : 13px;
+}
+
+#scanTextInput,
+#groupScanUrlInput {
+  width        : 100%;
+  min-height   : 96px;
+  resize       : vertical;
+  padding      : 10px;
+  border       : 1px solid var(--border);
+  border-radius: 10px;
+  font-size    : 13px;
+  line-height  : 1.35;
 }
 
 .feed-panel-actions {
@@ -1462,9 +1478,31 @@ tbody tr:last-child td {
 }
 
 .btn-secondary {
-  background: rgb(0, 192, 0);
-  color     : white;
+  background: rgb(255, 255, 255);
+  color     : rgb(0, 0, 0);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.btn-nuoiacc {
+  background: rgb(0, 192, 26);
+  color     : rgb(255, 255, 255);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.btn-yellow {
+  background: rgb(157, 168, 0);
+  color     : rgb(255, 255, 255);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.btn-yellow:hover {
+  background: #e5e7eb;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.btn-nuoiacc:hover {
+  background: #e5e7eb;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 .btn-secondary:hover {
@@ -1818,3 +1856,30 @@ td:nth-child(5) {
     font-size: 16px;
   }
 }
+
+
+#scanRunMinutesInput {
+  border-radius: 5px;
+  border       : 1px solid var(--border);
+  padding      : 4px;
+}
+
+#scanRestMinutesInput {
+  border-radius: 5px;
+  border       : 1px solid var(--border);
+  padding      : 4px;
+}
+
+#feedRunMinutesInput {
+  border-radius: 5px;
+  border       : 1px solid var(--border);
+  padding      : 4px;
+}
+
+#feedRestMinutesInput {
+  border-radius: 5px;
+  border       : 1px solid var(--border);
+  padding      : 4px;
+}
+
+/* groupScanUrlInput đã dùng chung style textarea ở phía trên */

@@ -1,6 +1,7 @@
 import time  # [Cần thêm thư viện này để đếm giờ]
 from multiprocessing import Process
-from typing import Optional
+from typing import Optional, Sequence
+from urllib.parse import quote_plus
 
 from core.browser import FBController
 from core.nst import connect_profile
@@ -10,10 +11,29 @@ from core.utils import clean_profile_list
 
 
 class AppRunner:
-    def __init__(self, run_minutes: Optional[int] = None, rest_minutes: Optional[int] = None):
+    def __init__(
+        self,
+        run_minutes: Optional[int] = None,
+        rest_minutes: Optional[int] = None,
+        profile_ids: Optional[Sequence[str]] = None,
+        text: Optional[str] = None,
+        mode: Optional[str] = None,
+    ):
         cfg = get_settings()
         self.target_url = cfg.target_url
-        self.profiles = clean_profile_list(cfg.profile_ids)
+        # Cho phép override danh sách profile từ API (/run) để không chạy hết.
+        base_profiles = profile_ids if profile_ids is not None else cfg.profile_ids
+        self.profiles = clean_profile_list(base_profiles)
+        self.text = str(text or "").strip()
+        self.mode = str(mode or "feed").strip().lower()
+        if self.mode not in ("feed", "search"):
+            self.mode = "feed"
+
+        # Nếu là search => target_url sẽ là trang search posts.
+        # Vẫn dùng core/browser.py để scan/like/share/bắt id.
+        if self.mode == "search" and self.text:
+            q = quote_plus(self.text)
+            self.target_url = f"https://www.facebook.com/search/posts/?q={q}"
 
         # Ưu tiên giá trị truyền từ API; fallback cấu hình; cuối cùng là default.
         self.RUN_MINUTES = self._coerce_positive_int(
@@ -51,6 +71,30 @@ class AppRunner:
             # 2. Khởi tạo trình duyệt
             fb = FBController(ws)
             fb.profile_id = profile_id
+            # Filter thêm theo text nhập từ UI (nếu có)
+            try:
+                raw = self.text
+                if raw:
+                    # Tách theo dấu phẩy / xuống dòng, giữ nguyên cụm từ (VD "hà nội")
+                    parts = []
+                    for chunk in raw.replace("\n", ",").split(","):
+                        s = " ".join(str(chunk).strip().split())
+                        if s:
+                            parts.append(s)
+                    # unique giữ thứ tự
+                    seen = set()
+                    user_keywords = []
+                    for x in parts:
+                        k = x.lower()
+                        if k in seen:
+                            continue
+                        seen.add(k)
+                        user_keywords.append(x)
+                    fb.user_keywords = user_keywords
+                    if user_keywords:
+                        print(f"🔎 [{profile_id}] Scan filter text: {user_keywords}")
+            except Exception:
+                pass
             fb.connect()
 
             # 3. Chạy bot tương tác

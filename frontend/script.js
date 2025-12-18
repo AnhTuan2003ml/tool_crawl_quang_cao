@@ -22,7 +22,6 @@ if (splashStartBtn) {
 
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
-const backendRunBtn = document.getElementById('backendRunBtn');
 const runMinutesInput = document.getElementById('runMinutes');
 const intervalInput = document.getElementById('interval');
 const stopAllBtn = document.getElementById('stopAllBtn');
@@ -50,7 +49,20 @@ const addProfileRowBtn = document.getElementById('addProfileRowBtn');
 const autoJoinGroupBtn = document.getElementById('autoJoinGroupBtn');
 const stopAllSettingBtn = document.getElementById('stopAllSettingBtn');
 const feedAccountSettingBtn = document.getElementById('feedAccountSettingBtn');
+const scanPostsSettingBtn = document.getElementById('scanPostsSettingBtn');
+const scanGroupSettingBtn = document.getElementById('scanGroupSettingBtn');
 const feedConfigPanel = document.getElementById('feedConfigPanel');
+const scanConfigPanel = document.getElementById('scanConfigPanel');
+const groupScanPanel = document.getElementById('groupScanPanel');
+const groupScanUrlInput = document.getElementById('groupScanUrlInput');
+const groupScanPostCountInput = document.getElementById('groupScanPostCountInput');
+const groupScanStartBtn = document.getElementById('groupScanStartBtn');
+const groupScanCancelBtn = document.getElementById('groupScanCancelBtn');
+const scanTextInput = document.getElementById('scanTextInput');
+const scanRunMinutesInput = document.getElementById('scanRunMinutesInput');
+const scanRestMinutesInput = document.getElementById('scanRestMinutesInput');
+const scanStartBtn = document.getElementById('scanStartBtn');
+const scanCancelBtn = document.getElementById('scanCancelBtn');
 const feedTextInput = document.getElementById('feedTextInput');
 const feedRunMinutesInput = document.getElementById('feedRunMinutesInput');
 const feedRestMinutesInput = document.getElementById('feedRestMinutesInput');
@@ -110,7 +122,6 @@ function setScanning(isOn) {
   const startBtnText = startBtn.querySelector('span:last-child');
   startBtnText.textContent = isOn ? 'Đang quét...' : 'Bắt đầu quét';
   stopBtn.disabled = !isOn;
-  backendRunBtn.disabled = isOn;
 }
 
 // ==== Settings (frontend-only) ====
@@ -272,7 +283,7 @@ function buildProfileRow(initialPid, initialInfo) {
 
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
-  saveBtn.className = 'btn-secondary';
+  saveBtn.className = 'btn-success';
   saveBtn.textContent = 'Lưu';
 
   const removeBtn = document.createElement('button');
@@ -671,6 +682,8 @@ if (feedAccountSettingBtn) {
       showToast('Thiếu UI feedConfigPanel.', 'error');
       return;
     }
+    // Nếu panel quét bài viết đang mở thì tắt đi để khỏi chồng UI
+    if (scanConfigPanel) scanConfigPanel.style.display = 'none';
     feedConfigPanel.style.display = (feedConfigPanel.style.display === 'none' || !feedConfigPanel.style.display) ? 'block' : 'none';
   });
 }
@@ -807,6 +820,118 @@ if (autoJoinGroupBtn) {
   });
 }
 
+// Nút "Quét bài viết" trong tab Setting profile
+if (scanPostsSettingBtn) {
+  scanPostsSettingBtn.addEventListener('click', () => {
+    if (!scanConfigPanel) {
+      showToast('Thiếu UI scanConfigPanel.', 'error');
+      return;
+    }
+    // Đóng panel nuôi acc nếu đang mở để khỏi rối
+    if (feedConfigPanel) feedConfigPanel.style.display = 'none';
+    const isOpen = scanConfigPanel.style.display !== 'none';
+    scanConfigPanel.style.display = isOpen ? 'none' : 'block';
+  });
+}
+
+if (scanCancelBtn && scanConfigPanel) {
+  scanCancelBtn.addEventListener('click', () => {
+    scanConfigPanel.style.display = 'none';
+  });
+}
+
+// Nút "Quét theo group" (UI only)
+if (scanGroupSettingBtn) {
+  scanGroupSettingBtn.addEventListener('click', () => {
+    const selected = Object.keys(profileState.selected || {}).filter((pid) => profileState.selected[pid]);
+    if (selected.length === 0) {
+      showToast('Chọn (tick) ít nhất 1 profile trước.', 'error');
+      try { switchTab('settings'); } catch (_) { }
+      return;
+    }
+    if (!groupScanPanel) {
+      showToast('Thiếu UI groupScanPanel.', 'error');
+      return;
+    }
+    // Đóng các panel khác để khỏi chồng UI
+    if (feedConfigPanel) feedConfigPanel.style.display = 'none';
+    if (scanConfigPanel) scanConfigPanel.style.display = 'none';
+
+    const isOpen = groupScanPanel.style.display !== 'none';
+    groupScanPanel.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen && groupScanUrlInput) groupScanUrlInput.focus();
+  });
+}
+
+if (groupScanCancelBtn && groupScanPanel) {
+  groupScanCancelBtn.addEventListener('click', () => {
+    groupScanPanel.style.display = 'none';
+  });
+}
+
+// UI only: bấm "Chạy" thì chỉ validate + toast (chưa gọi API)
+if (groupScanStartBtn) {
+  groupScanStartBtn.addEventListener('click', () => {
+    const selected = Object.keys(profileState.selected || {}).filter((pid) => profileState.selected[pid]);
+    if (selected.length === 0) {
+      showToast('Chọn (tick) ít nhất 1 profile trước.', 'error');
+      return;
+    }
+    const raw = String(groupScanUrlInput?.value || '');
+    const urls = raw
+      .split(/\r?\n/)
+      .map((s) => String(s || '').trim())
+      .filter(Boolean);
+    const postCount = parseInt(String(groupScanPostCountInput?.value || '0').trim(), 10);
+    if (urls.length === 0) {
+      showToast('Nhập ít nhất 1 URL group (mỗi dòng 1 URL).', 'error');
+      return;
+    }
+    if (!Number.isFinite(postCount) || postCount < 0) {
+      showToast('Số bài viết theo dõi không hợp lệ.', 'error');
+      return;
+    }
+    showToast(`✅ Đã nhận ${urls.length} group URL + số bài theo dõi: ${postCount}`, 'success', 2200);
+  });
+}
+
+if (scanStartBtn) {
+  scanStartBtn.addEventListener('click', async () => {
+    const selected = Object.keys(profileState.selected || {}).filter((pid) => profileState.selected[pid]);
+    if (selected.length === 0) {
+      showToast('Chọn (tick) ít nhất 1 profile để quét bài viết.', 'error');
+      try { switchTab('settings'); } catch (_) { }
+      return;
+    }
+
+    const runMinutes = parseInt(String(scanRunMinutesInput?.value || '0').trim(), 10);
+    const restMinutes = parseInt(String(scanRestMinutesInput?.value || '0').trim(), 10);
+    const text = String(scanTextInput?.value || '').trim();
+    const mode = String(document.querySelector('input[name="scanMode"]:checked')?.value || 'feed').trim().toLowerCase();
+
+    if (mode === 'search' && !text) {
+      showToast('Search cần nhập text để search.', 'error');
+      return;
+    }
+
+    // cho user thấy kết quả ngay ở tab danh sách quét
+    try { switchTab('scan'); } catch (_) { }
+
+    setButtonLoading(scanStartBtn, true, 'Đang chạy...');
+    setButtonLoading(scanPostsSettingBtn, true, 'Đang quét...');
+    try {
+      await startScanFlow({ runMinutes, restMinutes, text, mode });
+      // đóng panel sau khi chạy
+      if (scanConfigPanel) scanConfigPanel.style.display = 'none';
+    } catch (e) {
+      showToast('Không chạy được quét bài viết (kiểm tra FastAPI).', 'error');
+    } finally {
+      setButtonLoading(scanStartBtn, false);
+      setButtonLoading(scanPostsSettingBtn, false);
+    }
+  });
+}
+
 async function handleStopAll() {
   if (!confirm('Dừng TẤT CẢ tác vụ và tắt toàn bộ tab NST?')) return;
   // stop-all có thể bấm từ left panel hoặc từ setting header
@@ -818,8 +943,8 @@ async function handleStopAll() {
     const joinStopped = res && res.stopped && Array.isArray(res.stopped.join_groups) ? res.stopped.join_groups.length : 0;
     const nstOk = res && Array.isArray(res.nst_stop_ok) ? res.nst_stop_ok.length : 0;
     const nstAttempted = res && Array.isArray(res.nst_stop_attempted) ? res.nst_stop_attempted.length : 0;
-      const nstAll = res && typeof res.nst_stop_all_ok === 'boolean' ? res.nst_stop_all_ok : false;
-      showToast(`Đã dừng tất cả: bot=${botStopped ? 'OK' : 'NO'}, join_groups=${joinStopped}, NST=${nstOk}/${nstAttempted}${nstAll ? ' +ALL' : ''}`, 'success', 2800);
+    const nstAll = res && typeof res.nst_stop_all_ok === 'boolean' ? res.nst_stop_all_ok : false;
+    showToast(`Đã dừng tất cả: bot=${botStopped ? 'OK' : 'NO'}, join_groups=${joinStopped}, NST=${nstOk}/${nstAttempted}${nstAll ? ' +ALL' : ''}`, 'success', 2800);
   } catch (e) {
     showToast('Không dừng được tất cả (kiểm tra FastAPI).', 'error');
   } finally {
@@ -849,22 +974,22 @@ if (stopAllSettingBtn) {
 
 function getTypeColorClass(type) {
   const typeLower = String(type).toLowerCase().trim();
-  
+
   // Xanh cho: scan, success, ok, completed
   if (typeLower === 'type1' || typeLower === 'success' || typeLower === 'ok' || typeLower === 'completed') {
     return 'type-green';
   }
-  
+
   // Vàng cho: retry, warning, pending, processing
   if (typeLower === 'type2' || typeLower === 'warning' || typeLower === 'pending' || typeLower === 'processing') {
     return 'type-yellow';
   }
-  
+
   // Đỏ cho: error, fail, failed, cancel
   if (typeLower === 'type3' || typeLower === 'fail' || typeLower === 'failed' || typeLower === 'cancel') {
     return 'type-red';
   }
-  
+
   // Mặc định: xanh
   return 'type-green';
 }
@@ -893,13 +1018,13 @@ function appendRow({ id, userId, name, react, comment, time, type }) {
   // Comment: nếu có comment thì hiển thị icon con mắt, click mới xem nội dung
   const hasComment = !!comment;
   const commentDisplay = hasComment ? '<button class="comment-eye-btn" type="button" title="Xem comment">👁</button>' : '';
-  
+
   // Lưu timestamp để sắp xếp
   const timestamp = parseTime(time || '');
   tr.dataset.timestamp = timestamp;
   tr.dataset.hasReact = react ? 'true' : 'false';
   tr.dataset.hasComment = hasComment ? 'true' : 'false';
-  
+
   tr.innerHTML = `
     <td>${postIdDisplay}</td>
     <td>${userIdDisplay}</td>
@@ -918,7 +1043,7 @@ function appendRow({ id, userId, name, react, comment, time, type }) {
     const commentCell = tr.children[4]; // cột Comment
     commentCell.dataset.comment = comment;
     commentCell.dataset.showingText = 'false'; // Trạng thái: false = đang hiển thị icon, true = đang hiển thị text
-    
+
     const eyeBtn = commentCell.querySelector('.comment-eye-btn');
     if (eyeBtn) {
       // Hàm toggle giữa icon và text
@@ -928,7 +1053,7 @@ function appendRow({ id, userId, name, react, comment, time, type }) {
         if (!text) return;
 
         const isShowingText = commentCell.dataset.showingText === 'true';
-        
+
         if (isShowingText) {
           // Đang hiển thị text → chuyển về icon
           commentCell.innerHTML = '<button class="comment-eye-btn" type="button" title="Xem comment">👁</button>';
@@ -949,7 +1074,7 @@ function appendRow({ id, userId, name, react, comment, time, type }) {
           }
         }
       };
-      
+
       eyeBtn.addEventListener('click', toggleComment);
     }
   }
@@ -995,7 +1120,7 @@ function addGeneratedRow() {
   const randomName = names[Math.floor(Math.random() * names.length)];
   const comments = ['Rất hay!', 'Cảm ơn bạn', 'Tuyệt vời', 'Đồng ý', ''];
   const randomComment = comments[Math.floor(Math.random() * comments.length)];
-  
+
   appendRow({
     id: counter++,
     userId: `user_${Math.floor(Math.random() * 1000000)}`,
@@ -1013,7 +1138,7 @@ async function checkForNewData() {
     const res = await fetch('../backend/data/results/all_results_summary.json');
     if (!res.ok) throw new Error('Fetch failed');
     const data = await res.json();
-    
+
     // Lấy tất cả posts từ results_by_file
     const allPosts = [];
     Object.values(data.results_by_file || {}).forEach(filePosts => {
@@ -1021,7 +1146,7 @@ async function checkForNewData() {
         allPosts.push(...filePosts);
       }
     });
-    
+
     let newCount = 0;
     // Chỉ thêm những user mới (gộp cả react & comment)
     allPosts.forEach((post) => {
@@ -1119,7 +1244,7 @@ async function checkForNewData() {
         }
       });
     });
-    
+
     if (newCount > 0) {
       console.log(`Đã thêm ${newCount} dòng dữ liệu mới`);
     }
@@ -1135,7 +1260,7 @@ async function loadInitialData() {
   tbody.innerHTML = '';
   counter = 1;
   loadedPostIds.clear(); // Xóa danh sách post_id đã load
-  
+
   try {
     // Đọc từ all_results_summary.json
     const res = await fetch('../backend/data/results/all_results_summary.json');
@@ -1144,7 +1269,7 @@ async function loadInitialData() {
     }
     const data = await res.json();
     console.log('Đã load file JSON thành công, tổng số files:', data.total_files);
-    
+
     // Lấy tất cả posts từ results_by_file
     const allPosts = [];
     Object.values(data.results_by_file || {}).forEach(filePosts => {
@@ -1152,9 +1277,9 @@ async function loadInitialData() {
         allPosts.push(...filePosts);
       }
     });
-    
+
     console.log(`Tổng số posts cần hiển thị: ${allPosts.length}`);
-    
+
     // Chuyển đổi dữ liệu sang format của bảng
     let displayedCount = 0;
     allPosts.forEach((post) => {
@@ -1253,7 +1378,7 @@ async function loadInitialData() {
         }
       });
     });
-    
+
     console.log(`Đã hiển thị ${displayedCount} dòng dữ liệu`);
     initialLoaded = true;
   } catch (err) {
@@ -1280,23 +1405,41 @@ async function loadInitialData() {
   }
 }
 
+// Start quét bài viết (dùng chung cho nút "Bắt đầu quét" và nút trong tab Setting profile)
+async function startScanFlow(options = {}) {
+  const {
+    runMinutes,
+    restMinutes,
+    text,
+    mode,
+  } = options || {};
+  // Load và hiển thị tất cả dữ liệu từ all_results_summary.json ngay lập tức
+  // Không cần chờ backend, hiển thị dữ liệu trước
+  await loadInitialData();
+
+  // Nếu đang có interval check data cũ thì clear trước để tránh setInterval chồng
+  if (dataCheckInterval) {
+    clearInterval(dataCheckInterval);
+    dataCheckInterval = null;
+  }
+
+  // Sau đó mới chạy backend (nếu cần)
+  const ok = await triggerBackendRun({ runMinutes, restMinutes, text, mode });
+  if (!ok) return;
+
+  // Tự động kiểm tra dữ liệu mới mỗi 5 giây để cập nhật khi có dữ liệu mới
+  const checkInterval = 5000; // 5 giây
+  dataCheckInterval = setInterval(checkForNewData, checkInterval);
+
+  setScanning(true);
+}
+
 startBtn.addEventListener(
   'click',
   async () => {
-    // Load và hiển thị tất cả dữ liệu từ all_results_summary.json ngay lập tức
-    // Không cần chờ backend, hiển thị dữ liệu trước
-    await loadInitialData();
-    
-    // Sau đó mới chạy backend (nếu cần) - nhưng không block việc hiển thị dữ liệu
-    triggerBackendRun().catch(err => {
-      console.warn('Backend không chạy được, nhưng vẫn hiển thị dữ liệu:', err);
+    startScanFlow().catch((err) => {
+      console.warn('Không startScanFlow được:', err);
     });
-    
-    // Tự động kiểm tra dữ liệu mới mỗi 5 giây để cập nhật khi có dữ liệu mới
-    const checkInterval = 5000; // 5 giây
-    dataCheckInterval = setInterval(checkForNewData, checkInterval);
-    
-    setScanning(true);
   }
 );
 
@@ -1430,13 +1573,22 @@ async function callBackendNoAlert(path, options = {}) {
   }
 }
 
-async function triggerBackendRun() {
+async function triggerBackendRun(options = {}) {
   setBackendStatus('Đang gửi lệnh chạy...', false);
-  backendRunBtn.disabled = true;
   try {
-    const runMinutes = Number(runMinutesInput.value);
-    // Dùng luôn "Thời gian lặp lại (phút)" làm thời gian nghỉ giữa phiên
-    const restMinutes = Number(intervalInput.value);
+    // Bắt buộc phải chọn (tick) profile trước khi chạy backend
+    const selected = Object.keys(profileState.selected || {}).filter((pid) => profileState.selected[pid]);
+    if (selected.length === 0) {
+      showToast('Hãy tick ít nhất 1 profile ở tab "Setting profile" trước khi chạy.', 'error');
+      try { switchTab('settings'); } catch (_) { }
+      return false;
+    }
+
+    const runMinutes = (options.runMinutes != null) ? Number(options.runMinutes) : Number(runMinutesInput.value);
+    // Dùng luôn "Thời gian lặp lại (phút)" làm thời gian nghỉ giữa phiên (nếu không truyền override)
+    const restMinutes = (options.restMinutes != null) ? Number(options.restMinutes) : Number(intervalInput.value);
+    const text = (options.text != null) ? String(options.text || '').trim() : '';
+    const mode = (options.mode != null) ? String(options.mode || '').trim().toLowerCase() : '';
     const payload = {};
     if (Number.isFinite(runMinutes) && runMinutes > 0) {
       payload.run_minutes = runMinutes;
@@ -1444,6 +1596,9 @@ async function triggerBackendRun() {
     if (Number.isFinite(restMinutes) && restMinutes > 0) {
       payload.rest_minutes = restMinutes;
     }
+    payload.profile_ids = selected;
+    if (text) payload.text = text;
+    if (mode) payload.mode = mode;
 
     const data = await callBackend('/run', {
       body: JSON.stringify(payload),
@@ -1457,7 +1612,6 @@ async function triggerBackendRun() {
     setBackendStatus('Backend lỗi hoặc chưa khởi động', false);
     return false;
   } finally {
-    backendRunBtn.disabled = false;
   }
 }
 
@@ -1470,8 +1624,6 @@ async function sendStopSignal() {
     setBackendStatus('Backend có thể vẫn đang chạy', false);
   }
 }
-
-backendRunBtn.addEventListener('click', triggerBackendRun);
 
 // Thử kiểm tra trạng thái backend khi tải trang
 fetch(`${API_BASE}/status`)
@@ -1495,7 +1647,7 @@ function handleAddGroupData() {
   fileInput.type = 'file';
   fileInput.accept = '.json,.xlsx,.xls,.txt,.csv';
   fileInput.style.display = 'none';
-  
+
   fileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -1505,14 +1657,14 @@ function handleAddGroupData() {
     // Xóa input để có thể chọn lại file cùng tên
     fileInput.value = '';
   });
-  
+
   // Trigger click để mở dialog chọn file
   document.body.appendChild(fileInput);
   fileInput.click();
   document.body.removeChild(fileInput);
 }
 
-addGroupDataBtn.addEventListener('click', handleAddGroupData);
+
 
 // ==== Help Button với Tooltip ====
 
@@ -1566,14 +1718,14 @@ function toggleTypeFilter(filterType) {
   } else {
     // Bỏ "all" nếu chọn filter cụ thể
     selectedTypeFilters.delete('all');
-    
+
     // Toggle filter
     if (selectedTypeFilters.has(filterType)) {
       selectedTypeFilters.delete(filterType);
     } else {
       selectedTypeFilters.add(filterType);
     }
-    
+
     // Nếu không còn filter nào được chọn, tự động chọn "all"
     if (selectedTypeFilters.size === 0) {
       selectedTypeFilters.add('all');
@@ -1604,32 +1756,32 @@ function toggleCommentFilter(commentFilter) {
 
 function applyAllFilters() {
   const rows = tbody.querySelectorAll('tr');
-  
+
   rows.forEach((row) => {
     let shouldShow = true;
-    
+
     // Filter theo màu (Type) - có thể chọn nhiều
     if (!selectedTypeFilters.has('all')) {
       const typeCell = row.querySelector('.type-cell');
       let matchesType = false;
-      
+
       selectedTypeFilters.forEach(filterType => {
         if (typeCell && typeCell.classList.contains(filterType)) {
           matchesType = true;
         }
       });
-      
+
       if (!matchesType) {
         shouldShow = false;
       }
     }
-    
+
     // Filter theo React - nếu Set rỗng thì hiển thị tất cả
     if (shouldShow && selectedReactFilters.size > 0) {
       const reactCell = row.querySelector('td:nth-child(4)'); // Cột React
       const hasReact = reactCell && reactCell.textContent.trim() === '✓';
       let matchesReact = false;
-      
+
       selectedReactFilters.forEach(reactFilter => {
         if (reactFilter === 'has' && hasReact) {
           matchesReact = true;
@@ -1637,18 +1789,18 @@ function applyAllFilters() {
           matchesReact = true;
         }
       });
-      
+
       if (!matchesReact) {
         shouldShow = false;
       }
     }
-    
+
     // Filter theo Comment - nếu Set rỗng thì hiển thị tất cả
     if (shouldShow && selectedCommentFilters.size > 0) {
       const commentCell = row.querySelector('td:nth-child(5)'); // Cột Comment
       const hasComment = commentCell && commentCell.querySelector('.comment-eye-btn');
       let matchesComment = false;
-      
+
       selectedCommentFilters.forEach(commentFilter => {
         if (commentFilter === 'has' && hasComment) {
           matchesComment = true;
@@ -1656,17 +1808,17 @@ function applyAllFilters() {
           matchesComment = true;
         }
       });
-      
+
       if (!matchesComment) {
         shouldShow = false;
       }
     }
-    
+
     // Filter theo thời gian
     if (shouldShow && (timeFilterFromValue || timeFilterToValue)) {
       const timeCell = row.querySelector('td:nth-child(6)'); // Cột Time
       const timeStr = timeCell ? timeCell.textContent.trim() : '';
-      
+
       if (timeStr) {
         // Parse timestamp từ row hoặc từ text
         let rowTimestamp = row.dataset.timestamp ? parseInt(row.dataset.timestamp) : 0;
@@ -1674,7 +1826,7 @@ function applyAllFilters() {
           rowTimestamp = parseTime(timeStr);
           row.dataset.timestamp = rowTimestamp; // Lưu lại
         }
-        
+
         // So sánh với khoảng thời gian đã chọn
         if (timeFilterFromValue && rowTimestamp < timeFilterFromValue) {
           shouldShow = false;
@@ -1687,14 +1839,14 @@ function applyAllFilters() {
         shouldShow = false;
       }
     }
-    
+
     if (shouldShow) {
       row.classList.remove('filtered-out');
     } else {
       row.classList.add('filtered-out');
     }
   });
-  
+
   // Cập nhật trạng thái active của các nút filter màu
   filterButtons.forEach((btn) => {
     const filterType = btn.dataset.filter;
@@ -1704,7 +1856,7 @@ function applyAllFilters() {
       btn.classList.remove('active');
     }
   });
-  
+
   // Cập nhật trạng thái active của các nút filter React
   reactFilterButtons.forEach((btn) => {
     const reactFilter = btn.dataset.filterReact;
@@ -1714,7 +1866,7 @@ function applyAllFilters() {
       btn.classList.remove('active');
     }
   });
-  
+
   // Cập nhật trạng thái active của các nút filter Comment
   commentFilterButtons.forEach((btn) => {
     const commentFilter = btn.dataset.filterComment;
@@ -1724,7 +1876,7 @@ function applyAllFilters() {
       btn.classList.remove('active');
     }
   });
-  
+
   // Kiểm tra empty state
   const visibleRows = Array.from(rows).filter(row => !row.classList.contains('filtered-out'));
   if (visibleRows.length === 0 && rows.length > 0) {
@@ -1738,14 +1890,14 @@ function applyAllFilters() {
 function applyTimeFilter() {
   const fromValue = timeFilterFrom ? timeFilterFrom.value : '';
   const toValue = timeFilterTo ? timeFilterTo.value : '';
-  
+
   // Chuyển đổi từ datetime-local format (YYYY-MM-DDTHH:mm) sang timestamp
   if (fromValue) {
     timeFilterFromValue = new Date(fromValue).getTime();
   } else {
     timeFilterFromValue = null;
   }
-  
+
   if (toValue) {
     // Thêm 1 ngày và trừ 1ms để bao gồm cả ngày cuối
     const toDate = new Date(toValue);
@@ -1754,10 +1906,10 @@ function applyTimeFilter() {
   } else {
     timeFilterToValue = null;
   }
-  
+
   // Áp dụng filter
   applyAllFilters();
-  
+
   // Cập nhật trạng thái nút
   if (applyTimeFilterBtn) {
     if (timeFilterFromValue || timeFilterToValue) {
@@ -1774,10 +1926,10 @@ function clearTimeFilter() {
   if (timeFilterTo) timeFilterTo.value = '';
   timeFilterFromValue = null;
   timeFilterToValue = null;
-  
+
   // Áp dụng lại filter
   applyAllFilters();
-  
+
   // Cập nhật trạng thái nút
   if (applyTimeFilterBtn) {
     applyTimeFilterBtn.classList.remove('active');
@@ -1787,11 +1939,11 @@ function clearTimeFilter() {
 // Hàm parse time từ string sang Date object
 function parseTime(timeStr) {
   if (!timeStr) return 0;
-  
+
   // Thử parse các format thời gian phổ biến
   // Format: "HH:mm:ss" hoặc "HH:mm" hoặc "dd/MM/yyyy HH:mm:ss"
   const now = new Date();
-  
+
   // Nếu có format đầy đủ với ngày
   if (timeStr.includes('/')) {
     const parts = timeStr.split(' ');
@@ -1809,7 +1961,7 @@ function parseTime(timeStr) {
       }
     }
   }
-  
+
   // Nếu chỉ có giờ:phút:giây
   if (timeStr.includes(':')) {
     const parts = timeStr.split(':');
@@ -1821,7 +1973,7 @@ function parseTime(timeStr) {
       return date.getTime();
     }
   }
-  
+
   // Fallback: thử parse trực tiếp
   const parsed = Date.parse(timeStr);
   return isNaN(parsed) ? 0 : parsed;

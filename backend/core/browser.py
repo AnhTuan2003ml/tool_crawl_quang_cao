@@ -213,6 +213,9 @@ class FBController:
         self.page = None
         self.play = None
         self.profile_id = "unknown"
+        # keyword filter thêm từ UI (Setting profile -> Quét bài viết)
+        # nếu rỗng => chỉ lọc theo job_keywords mặc định
+        self.user_keywords = []
         cfg = get_settings()
         self.all_profile_ids = cfg.profile_ids
         # [THAY ĐỔI] Tách thành 2 biến để quản lý ưu tiên
@@ -667,6 +670,29 @@ class FBController:
                 return False
 
             print("✅ Có keyword")
+
+            # 2b. Nếu user nhập text (Setting profile -> Quét bài viết) thì bắt buộc
+            # bài phải có ít nhất 1 trong các từ/cụm từ đó (lọc giống Nuôi acc).
+            if getattr(self, "user_keywords", None):
+                try:
+                    has_user_text = self.page.evaluate(
+                        JS_CHECK_AND_HIGHLIGHT_SCOPED,
+                        [post_handle, self.user_keywords]
+                    )
+                except Exception:
+                    has_user_text = False
+                if not has_user_text:
+                    print("❌ Không đạt text nhập -> skip bài")
+
+                    # Đánh dấu đã xử lý + đẩy ra khỏi view
+                    self.mark_post_as_processed(post_handle)
+                    try:
+                        viewport = self.page.viewport_size
+                        height = viewport['height'] if viewport else 800
+                        self.page.mouse.wheel(0, height * 0.4)
+                    except:
+                        pass
+                    return False
 
             # 3. Like
             self.like_current_post(post_handle)

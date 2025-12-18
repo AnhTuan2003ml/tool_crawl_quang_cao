@@ -154,11 +154,22 @@ def _norm_profile_id(value: str) -> str:
 class RunRequest(BaseModel):
     run_minutes: Optional[int] = None
     rest_minutes: Optional[int] = None
+    profile_ids: Optional[list[str]] = None
+    # text filter cho scan bài viết (dùng trong core/browser.py)
+    text: Optional[str] = None
+    # mode cho scan bài viết: "feed" | "search"
+    mode: Optional[str] = None
 
 
-def _start_runner(run_minutes: Optional[int] = None, rest_minutes: Optional[int] = None) -> None:
+def _start_runner(
+    run_minutes: Optional[int] = None,
+    rest_minutes: Optional[int] = None,
+    profile_ids: Optional[list[str]] = None,
+    text: Optional[str] = None,
+    mode: Optional[str] = None,
+) -> None:
     """Hàm wrapper để chạy vòng lặp AppRunner trong tiến trình riêng."""
-    AppRunner(run_minutes=run_minutes, rest_minutes=rest_minutes).run()
+    AppRunner(run_minutes=run_minutes, rest_minutes=rest_minutes, profile_ids=profile_ids, text=text, mode=mode).run()
 
 
 @app.get("/health")
@@ -179,11 +190,29 @@ def run_bot(payload: Optional[RunRequest] = Body(None)) -> dict:
 
     run_minutes = payload.run_minutes if payload else None
     rest_minutes = payload.rest_minutes if payload else None
+    profile_ids = payload.profile_ids if payload else None
+    text = payload.text if payload else None
+    mode = payload.mode if payload else None
+
+    # Validate profile_ids (bắt buộc chọn profile như UI)
+    if not profile_ids:
+        raise HTTPException(status_code=400, detail="profile_ids rỗng")
+    pids = [_norm_profile_id(x) for x in (profile_ids or [])]
+    pids = [p for p in pids if p]
+    if not pids:
+        raise HTTPException(status_code=400, detail="profile_ids không hợp lệ")
+
+    m = str(mode or "feed").strip().lower()
+    if m not in ("feed", "search"):
+        m = "feed"
+    # Search bắt buộc có text để search
+    if m == "search" and not str(text or "").strip():
+        raise HTTPException(status_code=400, detail="Search cần text")
 
     # Không dùng daemon vì AppRunner tự sinh thêm Process con
     runner_process = Process(
         target=_start_runner,
-        args=(run_minutes, rest_minutes),
+        args=(run_minutes, rest_minutes, pids, text, m),
         daemon=False,
     )
     runner_process.start()
