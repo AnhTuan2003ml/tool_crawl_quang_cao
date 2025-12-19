@@ -209,6 +209,9 @@ def run_bot(payload: Optional[RunRequest] = Body(None)) -> dict:
     if not pids:
         raise HTTPException(status_code=400, detail="profile_ids không hợp lệ")
 
+    # ✅ Chặn chạy nếu bất kỳ profile nào thiếu cookie/access_token
+    _validate_profiles_requirements(pids, require_cookie=True, require_access_token=True)
+
     m = str(mode or "feed").strip().lower()
     if m not in ("feed", "search"):
         m = "feed"
@@ -291,6 +294,49 @@ def _read_settings_raw() -> Dict[str, Any]:
     if not isinstance(raw, dict):
         raise HTTPException(status_code=400, detail="settings.json phải là object")
     return raw
+
+
+def _validate_profiles_requirements(
+    profile_ids: list[str],
+    *,
+    require_cookie: bool = True,
+    require_access_token: bool = True,
+) -> None:
+    """
+    Nếu có profile thiếu cookie/access_token (theo require_*), sẽ raise 400 và KHÔNG cho start job.
+    """
+    raw = _read_settings_raw()
+    profiles = raw.get("PROFILE_IDS") or {}
+    if not isinstance(profiles, dict):
+        profiles = {}
+
+    missing_list: list[dict] = []
+    for pid in profile_ids:
+        cfg = profiles.get(pid)
+        missing: list[str] = []
+        if not isinstance(cfg, dict):
+            # profile chưa tồn tại trong settings.json
+            if require_cookie:
+                missing.append("cookie")
+            if require_access_token:
+                missing.append("access_token")
+        else:
+            if require_cookie and not str(cfg.get("cookie") or "").strip():
+                missing.append("cookie")
+            if require_access_token and not str(cfg.get("access_token") or cfg.get("accessToken") or "").strip():
+                missing.append("access_token")
+
+        if missing:
+            missing_list.append({"profile_id": pid, "missing": missing})
+
+    if missing_list:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Thiếu cấu hình profile (cookie/access_token). Hãy cập nhật trước khi chạy.",
+                "missing": missing_list,
+            },
+        )
 
 
 def _atomic_write_json(path: Path, data: Dict[str, Any]) -> None:
@@ -581,6 +627,9 @@ def auto_join_groups(payload: JoinGroupsRequest) -> dict:
     if not pids:
         raise HTTPException(status_code=400, detail="profile_ids không hợp lệ")
 
+    # ✅ Join group chỉ cần cookie (không bắt access_token)
+    _validate_profiles_requirements(pids, require_cookie=True, require_access_token=False)
+
     started: list[str] = []
     skipped: list[dict] = []
 
@@ -719,6 +768,9 @@ def feed_start(payload: FeedStartRequest) -> dict:
     pids = [p for p in pids if p]
     if not pids:
         raise HTTPException(status_code=400, detail="profile_ids không hợp lệ")
+
+    # ✅ Chặn chạy nếu bất kỳ profile nào thiếu cookie/access_token
+    _validate_profiles_requirements(pids, require_cookie=True, require_access_token=True)
 
     run_minutes = int(payload.run_minutes or 0)
     if run_minutes <= 0:

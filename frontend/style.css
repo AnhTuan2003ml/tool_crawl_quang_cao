@@ -258,9 +258,9 @@ body.splash-active .container {
 
 /* Right panel: giữ tab/header đứng im, chỉ cuộn phần nội dung bên dưới */
 .right-panel .panel-header {
-  position: sticky;
-  top     : 0;
-  z-index : 50;
+  position  : sticky;
+  top       : 0;
+  z-index   : 50;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
 }
 
@@ -1016,6 +1016,15 @@ tbody tr.filtered-out {
   gap    : 8px;
 }
 
+/* Settings: disable state rõ ràng khi chưa tick profile */
+#settingsView .setting-card-actions button:disabled,
+#settingsView .feed-panel button:disabled {
+  opacity   : 0.55;
+  cursor    : not-allowed;
+  box-shadow: none !important;
+  filter    : saturate(0.75);
+}
+
 .profile-list {
   display       : flex;
   flex-direction: column;
@@ -1024,12 +1033,14 @@ tbody tr.filtered-out {
 
 /* Settings: danh sách profile cuộn nội bộ (không kéo dài trang) */
 #settingsView #profileList.profile-list {
-  max-height          : min(55vh, 520px);
-  overflow-y          : auto;
-  padding-right       : 6px; /* chừa chỗ cho scrollbar */
-  overscroll-behavior : contain;
-  scrollbar-width     : thin; /* Firefox */
-  scrollbar-color     : rgba(100, 116, 139, 0.55) transparent;
+  max-height         : min(55vh, 520px);
+  overflow-y         : auto;
+  padding-right      : 6px;
+  /* chừa chỗ cho scrollbar */
+  overscroll-behavior: contain;
+  scrollbar-width    : thin;
+  /* Firefox */
+  scrollbar-color    : rgba(100, 116, 139, 0.55) transparent;
 }
 
 #settingsView #profileList.profile-list::-webkit-scrollbar {

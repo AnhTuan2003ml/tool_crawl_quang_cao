@@ -193,10 +193,49 @@ async function loadProfileState() {
 
   if (settingApiKeyInput) settingApiKeyInput.value = profileState.apiKey || '';
   renderProfileList();
+  updateSettingsActionButtons();
 }
 
 function saveProfileState() {
   localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(profileState));
+}
+
+function getSelectedProfileIds() {
+  return Object.keys(profileState.selected || {}).filter((pid) => profileState.selected[pid]);
+}
+
+function updateSettingsActionButtons() {
+  const selected = getSelectedProfileIds();
+  const hasSelected = selected.length > 0;
+
+  // Các nút "hành động" ở Setting profile: yêu cầu tick ít nhất 1 profile
+  const actionBtns = [
+    scanPostsSettingBtn,
+    scanGroupSettingBtn,
+    autoJoinGroupBtn,
+    feedAccountSettingBtn,
+    stopAllSettingBtn,
+  ].filter(Boolean);
+
+  actionBtns.forEach((b) => {
+    // nếu đang loading thì giữ nguyên trạng thái disabled
+    if (b.classList && b.classList.contains('btn-loading')) return;
+    b.disabled = !hasSelected;
+  });
+
+  // Các nút "Chạy" trong các panel cũng yêu cầu tick profile
+  const runBtns = [feedStartBtn, scanStartBtn, groupScanStartBtn].filter(Boolean);
+  runBtns.forEach((b) => {
+    if (b.classList && b.classList.contains('btn-loading')) return;
+    b.disabled = !hasSelected;
+  });
+
+  // Nếu không có selection thì auto đóng panel để tránh người dùng nhập rồi mới biết không chạy được
+  if (!hasSelected) {
+    if (feedConfigPanel) feedConfigPanel.style.display = 'none';
+    if (scanConfigPanel) scanConfigPanel.style.display = 'none';
+    if (groupScanPanel) groupScanPanel.style.display = 'none';
+  }
 }
 
 function showToast(message, type = 'success', ms = 1600) {
@@ -358,6 +397,7 @@ function buildProfileRow(initialPid, initialInfo) {
     if (selectCb.checked) profileState.selected[currentPid] = true;
     else delete profileState.selected[currentPid];
     saveProfileState();
+    updateSettingsActionButtons();
   });
 
   const cookieBtn = document.createElement('button');
@@ -585,6 +625,7 @@ function renderProfileList() {
     const info = profileState.profiles[pid] || {};
     profileList.appendChild(buildProfileRow(pid, info));
   });
+  updateSettingsActionButtons();
 }
 
 function showAddProfileRow() {
@@ -678,12 +719,20 @@ if (addProfileRowBtn) {
 
 if (feedAccountSettingBtn) {
   feedAccountSettingBtn.addEventListener('click', () => {
+    const selected = getSelectedProfileIds();
+    if (selected.length === 0) {
+      showToast('Hãy tick ít nhất 1 profile trước.', 'error');
+      try { switchTab('settings'); } catch (_) { }
+      return;
+    }
     if (!feedConfigPanel) {
       showToast('Thiếu UI feedConfigPanel.', 'error');
       return;
     }
     // Nếu panel quét bài viết đang mở thì tắt đi để khỏi chồng UI
     if (scanConfigPanel) scanConfigPanel.style.display = 'none';
+    // Nếu panel quét theo group đang mở thì tắt đi để khỏi chồng UI
+    if (groupScanPanel) groupScanPanel.style.display = 'none';
     feedConfigPanel.style.display = (feedConfigPanel.style.display === 'none' || !feedConfigPanel.style.display) ? 'block' : 'none';
   });
 }
@@ -823,12 +872,20 @@ if (autoJoinGroupBtn) {
 // Nút "Quét bài viết" trong tab Setting profile
 if (scanPostsSettingBtn) {
   scanPostsSettingBtn.addEventListener('click', () => {
+    const selected = getSelectedProfileIds();
+    if (selected.length === 0) {
+      showToast('Hãy tick ít nhất 1 profile trước.', 'error');
+      try { switchTab('settings'); } catch (_) { }
+      return;
+    }
     if (!scanConfigPanel) {
       showToast('Thiếu UI scanConfigPanel.', 'error');
       return;
     }
     // Đóng panel nuôi acc nếu đang mở để khỏi rối
     if (feedConfigPanel) feedConfigPanel.style.display = 'none';
+    // Đóng panel quét theo group nếu đang mở
+    if (groupScanPanel) groupScanPanel.style.display = 'none';
     const isOpen = scanConfigPanel.style.display !== 'none';
     scanConfigPanel.style.display = isOpen ? 'none' : 'block';
   });
@@ -1558,8 +1615,25 @@ async function callBackend(path, options = {}) {
   }
 
   if (!res.ok) {
-    const detail = data.detail || res.statusText || 'Request failed';
-    throw new Error(detail);
+    let detail = data.detail || res.statusText || 'Request failed';
+    // Nếu backend trả detail dạng object (vd: {message, missing:[...]}) thì format lại cho dễ đọc
+    try {
+      if (detail && typeof detail === 'object') {
+        const msg = detail.message ? String(detail.message) : 'Request failed';
+        const missing = Array.isArray(detail.missing) ? detail.missing : [];
+        if (missing.length > 0) {
+          const lines = missing.map((x) => {
+            const pid = (x && x.profile_id) ? String(x.profile_id) : '(unknown)';
+            const fields = Array.isArray(x && x.missing) ? x.missing.join(', ') : '';
+            return `${pid}${fields ? ` thiếu: ${fields}` : ''}`;
+          });
+          detail = `${msg} ${lines.join(' | ')}`;
+        } else {
+          detail = msg;
+        }
+      }
+    } catch (_) { }
+    throw new Error(String(detail));
   }
 
   return data;
