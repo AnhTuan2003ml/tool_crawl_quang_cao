@@ -11,6 +11,25 @@ from urllib.parse import urlencode, urlparse, parse_qs
 # Sử dụng get_payload.get_cookies_by_profile_id(profile_id) để lấy cookie
 
 
+def _import_get_cookies_by_profile_id():
+    """
+    Hỗ trợ chạy được cả 2 kiểu:
+    - chạy trực tiếp trong folder backend/worker (import get_payload)
+    - chạy qua module backend.worker.get_id (import backend.worker.get_payload)
+    """
+    try:
+        from get_payload import get_cookies_by_profile_id  # type: ignore
+        return get_cookies_by_profile_id
+    except Exception:
+        try:
+            from backend.worker.get_payload import get_cookies_by_profile_id  # type: ignore
+            return get_cookies_by_profile_id
+        except Exception:
+            # fallback (nếu sys.path đã append worker_path)
+            from worker.get_payload import get_cookies_by_profile_id  # type: ignore
+            return get_cookies_by_profile_id
+
+
 # ================================
 #   HÀM GỌI API VỚI URL VIDEO
 # ================================
@@ -62,7 +81,7 @@ def get_post_id_from_html(url, profile_id, cookies=None):
         tuple: (post_id, owning_profile_dict) hoặc (None, None) nếu không tìm thấy
         owning_profile_dict: {"__typename": "...", "name": "...", "id": "..."} hoặc None
     """
-    from get_payload import get_cookies_by_profile_id
+    get_cookies_by_profile_id = _import_get_cookies_by_profile_id()
     
     # Lấy cookies nếu chưa có
     if cookies is None:
@@ -353,7 +372,15 @@ def get_page_id_from_html(url, profile_id, cookies=None):
     Returns:
         str: page_id đầu tiên tìm thấy hoặc None
     """
-    from get_payload import get_cookies_by_profile_id
+    get_cookies_by_profile_id = _import_get_cookies_by_profile_id()
+
+    # ✅ Ưu tiên tuyệt đối: nếu URL đã có numeric group_id thì trả về luôn (ổn định nhất)
+    try:
+        m_url = re.search(r"/groups/(\d+)", str(url or ""))
+        if m_url:
+            return m_url.group(1)
+    except Exception:
+        pass
     
     # Lấy cookies nếu chưa có
     if cookies is None:
@@ -398,55 +425,66 @@ def get_page_id_from_html(url, profile_id, cookies=None):
         
         if response.status_code != 200:
             return None
+
+        # ✅ Nếu Facebook redirect sang URL có /groups/<id> thì ưu tiên lấy luôn từ response.url
+        try:
+            m_final = re.search(r"/groups/(\d+)", str(getattr(response, "url", "") or ""))
+            if m_final:
+                return m_final.group(1)
+        except Exception:
+            pass
         
         html_content = response.text
         
-        # Tìm page_id bằng các pattern phổ biến
-        page_id_patterns = [
-            r'"page_id"\s*:\s*"(\d+)"',  # "page_id": "987870664956102"
-            r'page_id["\']\s*:\s*["\'](\d+)',  # page_id: "987870664956102"
-            r'/groups/(\d+)',  # /groups/987870664956102
-            r'/pages/(\d+)',  # /pages/987870664956102
-            r'page_id=(\d+)',  # page_id=987870664956102
-            r'data-page-id="(\d+)"',  # data-page-id="987870664956102"
-            r'"pageID"\s*:\s*"(\d+)"',  # "pageID": "987870664956102"
+        # ===== ƯU TIÊN LẤY "GROUP ID" (tránh nhặt nhầm page_id khác trong HTML) =====
+        # 1) Các pattern rất đặc hiệu cho group
+        group_specific_patterns = [
+            # page_id_type = group (ưu tiên)
+            r'"page_id"\s*:\s*"(\d+)"\s*,\s*"page_id_type"\s*:\s*"group"',
+            r'"page_id_type"\s*:\s*"group"\s*,\s*"page_id"\s*:\s*"(\d+)"',
+            # groupID/group_id
+            r'"groupID"\s*:\s*"(\d+)"',
+            r'"group_id"\s*:\s*"(\d+)"',
         ]
-        
-        found_ids = []
-        for pattern in page_id_patterns:
-            matches = re.findall(pattern, html_content, re.IGNORECASE)
-            if matches:
-                found_ids.extend(matches)
-        
-        # Tìm trong JSON structure như ví dụ: {"987870664956102":{"page_id":"987870664956102","page_id_type":"group"
-        # Pattern 1: Lấy từ key của JSON object
-        json_key_pattern = r'{"(\d+)":\s*{"page_id"\s*:\s*"(\d+)"'
-        json_matches = re.findall(json_key_pattern, html_content)
-        if json_matches:
-            for match in json_matches:
-                found_ids.append(match[0])  # Key từ JSON
-                found_ids.append(match[1])  # Value từ page_id field
-        
-        # Pattern 2: Tìm trực tiếp trong JSON với page_id_type
-        json_with_type_pattern = r'"page_id"\s*:\s*"(\d+)"\s*,\s*"page_id_type"\s*:\s*"[^"]*"'
-        json_type_matches = re.findall(json_with_type_pattern, html_content)
-        if json_type_matches:
-            found_ids.extend(json_type_matches)
-        
-        # Pattern 3: Tìm trong structure phức tạp hơn (có thể có nhiều fields giữa)
-        complex_json_pattern = r'{"(\d+)":\s*{[^}]*"page_id"\s*:\s*"(\d+)"'
-        complex_matches = re.findall(complex_json_pattern, html_content)
-        if complex_matches:
-            for match in complex_matches:
-                found_ids.append(match[0])  # Key
-                found_ids.append(match[1])  # page_id value
-        
-        if found_ids:
-            # Lấy page_id đầu tiên (thường là page_id chính)
-            page_id = found_ids[0]
-            return page_id
-        else:
-            return None
+        for pat in group_specific_patterns:
+            m = re.search(pat, html_content, flags=re.IGNORECASE)
+            if m:
+                return m.group(1)
+
+        # 2) Nếu HTML có /groups/<id> thì ưu tiên ID xuất hiện nhiều nhất (tránh dính 1 ID cố định ở header)
+        try:
+            group_ids = re.findall(r"/groups/(\d+)", html_content, flags=re.IGNORECASE)
+            if group_ids:
+                # chọn ID phổ biến nhất
+                freq: dict[str, int] = {}
+                for gid in group_ids:
+                    freq[gid] = freq.get(gid, 0) + 1
+                group_ids_sorted = sorted(freq.items(), key=lambda x: x[1], reverse=True)
+                return group_ids_sorted[0][0]
+        except Exception:
+            pass
+
+        # 3) Fallback cuối: tìm page_id nhưng chọn cái có tần suất cao nhất (đỡ nhặt "cái đầu tiên")
+        try:
+            candidates: list[str] = []
+            for pat in [
+                r'"page_id"\s*:\s*"(\d+)"',
+                r'page_id["\']\s*:\s*["\'](\d+)',
+                r'page_id=(\d+)',
+                r'data-page-id="(\d+)"',
+                r'"pageID"\s*:\s*"(\d+)"',
+            ]:
+                candidates.extend(re.findall(pat, html_content, flags=re.IGNORECASE) or [])
+            if candidates:
+                freq2: dict[str, int] = {}
+                for cid in candidates:
+                    freq2[cid] = freq2.get(cid, 0) + 1
+                cand_sorted = sorted(freq2.items(), key=lambda x: x[1], reverse=True)
+                return cand_sorted[0][0]
+        except Exception:
+            pass
+
+        return None
             
     except Exception:
         return None
@@ -473,7 +511,7 @@ def get_id_from_url(url, profile_id):
             "url_type": str ("group" hoặc "post")
         }
     """
-    from get_payload import get_cookies_by_profile_id
+    get_cookies_by_profile_id = _import_get_cookies_by_profile_id()
     
     # Load cookies một lần duy nhất
     cookies = get_cookies_by_profile_id(profile_id)
@@ -546,6 +584,6 @@ if __name__ == "__main__":
     # result = get_id_from_url(group_url, profile_id)
     
     # Test với video/post URL
-    url = "https://www.facebook.com/groups/851670585436522/posts/1880500019220235/#"
+    url = "https://www.facebook.com/groups/tuyendungkisuIT"
     result = get_id_from_url(url, profile_id)
-    print(result)
+    print("heLLO" ,result)

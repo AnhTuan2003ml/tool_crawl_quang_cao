@@ -4,6 +4,7 @@ import json
 import time
 import random
 import re
+from pathlib import Path
 
 # --- SETUP ĐƯỜNG DẪN ĐỂ IMPORT CORE ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -13,6 +14,132 @@ sys.path.append(parent_dir)
 from core.nst import connect_profile
 from core.nst import stop_profile
 from core.browser import FBController
+
+# Worker lấy page_id/post_id từ URL (dùng cookie theo profile_id trong settings.json)
+try:
+    from worker.get_id import get_id_from_url
+except Exception:
+    try:
+        from get_id import get_id_from_url
+    except Exception:
+        get_id_from_url = None
+
+# Lưu mapping group -> page_id theo profile_id
+GROUPS_JSON_PATH = Path(parent_dir) / "config" / "groups.json"
+GROUPS_LOCK_PATH = Path(str(GROUPS_JSON_PATH) + ".lock")
+
+
+def _normalize_group_url(raw: str) -> str:
+    s = str(raw or "").strip()
+    if not s:
+        return ""
+    if re.match(r"^https?://", s, flags=re.IGNORECASE):
+        return s
+    if s.lower().startswith("facebook.com/") or s.lower().startswith("www.facebook.com/"):
+        return "https://" + s
+    if "/groups/" in s:
+        if s.startswith("/"):
+            return "https://www.facebook.com" + s
+        return "https://www.facebook.com/" + s.lstrip("/")
+    return f"https://www.facebook.com/groups/{s}"
+
+
+def _acquire_groups_lock(timeout_seconds: float = 60.0, poll: float = 0.1):
+    """
+    Lock file đơn giản (cross-platform): tạo file .lock bằng O_EXCL để chống ghi đè khi nhiều process cùng ghi.
+    """
+    start = time.time()
+    while True:
+        try:
+            fd = os.open(str(GROUPS_LOCK_PATH), os.O_CREAT | os.O_EXCL | os.O_RDWR)
+            return fd
+        except FileExistsError:
+            # timeout_seconds <= 0 => chờ vô hạn
+            if timeout_seconds and timeout_seconds > 0 and (time.time() - start >= timeout_seconds):
+                return None
+            time.sleep(poll)
+        except Exception:
+            return None
+
+
+def _release_groups_lock(fd) -> None:
+    try:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except Exception:
+                pass
+        try:
+            if GROUPS_LOCK_PATH.exists():
+                GROUPS_LOCK_PATH.unlink()
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def _read_groups_json() -> dict:
+    try:
+        if not GROUPS_JSON_PATH.exists():
+            return {}
+        raw = GROUPS_JSON_PATH.read_text(encoding="utf-8").strip()
+        if not raw:
+            return {}
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _write_groups_json(data: dict) -> None:
+    GROUPS_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = Path(str(GROUPS_JSON_PATH) + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(str(tmp), str(GROUPS_JSON_PATH))
+
+
+def save_group_page_id(profile_id: str, page_id: str, url_page: str) -> bool:
+    """
+    Lưu vào backend/config/groups.json theo format:
+    {
+      "<profile_id>": [
+        {"page_id": "...", "url_page": "..."}
+      ]
+    }
+    """
+    pid = str(profile_id or "").strip()
+    pg = str(page_id or "").strip()
+    urlp = str(url_page or "").strip()
+    if not pid or not pg or not urlp:
+        return False
+
+    fd = _acquire_groups_lock()
+    if fd is None:
+        # Không có lock => không ghi để tránh race condition khi chạy đa process
+        print(f"⚠️ [groups.json] Không lấy được lock trong thời gian chờ -> bỏ qua ghi (profile_id={pid})")
+        return False
+    try:
+        data = _read_groups_json()
+        arr = data.get(pid)
+        if not isinstance(arr, list):
+            arr = []
+
+        # chống trùng theo page_id
+        updated = False
+        for item in arr:
+            if isinstance(item, dict) and str(item.get("page_id") or "").strip() == pg:
+                item["url_page"] = urlp
+                updated = True
+                break
+
+        if not updated:
+            arr.append({"page_id": pg, "url_page": urlp})
+
+        data[pid] = arr
+        _write_groups_json(data)
+        return True
+    finally:
+        _release_groups_lock(fd)
 
 class GroupJoiner(FBController):
     """
@@ -24,20 +151,7 @@ class GroupJoiner(FBController):
             print("⚠️ group rỗng, bỏ qua")
             return False
 
-        # Hỗ trợ lưu group dưới dạng full URL / hoặc facebook.com/... không có scheme
-        if re.match(r"^https?://", raw, flags=re.IGNORECASE):
-            url = raw
-        elif raw.lower().startswith("facebook.com/") or raw.lower().startswith("www.facebook.com/"):
-            url = "https://" + raw
-        elif "/groups/" in raw:
-            # Trường hợp người dùng dán path có /groups/ nhưng thiếu domain
-            if raw.startswith("/"):
-                url = "https://www.facebook.com" + raw
-            else:
-                url = "https://www.facebook.com/" + raw.lstrip("/")
-        else:
-            # Fallback: coi là group_id
-            url = f"https://www.facebook.com/groups/{raw}"
+        url = _normalize_group_url(raw)
         print(f"\n🚀 Đang truy cập nhóm: {group_id}")
         print(f"🔗 Link: {url}")
         
@@ -132,7 +246,24 @@ def run_batch_join_from_list(profile_id, group_ids):
         
         # 3. Chạy vòng lặp
         for idx, gid in enumerate(cleaned):
-            fb.join_group(gid)
+            # 3a) Join group (hoặc skip nếu đã join)
+            url = _normalize_group_url(gid)
+            fb.join_group(url)
+
+            # 3b) Sau khi join/đã join -> lấy page_id bằng get_id_from_url và lưu vào backend/config/groups.json
+            if get_id_from_url and url:
+                try:
+                    res = get_id_from_url(url, profile_id)
+                    if isinstance(res, dict) and res.get("url_type") == "group":
+                        page_id = str(res.get("page_id") or "").strip()
+                        if page_id:
+                            ok = save_group_page_id(profile_id, page_id, url)
+                            if ok:
+                                print(f"💾 Đã lưu group: profile_id={profile_id} page_id={page_id}")
+                            else:
+                                print(f"⚠️ Không lưu được groups.json (profile_id={profile_id}, page_id={page_id})")
+                except Exception as e:
+                    print(f"⚠️ Lỗi get_id_from_url khi join group: {e}")
             
             # Nghỉ ngẫu nhiên (trừ khi là group cuối)
             if idx < len(cleaned) - 1:
