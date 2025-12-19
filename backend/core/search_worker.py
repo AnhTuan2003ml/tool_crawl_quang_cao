@@ -332,7 +332,7 @@ class SearchBotController(FBController):
 # ==============================================================================
 # HÀM 1: TÌM KIẾM & LIKE (Trang Search)
 # ==============================================================================
-def search_and_like(profile_id: str, search_text: str, duration_minutes: int = 30):
+def search_and_like(profile_id: str, search_text: str, duration_minutes: int = 30, all_profile_ids=None):
     """Nhập từ khóa -> Vào trang Search -> Lướt & Like bài có từ khóa"""
     try:
         # 1. Tạo URL Tìm kiếm
@@ -342,7 +342,7 @@ def search_and_like(profile_id: str, search_text: str, duration_minutes: int = 3
         print(f"🔍 [Search] Từ khóa: '{search_text}'")
         print(f"🔗 Link: {target_url}")
 
-        _run_bot_logic(profile_id, target_url, search_text, duration_minutes)
+        _run_bot_logic(profile_id, target_url, search_text, duration_minutes, all_profile_ids=all_profile_ids)
 
     except Exception as e:
         print(f"❌ Lỗi search_and_like: {e}")
@@ -350,7 +350,7 @@ def search_and_like(profile_id: str, search_text: str, duration_minutes: int = 3
 # ==============================================================================
 # HÀM 2: LƯỚT NEWFEED & LIKE (Trang Chủ)
 # ==============================================================================
-def feed_and_like(profile_id: str, filter_text: str, duration_minutes: int = 30):
+def feed_and_like(profile_id: str, filter_text: str, duration_minutes: int = 30, all_profile_ids=None):
     """Vào trang chủ (Feed) -> Lướt -> Chỉ Like bài nào chứa filter_text"""
     try:
         # 1. URL là Trang chủ
@@ -358,7 +358,7 @@ def feed_and_like(profile_id: str, filter_text: str, duration_minutes: int = 30)
         
         print(f"🏠 [Feed] Lướt News Feed tìm từ khóa: '{filter_text}'")
         
-        _run_bot_logic(profile_id, target_url, filter_text, duration_minutes)
+        _run_bot_logic(profile_id, target_url, filter_text, duration_minutes, all_profile_ids=all_profile_ids)
 
     except Exception as e:
         print(f"❌ Lỗi feed_and_like: {e}")
@@ -366,7 +366,7 @@ def feed_and_like(profile_id: str, filter_text: str, duration_minutes: int = 30)
 # ==============================================================================
 # HÀM CHẠY CHUNG (CORE LOGIC)
 # ==============================================================================
-def _run_bot_logic(profile_id, url, raw_text, duration_minutes):
+def _run_bot_logic(profile_id, url, raw_text, duration_minutes, all_profile_ids=None):
     try:
         # 1. Kết nối
         print(f"🚀 Đang mở profile: {profile_id}")
@@ -375,6 +375,14 @@ def _run_bot_logic(profile_id, url, raw_text, duration_minutes):
         # Dùng Controller đã cắt bỏ Share/Save
         fb = SearchBotController(ws_url)
         fb.profile_id = profile_id
+        # ✅ giới hạn dispatch/get_id chỉ trong các profile đang chạy (đã chọn)
+        try:
+            if all_profile_ids:
+                fb.all_profile_ids = list(all_profile_ids)
+            else:
+                fb.all_profile_ids = [profile_id]
+        except Exception:
+            fb.all_profile_ids = [profile_id]
         fb.connect()
 
         # 2. Setup filter rules

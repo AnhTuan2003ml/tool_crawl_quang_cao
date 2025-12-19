@@ -5,7 +5,6 @@ import json
 import re
 from urllib.parse import urlparse, parse_qs, unquote
 import os
-from worker.get_id import get_id_from_url
 import sys
 from core.settings import get_settings, SETTINGS_PATH
 # ==============================================================================

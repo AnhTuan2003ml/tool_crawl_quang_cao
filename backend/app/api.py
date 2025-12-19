@@ -46,7 +46,14 @@ def _run_join_groups_worker(profile_id: str, groups: list[str]) -> None:
         print(f"❌ Join groups worker lỗi ({profile_id}): {exc}")
 
 
-def _run_feed_worker(profile_id: str, mode: str, text: str, run_minutes: int, rest_minutes: int) -> None:
+def _run_feed_worker(
+    profile_id: str,
+    mode: str,
+    text: str,
+    run_minutes: int,
+    rest_minutes: int,
+    all_profile_ids: Optional[list[str]] = None,
+) -> None:
     """
     Worker chạy nuôi acc (feed/search & like) cho 1 profile theo vòng lặp:
     chạy run_minutes -> tắt -> nghỉ rest_minutes -> lặp lại.
@@ -62,9 +69,9 @@ def _run_feed_worker(profile_id: str, mode: str, text: str, run_minutes: int, re
 
         while True:
             if m == "search":
-                search_and_like(profile_id, text or "", duration_minutes=run_m)
+                search_and_like(profile_id, text or "", duration_minutes=run_m, all_profile_ids=all_profile_ids)
             else:
-                feed_and_like(profile_id, text or "", duration_minutes=run_m)
+                feed_and_like(profile_id, text or "", duration_minutes=run_m, all_profile_ids=all_profile_ids)
 
             if rest_m <= 0:
                 break
@@ -741,7 +748,7 @@ def feed_start(payload: FeedStartRequest) -> dict:
 
             proc = Process(
                 target=_run_feed_worker,
-                args=(pid, mode, text, run_minutes, rest_minutes),
+                args=(pid, mode, text, run_minutes, rest_minutes, pids),
                 daemon=True,
             )
             proc.start()

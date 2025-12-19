@@ -71,6 +71,12 @@ class AppRunner:
             # 2. Khởi tạo trình duyệt
             fb = FBController(ws)
             fb.profile_id = profile_id
+            # ✅ Chỉ dispatch/get_id trong phạm vi các profile đang chạy (đã chọn),
+            # tránh loop toàn bộ PROFILE_IDS trong settings.json gây log "thiếu cookie".
+            try:
+                fb.all_profile_ids = list(self.profiles or [])
+            except Exception:
+                fb.all_profile_ids = [profile_id]
             # Filter thêm theo text nhập từ UI (nếu có)
             try:
                 raw = self.text
