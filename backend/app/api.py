@@ -235,22 +235,95 @@ def run_bot(payload: Optional[RunRequest] = Body(None)) -> dict:
 
 @app.post("/stop")
 def stop_bot() -> dict:
-    """Dừng tiến trình AppRunner nếu đang chạy."""
+    """Dừng tiến trình AppRunner nếu đang chạy và đóng toàn bộ NST browser."""
     global runner_process
+    
+    print("=" * 60)
+    print("🛑 [STOP] Nhận lệnh dừng từ frontend")
+    print("=" * 60)
 
-    if not runner_process or not runner_process.is_alive():
-        return {"status": "not_running"}
+    # 1) Đóng NST browser TRƯỚC để process tự detect và dừng
+    print("\n🔌 [NST] Đang đóng toàn bộ browser NST...")
+    nst_stopped = False
+    nst_error = None
+    try:
+        result = stop_all_browsers()
+        nst_stopped = bool(result)
+        if nst_stopped:
+            print("   ✅ Đã đóng toàn bộ NST browser thành công")
+        else:
+            print("   ⚠️ Không đóng được NST browser (có thể NST không hỗ trợ stop-all)")
+    except Exception as e:
+        nst_error = str(e)
+        print(f"   ❌ Lỗi khi đóng NST browsers: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    # 2) Đợi một chút để process con detect browser đã đóng
+    if nst_stopped:
+        print("   ⏳ Đợi 2s để process con detect browser đã đóng...")
+        import time
+        time.sleep(2)
+    
+    # 3) Dừng runner process (force terminate nếu cần)
+    runner_status = "not_running"
+    if runner_process:
+        if runner_process.is_alive():
+            print(f"\n📌 Runner process đang chạy (PID: {runner_process.pid})")
+            print("   → Đang terminate process...")
+            runner_process.terminate()
+            runner_process.join(timeout=5)
+            was_alive = runner_process.is_alive()
+            if was_alive:
+                print("   ❌ Process vẫn còn sống sau 5s, force kill...")
+                runner_process.kill()
+                runner_process.join(timeout=2)
+            runner_status = "stopped" if not runner_process.is_alive() else "failed"
+            runner_process = None
+            print(f"   ✅ Runner process đã dừng: {runner_status}")
+        else:
+            print("   ℹ️ Runner process không chạy")
+    else:
+        print("   ℹ️ Không có runner process")
+    
+    # 4) Đóng NST browser lần nữa để chắc chắn (nếu lần đầu chưa thành công)
+    if not nst_stopped:
+        print("\n🔌 [NST] Thử đóng NST browser lần nữa...")
+        try:
+            result = stop_all_browsers()
+            nst_stopped = bool(result)
+            if nst_stopped:
+                print("   ✅ Đã đóng toàn bộ NST browser thành công (lần 2)")
+        except Exception as e:
+            print(f"   ⚠️ Lỗi khi đóng NST browsers (lần 2): {e}")
+    
+    # 2) Đóng toàn bộ NST browser
+    print("\n🔌 [NST] Đang đóng toàn bộ browser NST...")
+    nst_stopped = False
+    nst_error = None
+    try:
+        result = stop_all_browsers()
+        nst_stopped = bool(result)
+        if nst_stopped:
+            print("   ✅ Đã đóng toàn bộ NST browser thành công")
+        else:
+            print("   ⚠️ Không đóng được NST browser (có thể NST không hỗ trợ stop-all)")
+    except Exception as e:
+        nst_error = str(e)
+        print(f"   ❌ Lỗi khi đóng NST browsers: {e}")
+        import traceback
+        traceback.print_exc()
 
-    runner_process.terminate()
-    runner_process.join(timeout=5)
+    print("=" * 60)
+    print(f"📊 [STOP] Kết quả: runner={runner_status}, nst={nst_stopped}")
+    print("=" * 60)
 
-    was_alive = runner_process.is_alive()
-    runner_process = None
-
-    if was_alive:
-        raise HTTPException(status_code=500, detail="Không dừng được bot")
-
-    return {"status": "stopped"}
+    return {
+        "status": "stopped",
+        "runner_status": runner_status,
+        "nst_stopped": nst_stopped,
+        "nst_error": nst_error
+    }
 
 
 @app.get("/status")

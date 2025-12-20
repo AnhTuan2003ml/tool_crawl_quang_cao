@@ -23,115 +23,153 @@ NST_BASE_URLS = [
 ]
 
 
-def _nst_request(method: str, path: str, timeout: int = 15, headers: Optional[dict] = None) -> Optional[Any]:
+def _nst_request(method: str, path: str, timeout: int = 15, headers: Optional[dict] = None, data: Optional[Any] = None) -> Optional[Any]:
     """
     Gọi NST local API. Trả về JSON nếu parse được, None nếu lỗi.
     """
     for base in NST_BASE_URLS:
         url = f"{base}{path}"
         try:
-            resp = requests.request(method, url, timeout=timeout, headers=headers)
+            print(f"      🔗 Thử: {method} {url}")
+            if data is not None:
+                print(f"         → Body: {data}")
+            resp = requests.request(method, url, timeout=timeout, headers=headers, json=data if data is not None else None)
+            print(f"         → Status: {resp.status_code}")
             try:
-                return resp.json()
-            except Exception:
-                return {"status_code": resp.status_code, "text": resp.text}
-        except Exception:
+                json_data = resp.json()
+                print(f"         → Response: {json_data}")
+                return json_data
+            except Exception as json_err:
+                text_data = {"status_code": resp.status_code, "text": resp.text[:200]}
+                print(f"         → Response (không phải JSON): {text_data}")
+                return text_data
+        except Exception as req_err:
+            print(f"         ❌ Lỗi request: {req_err}")
             continue
+    print(f"      ⚠️ Không endpoint nào thành công cho {method} {path}")
     return None
 
 
 def stop_profile(profile_id: str) -> bool:
     """
-    Best-effort: yêu cầu NST stop/close browser instance của profile.
-    Vì NST có nhiều bản/endpoint khác nhau, thử nhiều đường dẫn phổ biến.
+    Dừng browser instance của profile bằng DELETE /api/v2/browsers/{profile_id}
     """
     pid = str(profile_id or "").strip()
     if not pid:
+        print(f"   ⚠️ [stop_profile] profile_id rỗng")
         return False
 
+    print(f"   🔍 [stop_profile] Đang dừng profile: {pid}")
+    
     cfg = _get_runtime_settings()
     api_key = str(getattr(cfg, "api_key", "") or "").strip()
-    hdr = {"x-api-key": api_key} if api_key else None
-    # Thử cả kiểu query param và header (một số bản NST chỉ nhận header)
-    candidates = [
-        # query
-        ("POST", f"/browsers/stop/{pid}?x-api-key={api_key}"),
-        ("GET", f"/browsers/stop/{pid}?x-api-key={api_key}"),
-        ("POST", f"/browsers/close/{pid}?x-api-key={api_key}"),
-        ("GET", f"/browsers/close/{pid}?x-api-key={api_key}"),
-        ("POST", f"/browser/stop/{pid}?x-api-key={api_key}"),
-        ("GET", f"/browser/stop/{pid}?x-api-key={api_key}"),
-        ("POST", f"/browser/close/{pid}?x-api-key={api_key}"),
-        ("GET", f"/browser/close/{pid}?x-api-key={api_key}"),
-        ("POST", f"/stop/{pid}?x-api-key={api_key}"),
-        ("GET", f"/stop/{pid}?x-api-key={api_key}"),
-        ("POST", f"/close/{pid}?x-api-key={api_key}"),
-        ("GET", f"/close/{pid}?x-api-key={api_key}"),
-        ("POST", f"/disconnect/{pid}?x-api-key={api_key}"),
-        ("GET", f"/disconnect/{pid}?x-api-key={api_key}"),
-        # header (không query)
-        ("POST", f"/browsers/stop/{pid}"),
-        ("GET", f"/browsers/stop/{pid}"),
-        ("POST", f"/browsers/close/{pid}"),
-        ("GET", f"/browsers/close/{pid}"),
-        ("POST", f"/browser/stop/{pid}"),
-        ("GET", f"/browser/stop/{pid}"),
-        ("POST", f"/browser/close/{pid}"),
-        ("GET", f"/browser/close/{pid}"),
-        ("POST", f"/stop/{pid}"),
-        ("GET", f"/stop/{pid}"),
-        ("POST", f"/close/{pid}"),
-        ("GET", f"/close/{pid}"),
-        ("POST", f"/disconnect/{pid}"),
-        ("GET", f"/disconnect/{pid}"),
-    ]
-
-    for method, path in candidates:
-        data = _nst_request(method, path, headers=hdr)
-        if not data:
-            continue
-        # heuristic success: err==False or code==0 or status ok
+    hdr = {
+        "x-api-key": api_key,
+        "Content-Type": "application/json"
+    } if api_key else {"Content-Type": "application/json"}
+    
+    # Dùng DELETE /browsers/{profile_id} (base URL đã có /api/v2)
+    path = f"/browsers/{pid}"
+    
+    print(f"   📋 API Key: {'Có' if api_key else 'Không có'}")
+    print(f"   📋 Endpoint: DELETE {path}")
+    
+    data = _nst_request("DELETE", path, headers=hdr)
+    if not data:
+        print(f"   ❌ [stop_profile] Không có response từ NST")
+        return False
+    
+    # Kiểm tra kết quả
+    if isinstance(data, dict):
         if data.get("err") is False:
+            print(f"   ✅ [stop_profile] THÀNH CÔNG! err=False")
             return True
-        if str(data.get("status")).lower() in {"ok", "success", "stopped", "closed"}:
+        status_lower = str(data.get("status", "")).lower()
+        if status_lower in {"ok", "success", "stopped", "closed"}:
+            print(f"   ✅ [stop_profile] THÀNH CÔNG! status={status_lower}")
             return True
         if data.get("code") in (0, 200):
+            print(f"   ✅ [stop_profile] THÀNH CÔNG! code={data.get('code')}")
             return True
+        print(f"   ⚠️ [stop_profile] Không match điều kiện thành công (err={data.get('err')}, status={data.get('status')}, code={data.get('code')})")
+    else:
+        print(f"   ⚠️ [stop_profile] Response không phải dict: {type(data)}")
+    
     return False
 
 
 def stop_all_browsers() -> bool:
     """
-    Best-effort: đóng toàn bộ browser/tab NST (một số bản hỗ trợ endpoint stop/close all).
+    Đóng toàn bộ browser NST bằng DELETE /api/v2/browsers với body là array các profile_id.
     """
+    print("   🔍 [stop_all_browsers] Bắt đầu đóng toàn bộ NST browser...")
+    
     cfg = _get_runtime_settings()
     api_key = str(getattr(cfg, "api_key", "") or "").strip()
-    hdr = {"x-api-key": api_key} if api_key else None
-
-    candidates = [
-        ("POST", f"/browsers/stop-all?x-api-key={api_key}"),
-        ("POST", f"/browsers/close-all?x-api-key={api_key}"),
-        ("POST", f"/browsers/stopAll?x-api-key={api_key}"),
-        ("POST", f"/browsers/closeAll?x-api-key={api_key}"),
-        ("POST", f"/stop-all?x-api-key={api_key}"),
-        ("POST", f"/close-all?x-api-key={api_key}"),
-        ("POST", "/browsers/stop-all"),
-        ("POST", "/browsers/close-all"),
-        ("POST", "/stop-all"),
-        ("POST", "/close-all"),
-    ]
-
-    for method, path in candidates:
-        data = _nst_request(method, path, headers=hdr)
-        if not data:
-            continue
-        if isinstance(data, dict):
-            if data.get("err") is False:
-                return True
-            if str(data.get("status")).lower() in {"ok", "success", "stopped", "closed"}:
-                return True
-            if data.get("code") in (0, 200):
-                return True
+    hdr = {
+        "x-api-key": api_key,
+        "Content-Type": "application/json"
+    } if api_key else {"Content-Type": "application/json"}
+    
+    print(f"   📋 API Key: {'Có' if api_key else 'Không có'}")
+    
+    # Lấy danh sách profile_id từ settings
+    try:
+        from core.settings import get_settings
+        settings = get_settings()
+        profile_ids = []
+        
+        # Lấy từ PROFILE_IDS (có thể là dict hoặc list)
+        profile_data = getattr(settings, "profile_ids", None)
+        if isinstance(profile_data, dict):
+            profile_ids = list(profile_data.keys())
+        elif isinstance(profile_data, list):
+            profile_ids = profile_data
+        elif isinstance(profile_data, str):
+            profile_ids = [p.strip() for p in profile_data.split(",") if p.strip()]
+        
+        profile_ids = [str(pid).strip() for pid in profile_ids if str(pid).strip()]
+        
+        if not profile_ids:
+            print(f"   ⚠️ [stop_all_browsers] Không tìm thấy profile_id nào trong settings")
+            # Vẫn thử gọi với array rỗng
+            profile_ids = []
+    except Exception as e:
+        print(f"   ⚠️ [stop_all_browsers] Lỗi khi lấy profile_ids: {e}")
+        profile_ids = []
+    
+    print(f"   📋 Số profile sẽ đóng: {len(profile_ids)}")
+    if profile_ids:
+        print(f"   📋 Profile IDs: {profile_ids}")
+    
+    # Dùng DELETE /browsers với body là JSON array các profile_id (base URL đã có /api/v2)
+    path = "/browsers"
+    payload = profile_ids  # requests sẽ tự động convert list thành JSON array
+    
+    print(f"   📋 Endpoint: DELETE {path}")
+    print(f"   📋 Body: {payload}")
+    
+    data = _nst_request("DELETE", path, headers=hdr, data=payload)
+    if not data:
+        print(f"   ❌ [stop_all_browsers] Không có response từ NST")
+        return False
+    
+    # Kiểm tra kết quả
+    if isinstance(data, dict):
+        if data.get("err") is False:
+            print(f"   ✅ [stop_all_browsers] THÀNH CÔNG! err=False")
+            return True
+        status_lower = str(data.get("status", "")).lower()
+        if status_lower in {"ok", "success", "stopped", "closed"}:
+            print(f"   ✅ [stop_all_browsers] THÀNH CÔNG! status={status_lower}")
+            return True
+        if data.get("code") in (0, 200):
+            print(f"   ✅ [stop_all_browsers] THÀNH CÔNG! code={data.get('code')}")
+            return True
+        print(f"   ⚠️ [stop_all_browsers] Không match điều kiện thành công (err={data.get('err')}, status={data.get('status')}, code={data.get('code')})")
+    else:
+        print(f"   ⚠️ [stop_all_browsers] Response không phải dict: {type(data)}")
+    
     return False
 
 def connect_profile(profile_id: str):

@@ -42,6 +42,17 @@ class SimpleBot:
                 # Random mouse move nhẹ cho đỡ bị check bot
                 
             
+            except RuntimeError as e:
+                # Nếu là exception đặc biệt BROWSER_CLOSED thì dừng ngay
+                if "BROWSER_CLOSED" in str(e):
+                    print(f"🛑 Browser đã bị đóng -> Dừng bot ngay lập tức")
+                    break
+                raise  # Re-raise nếu không phải BROWSER_CLOSED
             except Exception as e:
-                print(f"❌ Lỗi vòng lặp: {e}")
+                error_msg = str(e).lower()
+                # Nếu browser/page đã bị đóng thì dừng luôn
+                if any(keyword in error_msg for keyword in ["closed", "disconnected", "target page", "context or browser"]):
+                    print(f"🛑 Browser đã bị đóng -> Dừng bot")
+                    break
+                print(f"⚠️ Lỗi scan: {e}")
                 time.sleep(2)

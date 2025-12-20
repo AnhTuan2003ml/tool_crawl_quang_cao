@@ -397,7 +397,13 @@ class FBController:
                 # POST ĐÃ XỬ LÝ → ĐẨY RA KHỎI VIEW
                 # =========================
                 if self.check_post_is_processed(post):
-                    self.page.mouse.wheel(0, normal_step)
+                    try:
+                        self.page.mouse.wheel(0, normal_step)
+                    except Exception as e:
+                        error_msg = str(e).lower()
+                        if any(keyword in error_msg for keyword in ["closed", "disconnected", "target page", "context or browser"]):
+                            raise RuntimeError("BROWSER_CLOSED") from e
+                        raise
                     time.sleep(random.uniform(0.08, 0.15))
                     continue
 
@@ -414,6 +420,11 @@ class FBController:
                     return post, "yellow"
 
         except Exception as e:
+            error_msg = str(e).lower()
+            # Nếu browser/page đã bị đóng thì raise exception đặc biệt để bot dừng
+            if any(keyword in error_msg for keyword in ["closed", "disconnected", "target page", "context or browser"]):
+                print(f"🛑 Browser đã bị đóng trong scan_while_scrolling -> Raise exception")
+                raise RuntimeError("BROWSER_CLOSED") from e
             print(f"⚠️ Lỗi scan: {e}")
             return None, None
 
@@ -640,7 +651,10 @@ class FBController:
                     viewport = self.page.viewport_size
                     height = viewport['height'] if viewport else 800
                     self.page.mouse.wheel(0, height * 0.4)
-                except:
+                except Exception as e:
+                    error_msg = str(e).lower()
+                    if any(keyword in error_msg for keyword in ["closed", "disconnected", "target page", "context or browser"]):
+                        raise RuntimeError("BROWSER_CLOSED") from e
                     pass
 
                 return False
@@ -666,7 +680,10 @@ class FBController:
                         viewport = self.page.viewport_size
                         height = viewport['height'] if viewport else 800
                         self.page.mouse.wheel(0, height * 0.4)
-                    except:
+                    except Exception as e:
+                        error_msg = str(e).lower()
+                        if any(keyword in error_msg for keyword in ["closed", "disconnected", "target page", "context or browser"]):
+                            raise RuntimeError("BROWSER_CLOSED") from e
                         pass
                     return False
 

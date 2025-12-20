@@ -87,6 +87,7 @@ let profileState = {
 let addRowEl = null; // Row tạm để nhập profile mới
 let joinGroupPollTimer = null;
 let feedPollTimer = null;
+let isScanning = false; // Trạng thái đang quét
 
 stopBtn.disabled = true;
 
@@ -118,10 +119,36 @@ async function loadPostsForManager() {
 }
 
 function setScanning(isOn) {
+  isScanning = isOn;
   startBtn.disabled = isOn;
   const startBtnText = startBtn.querySelector('span:last-child');
   startBtnText.textContent = isOn ? 'Đang quét...' : 'Bắt đầu quét';
   stopBtn.disabled = !isOn;
+  
+  // Disable/enable các nút quét khác khi đang quét
+  if (scanStartBtn) {
+    scanStartBtn.disabled = isOn;
+  }
+  if (scanPostsSettingBtn) {
+    scanPostsSettingBtn.disabled = isOn;
+  }
+
+  // Khi dừng quét: gỡ hết trạng thái loading/spinner ở các nút liên quan
+  // (tránh trường hợp backend stop chậm làm UI bị kẹt, không bấm lại được)
+  if (!isOn) {
+    setButtonLoading(scanStartBtn, false);
+    setButtonLoading(scanPostsSettingBtn, false);
+  }
+  // Thêm loading spinner cho nút bắt đầu quét
+  if (startBtn) {
+    if (isOn) {
+      if (!startBtn.classList.contains('btn-loading')) {
+        startBtn.classList.add('btn-loading');
+      }
+    } else {
+      startBtn.classList.remove('btn-loading');
+    }
+  }
 }
 
 // ==== Settings (frontend-only) ====
@@ -954,6 +981,17 @@ if (groupScanStartBtn) {
 
 if (scanStartBtn) {
   scanStartBtn.addEventListener('click', async () => {
+    // Nếu đang quét thì không cho bấm lại
+    if (isScanning) {
+      showToast('Đang quét, vui lòng đợi hoặc bấm dừng trước', 'warning');
+      return;
+    }
+    
+    // Nếu nút đang loading thì không cho bấm lại
+    if (scanStartBtn.classList.contains('btn-loading')) {
+      return;
+    }
+    
     const selected = Object.keys(profileState.selected || {}).filter((pid) => profileState.selected[pid]);
     if (selected.length === 0) {
       showToast('Chọn (tick) ít nhất 1 profile để quét bài viết.', 'error');
@@ -982,10 +1020,11 @@ if (scanStartBtn) {
       if (scanConfigPanel) scanConfigPanel.style.display = 'none';
     } catch (e) {
       showToast('Không chạy được quét bài viết (kiểm tra FastAPI).', 'error');
-    } finally {
       setButtonLoading(scanStartBtn, false);
       setButtonLoading(scanPostsSettingBtn, false);
+      setScanning(false);
     }
+    // Không reset loading ở đây vì setScanning(true) sẽ giữ trạng thái
   });
 }
 
@@ -1005,6 +1044,20 @@ async function handleStopAll() {
   } catch (e) {
     showToast('Không dừng được tất cả (kiểm tra FastAPI).', 'error');
   } finally {
+    // Reset UI quét (tránh kẹt spinner nếu user dừng bằng stop-all)
+    if (timerId) {
+      clearInterval(timerId);
+      timerId = null;
+    }
+    if (dataCheckInterval) {
+      clearInterval(dataCheckInterval);
+      dataCheckInterval = null;
+    }
+    setScanning(false);
+    setButtonLoading(scanStartBtn, false);
+    setButtonLoading(scanPostsSettingBtn, false);
+    setButtonLoading(stopBtn, false);
+
     btns.forEach((b) => setButtonLoading(b, false));
     if (joinGroupPollTimer) {
       clearInterval(joinGroupPollTimer);
@@ -1464,54 +1517,110 @@ async function loadInitialData() {
 
 // Start quét bài viết (dùng chung cho nút "Bắt đầu quét" và nút trong tab Setting profile)
 async function startScanFlow(options = {}) {
+  // Nếu đang quét thì không cho chạy lại
+  if (isScanning) {
+    showToast('Đang quét, vui lòng đợi hoặc bấm dừng trước', 'warning');
+    return;
+  }
+  
   const {
     runMinutes,
     restMinutes,
     text,
     mode,
   } = options || {};
-  // Load và hiển thị tất cả dữ liệu từ all_results_summary.json ngay lập tức
-  // Không cần chờ backend, hiển thị dữ liệu trước
-  await loadInitialData();
+  
+  try {
+    // Load và hiển thị tất cả dữ liệu từ all_results_summary.json ngay lập tức
+    // Không cần chờ backend, hiển thị dữ liệu trước
+    await loadInitialData();
 
-  // Nếu đang có interval check data cũ thì clear trước để tránh setInterval chồng
-  if (dataCheckInterval) {
-    clearInterval(dataCheckInterval);
-    dataCheckInterval = null;
+    // Nếu đang có interval check data cũ thì clear trước để tránh setInterval chồng
+    if (dataCheckInterval) {
+      clearInterval(dataCheckInterval);
+      dataCheckInterval = null;
+    }
+
+    // Sau đó mới chạy backend (nếu cần)
+    const ok = await triggerBackendRun({ runMinutes, restMinutes, text, mode });
+    if (!ok) {
+      setScanning(false);
+      return;
+    }
+
+    // Tự động kiểm tra dữ liệu mới mỗi 5 giây để cập nhật khi có dữ liệu mới
+    const checkInterval = 5000; // 5 giây
+    dataCheckInterval = setInterval(checkForNewData, checkInterval);
+
+    setScanning(true);
+  } catch (err) {
+    console.error('Lỗi trong startScanFlow:', err);
+    setScanning(false);
+    throw err;
   }
-
-  // Sau đó mới chạy backend (nếu cần)
-  const ok = await triggerBackendRun({ runMinutes, restMinutes, text, mode });
-  if (!ok) return;
-
-  // Tự động kiểm tra dữ liệu mới mỗi 5 giây để cập nhật khi có dữ liệu mới
-  const checkInterval = 5000; // 5 giây
-  dataCheckInterval = setInterval(checkForNewData, checkInterval);
-
-  setScanning(true);
 }
 
 startBtn.addEventListener(
   'click',
   async () => {
-    startScanFlow().catch((err) => {
+    // Nếu đang quét thì không cho bấm lại
+    if (isScanning) {
+      showToast('Đang quét, vui lòng đợi hoặc bấm dừng trước', 'warning');
+      return;
+    }
+    
+    // Nếu nút đang loading thì không cho bấm lại
+    if (startBtn.classList.contains('btn-loading')) {
+      return;
+    }
+    
+    try {
+      await startScanFlow();
+    } catch (err) {
       console.warn('Không startScanFlow được:', err);
-    });
+      showToast('Không thể khởi động quét', 'error');
+      setScanning(false);
+    }
   }
 );
 
-stopBtn.addEventListener('click', () => {
-  if (timerId) {
-    clearInterval(timerId);
-    timerId = null;
+stopBtn.addEventListener('click', async () => {
+  // Nếu đang dừng rồi thì không làm gì
+  if (stopBtn.classList.contains('btn-loading')) {
+    return;
   }
-  // Dừng kiểm tra dữ liệu mới
-  if (dataCheckInterval) {
-    clearInterval(dataCheckInterval);
-    dataCheckInterval = null;
+  
+  // Thêm loading state cho nút dừng
+  setButtonLoading(stopBtn, true, 'Đang dừng...');
+  
+  try {
+    // Dừng tất cả intervals và timers
+    if (timerId) {
+      clearInterval(timerId);
+      timerId = null;
+    }
+    // Dừng kiểm tra dữ liệu mới
+    if (dataCheckInterval) {
+      clearInterval(dataCheckInterval);
+      dataCheckInterval = null;
+    }
+
+    // Reset UI NGAY LẬP TỨC để user bấm lại được (không chờ backend)
+    setScanning(false);
+    setButtonLoading(scanStartBtn, false);
+    setButtonLoading(scanPostsSettingBtn, false);
+
+    // Gửi lệnh dừng backend (có thể chậm/timeout, nhưng UI không bị kẹt)
+    await sendStopSignal();
+    
+    showToast('Đã dừng quét', 'success');
+  } catch (err) {
+    console.warn('Lỗi khi dừng:', err);
+    showToast('Có lỗi khi dừng quét', 'error');
+  } finally {
+    // Bỏ loading state của nút dừng
+    setButtonLoading(stopBtn, false);
   }
-  setScanning(false);
-  sendStopSignal();
 });
 
 // Xuất file Excel
