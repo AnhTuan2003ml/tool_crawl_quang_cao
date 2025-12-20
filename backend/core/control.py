@@ -101,6 +101,26 @@ def set_global_pause(value: bool) -> Dict[str, Any]:
     return _update(_m)
 
 
+def reset_emergency_stop(*, clear_stopped_profiles: bool = False) -> Dict[str, Any]:
+    """
+    Reset GLOBAL_EMERGENCY_STOP về false để hệ thống chạy lại được.
+    Optionally clear stopped_profiles (để profile không bị giữ STOPPED).
+    """
+    def _m(st: Dict[str, Any]) -> None:
+        st["global_emergency_stop"] = False
+        if clear_stopped_profiles:
+            st["stopped_profiles"] = []
+            # không force đổi profile_states nếu caller muốn giữ audit;
+            # nhưng nếu đang STOPPED mà clear_stopped_profiles thì set RUNNING để dễ hiểu.
+            ps = st.get("profile_states")
+            if isinstance(ps, dict):
+                for k in list(ps.keys()):
+                    if str(ps.get(k) or "").upper() == "STOPPED":
+                        ps[k] = "RUNNING"
+
+    return _update(_m)
+
+
 def pause_profile(profile_id: str) -> Dict[str, Any]:
     pid = str(profile_id or "").strip()
     if not pid:

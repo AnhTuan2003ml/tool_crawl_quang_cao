@@ -1,19 +1,69 @@
 import time
 import random
 import os
+from core import control as control_state
 
 class SimpleBot:
     def __init__(self, fb):
         self.fb = fb 
 
+    def _sleep_with_pause_check(self, total_seconds, profile_id, active_time_list, last_check_time_list):
+        """
+        Sleep nhưng check pause: chỉ tính thời gian không pause vào active_time.
+        active_time_list và last_check_time_list là list để pass by reference.
+        """
+        remaining = total_seconds
+        chunk = 0.5  # Sleep theo chunk 0.5s để check pause thường xuyên
+        
+        while remaining > 0:
+            sleep_chunk = min(chunk, remaining)
+            
+            # Check pause TRƯỚC sleep: nếu đang pause thì không sleep, chỉ đợi
+            stop, paused_before, _reason = control_state.check_flags(profile_id)
+            if stop:
+                raise RuntimeError("EMERGENCY_STOP")
+            
+            if paused_before:
+                # Đang pause: không sleep, chỉ đợi và không tính vào active_time
+                time.sleep(sleep_chunk)
+                last_check_time_list[0] = time.time()
+                remaining -= sleep_chunk
+                continue
+            
+            # Không pause: sleep và tính vào active_time
+            start_chunk = time.time()
+            time.sleep(sleep_chunk)
+            end_chunk = time.time()
+            actual_elapsed = end_chunk - start_chunk
+            
+            # Check pause SAU sleep: nếu pause trong lúc sleep thì không tính
+            stop, paused_after, _reason = control_state.check_flags(profile_id)
+            if stop:
+                raise RuntimeError("EMERGENCY_STOP")
+            
+            # Chỉ cộng vào active_time nếu không pause cả trước và sau
+            if not paused_after:
+                active_time_list[0] += actual_elapsed
+            
+            last_check_time_list[0] = end_chunk
+            remaining -= sleep_chunk
+
     def run(self, url, duration=None):
         print(f"🚀 Đang truy cập: {url}")
         self.fb.goto(url) 
         
-        start_time = time.time()
+        # Track "active time" (chỉ tăng khi không pause) thay vì wall clock time
+        # Dùng list để pass by reference cho helper function
+        active_time_list = [0.0]
+        last_check_time_list = [time.time()]
+        profile_id = getattr(self.fb, 'profile_id', None)
         
         while True:
             try:
+                now = time.time()
+                elapsed_since_last_check = now - last_check_time_list[0]
+                last_check_time_list[0] = now
+                
                 # STOP/PAUSE checkpoint (ưu tiên STOP ALL)
                 try:
                     if hasattr(self.fb, "control_checkpoint"):
@@ -24,9 +74,19 @@ class SimpleBot:
                         break
                     raise
 
-                # 1. Kiểm tra thời gian chạy
-                if duration and (time.time() - start_time > duration):
-                    print("⏳ Hết giờ chạy.")
+                # Check pause: nếu không pause thì cộng thời gian đã trôi qua vào active_time
+                stop, paused, _reason = control_state.check_flags(profile_id)
+                if stop:
+                    print("🛑 Dừng bot do STOP flag")
+                    break
+                
+                # Chỉ tăng active_time khi KHÔNG pause (đóng băng timer khi pause)
+                if not paused:
+                    active_time_list[0] += elapsed_since_last_check
+                
+                # 1. Kiểm tra thời gian chạy (dùng active_time thay vì wall clock)
+                if duration and active_time_list[0] >= duration:
+                    print(f"⏳ Hết giờ chạy (đã chạy {active_time_list[0]:.1f}s / {duration}s).")
                     break
                 
                 # ============================================================
@@ -41,11 +101,13 @@ class SimpleBot:
 
                     delay = random.uniform(5.0, 8.0)
                     print(f"😴 Nghỉ sau khi xử lý bài {delay:.1f}s")
-                    time.sleep(delay)
+                    # Sleep với pause check: chỉ tính thời gian không pause vào active_time
+                    self._sleep_with_pause_check(delay, profile_id, active_time_list, last_check_time_list)
                 else:
                     delay = random.uniform(3.0, 5.0)
                     print(f"😴 Không có bài – nghỉ {delay:.1f}s")
-                    time.sleep(delay)
+                    # Sleep với pause check
+                    self._sleep_with_pause_check(delay, profile_id, active_time_list, last_check_time_list)
 
 
 
@@ -65,4 +127,5 @@ class SimpleBot:
                     print(f"🛑 Browser đã bị đóng -> Dừng bot")
                     break
                 print(f"⚠️ Lỗi scan: {e}")
-                time.sleep(2)
+                # Sleep với pause check cho lỗi
+                self._sleep_with_pause_check(2.0, profile_id, active_time_list, last_check_time_list)

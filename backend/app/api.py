@@ -972,6 +972,10 @@ class ProfilesControlPayload(BaseModel):
     profile_ids: list[str]
 
 
+class ResetStopPayload(BaseModel):
+    clear_stopped_profiles: bool = False
+
+
 @app.get("/control/state")
 def control_get_state() -> dict:
     return control_state.get_state()
@@ -1074,6 +1078,18 @@ def control_resume_profiles(payload: ProfilesControlPayload) -> dict:
     print(f"[UI] RESUME profiles={pids}")
     st = control_state.resume_profiles(pids)
     return {"status": "ok", "state": st, "resumed_profiles": pids}
+
+
+@app.post("/control/reset-stop")
+def control_reset_stop(payload: Optional[ResetStopPayload] = Body(None)) -> dict:
+    """
+    Reset emergency stop để hệ thống chạy lại được.
+    - clear_stopped_profiles=true: xoá luôn stopped_profiles (để profile không bị giữ STOPPED)
+    """
+    clear_stopped = bool(payload.clear_stopped_profiles) if payload else False
+    print(f"[UI] RESET STOP (clear_stopped_profiles={clear_stopped})")
+    st = control_state.reset_emergency_stop(clear_stopped_profiles=clear_stopped)
+    return {"status": "ok", "state": st}
 
 @app.delete("/settings/profiles/{profile_id}")
 def delete_profile(profile_id: str) -> dict:
