@@ -47,10 +47,18 @@
             </button>
           </div>
           <div class="field">
-            <button id="stopAllBtn" class="btn-danger" type="button">
-              <span class="btn-icon">🛑</span>
-              <span>Dừng tất cả</span>
-            </button>
+            <label for="interval">
+              <span class="label-icon">⏱️</span>
+              Thời gian lặp lại (phút)
+            </label>
+            <input id="interval" type="number" min="1" value="1" placeholder="Nhập số phút" />
+          </div>
+          <div class="field">
+            <label for="runMinutes">
+              <span class="label-icon">⏳</span>
+              Thời gian chạy mỗi phiên (phút)
+            </label>
+            <input id="runMinutes" type="number" min="1" value="30" placeholder="VD: 30" />
           </div>
           <div class="field">
             <label for="postCount">
@@ -128,33 +136,18 @@
               </div>
             </div>
             <div class="filter-group">
-              <div class="time-filter-wrapper">
-                <div>
-                  <div class="filter-label">⏰ Lọc theo thời gian:</div>
-                  <div class="time-filter-compact">
-                    <div class="time-filter-inline">
-                      <input type="datetime-local" id="timeFilterFrom" class="time-filter-input-compact" placeholder="Từ" />
-                      <span class="time-filter-separator">→</span>
-                      <input type="datetime-local" id="timeFilterTo" class="time-filter-input-compact" placeholder="Đến" />
-                      <button id="applyTimeFilterBtn" class="time-filter-btn-compact time-filter-apply-compact"
-                        title="Áp dụng">
-                        <span>✓</span>
-                      </button>
-                      <button id="clearTimeFilterBtn" class="time-filter-btn-compact time-filter-clear-compact" title="Xóa">
-                        <span>✗</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div class="recent-days-filter">
-                  <button id="todayBtn" class="filter-btn recent-day-btn" data-type="today">
-                    <span>📅 2 ngày trước</span>
+              <div class="filter-label">⏰ Lọc theo thời gian:</div>
+              <div class="time-filter-compact">
+                <div class="time-filter-inline">
+                  <input type="datetime-local" id="timeFilterFrom" class="time-filter-input-compact" placeholder="Từ" />
+                  <span class="time-filter-separator">→</span>
+                  <input type="datetime-local" id="timeFilterTo" class="time-filter-input-compact" placeholder="Đến" />
+                  <button id="applyTimeFilterBtn" class="time-filter-btn-compact time-filter-apply-compact"
+                    title="Áp dụng">
+                    <span>✓</span>
                   </button>
-                  <button id="recent1DayBtn" class="filter-btn recent-day-btn" data-type="1day">
-                    <span>📅 1 ngày trước</span>
-                  </button>
-                  <button id="recent2DaysBtn" class="filter-btn recent-day-btn" data-type="2days">
-                    <span>📅 Hiện tại</span>
+                  <button id="clearTimeFilterBtn" class="time-filter-btn-compact time-filter-clear-compact" title="Xóa">
+                    <span>✗</span>
                   </button>
                 </div>
               </div>

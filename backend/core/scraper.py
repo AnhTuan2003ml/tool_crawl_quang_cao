@@ -60,10 +60,6 @@ class SimpleBot:
         
         while True:
             try:
-                now = time.time()
-                elapsed_since_last_check = now - last_check_time_list[0]
-                last_check_time_list[0] = now
-                
                 # STOP/PAUSE checkpoint (ưu tiên STOP ALL)
                 try:
                     if hasattr(self.fb, "control_checkpoint"):
@@ -74,6 +70,11 @@ class SimpleBot:
                         break
                     raise
 
+                # Chỉ bắt đầu đo elapsed SAU checkpoint (vì checkpoint có thể wait khi pause)
+                now = time.time()
+                elapsed_since_last_check = now - last_check_time_list[0]
+                last_check_time_list[0] = now
+
                 # Check pause: nếu không pause thì cộng thời gian đã trôi qua vào active_time
                 stop, paused, _reason = control_state.check_flags(profile_id)
                 if stop:
@@ -81,8 +82,11 @@ class SimpleBot:
                     break
                 
                 # Chỉ tăng active_time khi KHÔNG pause (đóng băng timer khi pause)
-                if not paused:
-                    active_time_list[0] += elapsed_since_last_check
+                if paused:
+                    # Nếu vẫn đang pause (hiếm), reset mốc thời gian để không cộng dồn
+                    last_check_time_list[0] = time.time()
+                    continue
+                active_time_list[0] += elapsed_since_last_check
                 
                 # 1. Kiểm tra thời gian chạy (dùng active_time thay vì wall clock)
                 if duration and active_time_list[0] >= duration:

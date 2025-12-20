@@ -2302,15 +2302,10 @@ function clearTimeFilter() {
   if (timeFilterTo) timeFilterTo.value = '';
   timeFilterFromValue = null;
   timeFilterToValue = null;
-  
-  // Bỏ active state của các button recent days
-  if (todayBtn) todayBtn.classList.remove('active');
-  if (recent1DayBtn) recent1DayBtn.classList.remove('active');
-  if (recent2DaysBtn) recent2DaysBtn.classList.remove('active');
-  
+
   // Áp dụng lại filter
   applyAllFilters();
-  
+
   // Cập nhật trạng thái nút
   if (applyTimeFilterBtn) {
     applyTimeFilterBtn.classList.remove('active');
@@ -2415,12 +2410,6 @@ if (timeFilterFrom) {
       applyTimeFilter();
     }
   });
-  // Bỏ active state của recent days khi thay đổi input thủ công
-  timeFilterFrom.addEventListener('change', () => {
-    if (todayBtn) todayBtn.classList.remove('active');
-    if (recent1DayBtn) recent1DayBtn.classList.remove('active');
-    if (recent2DaysBtn) recent2DaysBtn.classList.remove('active');
-  });
 }
 
 if (timeFilterTo) {
@@ -2428,92 +2417,6 @@ if (timeFilterTo) {
     if (e.key === 'Enter') {
       applyTimeFilter();
     }
-  });
-  // Bỏ active state của recent days khi thay đổi input thủ công
-  timeFilterTo.addEventListener('change', () => {
-    if (todayBtn) todayBtn.classList.remove('active');
-    if (recent1DayBtn) recent1DayBtn.classList.remove('active');
-    if (recent2DaysBtn) recent2DaysBtn.classList.remove('active');
-  });
-}
-
-// Chọn ngày (hiện tại, 1 ngày trước, 2 ngày trước)
-const todayBtn = document.getElementById('todayBtn');
-const recent1DayBtn = document.getElementById('recent1DayBtn');
-const recent2DaysBtn = document.getElementById('recent2DaysBtn');
-
-function applyRecentDaysFilter(type) {
-  const now = new Date();
-  let startDate, endDate;
-  
-  if (type === 'today') {
-    // Hiện tại: từ 0h hôm nay đến 23h59 hôm nay
-    startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-  } else if (type === '1day') {
-    // 1 ngày trước: từ 0h hôm qua đến 23h59 hôm qua
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    startDate = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 0, 0, 0, 0);
-    endDate = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999);
-  } else if (type === '2days') {
-    // 2 ngày trước: từ 0h ngày hôm kia đến 23h59 ngày hôm kia
-    const dayBefore = new Date(now);
-    dayBefore.setDate(dayBefore.getDate() - 2);
-    startDate = new Date(dayBefore.getFullYear(), dayBefore.getMonth(), dayBefore.getDate(), 0, 0, 0, 0);
-    endDate = new Date(dayBefore.getFullYear(), dayBefore.getMonth(), dayBefore.getDate(), 23, 59, 59, 999);
-  }
-  
-  // Format thành datetime-local format (YYYY-MM-DDTHH:mm)
-  const formatDateTime = (date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-  };
-  
-  // Set giá trị vào input
-  if (timeFilterFrom && startDate) {
-    timeFilterFrom.value = formatDateTime(startDate);
-  }
-  if (timeFilterTo && endDate) {
-    timeFilterTo.value = formatDateTime(endDate);
-  }
-  
-  // Áp dụng filter
-  applyTimeFilter();
-  
-  // Cập nhật trạng thái active của các button
-  if (todayBtn) todayBtn.classList.remove('active');
-  if (recent1DayBtn) recent1DayBtn.classList.remove('active');
-  if (recent2DaysBtn) recent2DaysBtn.classList.remove('active');
-  
-  if (type === 'today' && todayBtn) {
-    todayBtn.classList.add('active');
-  } else if (type === '1day' && recent1DayBtn) {
-    recent1DayBtn.classList.add('active');
-  } else if (type === '2days' && recent2DaysBtn) {
-    recent2DaysBtn.classList.add('active');
-  }
-}
-
-if (todayBtn) {
-  todayBtn.addEventListener('click', () => {
-    applyRecentDaysFilter('today');
-  });
-}
-
-if (recent1DayBtn) {
-  recent1DayBtn.addEventListener('click', () => {
-    applyRecentDaysFilter('1day');
-  });
-}
-
-if (recent2DaysBtn) {
-  recent2DaysBtn.addEventListener('click', () => {
-    applyRecentDaysFilter('2days');
   });
 }
 
