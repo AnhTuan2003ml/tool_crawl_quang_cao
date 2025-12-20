@@ -16,6 +16,7 @@ from core.runner import AppRunner
 from core.settings import SETTINGS_PATH
 from core.nst import connect_profile, stop_profile, stop_all_browsers
 from core.browser import FBController
+from core import control as control_state
 
 app = FastAPI(title="NST Tool API", version="1.0.0")
 
@@ -68,6 +69,15 @@ def _run_feed_worker(
             run_m = 30
 
         while True:
+            # STOP/PAUSE checkpoint
+            stop, paused, reason = control_state.check_flags(profile_id)
+            if stop:
+                print(f"🛑 [FEED] {profile_id} EMERGENCY_STOP ({reason}) -> dừng worker")
+                break
+            if paused:
+                print(f"⏸️ [FEED] {profile_id} PAUSED ({reason}) -> sleep")
+                control_state.wait_if_paused(profile_id, sleep_seconds=0.5)
+
             if m == "search":
                 search_and_like(profile_id, text or "", duration_minutes=run_m, all_profile_ids=all_profile_ids)
             else:
@@ -78,7 +88,18 @@ def _run_feed_worker(
 
             # nghỉ rồi chạy lại (process có thể bị terminate bởi stop-all)
             import time as _t
-            _t.sleep(rest_m * 60)
+            # sleep theo chunk để vẫn dừng được ngay
+            slept = 0
+            while slept < rest_m * 60:
+                stop, paused, reason = control_state.check_flags(profile_id)
+                if stop:
+                    print(f"🛑 [FEED] {profile_id} EMERGENCY_STOP trong sleep ({reason}) -> dừng")
+                    return
+                if paused:
+                    _t.sleep(1)
+                    continue
+                _t.sleep(1)
+                slept += 1
     except Exception as exc:
         print(f"❌ Feed worker lỗi ({profile_id}): {exc}")
 
@@ -235,95 +256,27 @@ def run_bot(payload: Optional[RunRequest] = Body(None)) -> dict:
 
 @app.post("/stop")
 def stop_bot() -> dict:
-    """Dừng tiến trình AppRunner nếu đang chạy và đóng toàn bộ NST browser."""
-    global runner_process
-    
+    """
+    STOP (khẩn cấp):
+    - Set GLOBAL_EMERGENCY_STOP = true
+    - Best-effort: đóng toàn bộ NST browser (để các loop Playwright tự thoát)
+    - Không terminate/kill process (cooperative stop theo spec)
+    """
     print("=" * 60)
-    print("🛑 [STOP] Nhận lệnh dừng từ frontend")
+    print("🛑 [STOP] /stop triggered")
     print("=" * 60)
 
-    # 1) Đóng NST browser TRƯỚC để process tự detect và dừng
-    print("\n🔌 [NST] Đang đóng toàn bộ browser NST...")
+    control_state.set_global_emergency_stop(True)
+
     nst_stopped = False
     nst_error = None
     try:
-        result = stop_all_browsers()
-        nst_stopped = bool(result)
-        if nst_stopped:
-            print("   ✅ Đã đóng toàn bộ NST browser thành công")
-        else:
-            print("   ⚠️ Không đóng được NST browser (có thể NST không hỗ trợ stop-all)")
+        nst_stopped = bool(stop_all_browsers())
     except Exception as e:
         nst_error = str(e)
-        print(f"   ❌ Lỗi khi đóng NST browsers: {e}")
-        import traceback
-        traceback.print_exc()
-    
-    # 2) Đợi một chút để process con detect browser đã đóng
-    if nst_stopped:
-        print("   ⏳ Đợi 2s để process con detect browser đã đóng...")
-        import time
-        time.sleep(2)
-    
-    # 3) Dừng runner process (force terminate nếu cần)
-    runner_status = "not_running"
-    if runner_process:
-        if runner_process.is_alive():
-            print(f"\n📌 Runner process đang chạy (PID: {runner_process.pid})")
-            print("   → Đang terminate process...")
-            runner_process.terminate()
-            runner_process.join(timeout=5)
-            was_alive = runner_process.is_alive()
-            if was_alive:
-                print("   ❌ Process vẫn còn sống sau 5s, force kill...")
-                runner_process.kill()
-                runner_process.join(timeout=2)
-            runner_status = "stopped" if not runner_process.is_alive() else "failed"
-            runner_process = None
-            print(f"   ✅ Runner process đã dừng: {runner_status}")
-        else:
-            print("   ℹ️ Runner process không chạy")
-    else:
-        print("   ℹ️ Không có runner process")
-    
-    # 4) Đóng NST browser lần nữa để chắc chắn (nếu lần đầu chưa thành công)
-    if not nst_stopped:
-        print("\n🔌 [NST] Thử đóng NST browser lần nữa...")
-        try:
-            result = stop_all_browsers()
-            nst_stopped = bool(result)
-            if nst_stopped:
-                print("   ✅ Đã đóng toàn bộ NST browser thành công (lần 2)")
-        except Exception as e:
-            print(f"   ⚠️ Lỗi khi đóng NST browsers (lần 2): {e}")
-    
-    # 2) Đóng toàn bộ NST browser
-    print("\n🔌 [NST] Đang đóng toàn bộ browser NST...")
-    nst_stopped = False
-    nst_error = None
-    try:
-        result = stop_all_browsers()
-        nst_stopped = bool(result)
-        if nst_stopped:
-            print("   ✅ Đã đóng toàn bộ NST browser thành công")
-        else:
-            print("   ⚠️ Không đóng được NST browser (có thể NST không hỗ trợ stop-all)")
-    except Exception as e:
-        nst_error = str(e)
-        print(f"   ❌ Lỗi khi đóng NST browsers: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"⚠️ stop_all_browsers lỗi: {e}")
 
-    print("=" * 60)
-    print(f"📊 [STOP] Kết quả: runner={runner_status}, nst={nst_stopped}")
-    print("=" * 60)
-
-    return {
-        "status": "stopped",
-        "runner_status": runner_status,
-        "nst_stopped": nst_stopped,
-        "nst_error": nst_error
-    }
+    return {"status": "ok", "global_emergency_stop": True, "nst_stopped": nst_stopped, "nst_error": nst_error}
 
 
 @app.get("/status")
@@ -953,37 +906,29 @@ def stop_all_jobs() -> dict:
     """
     global runner_process
 
+    # STOP ALL theo spec: set flag trước, ưu tiên cao nhất
+    print("[UI] STOP ALL triggered (/jobs/stop-all)")
+    control_state.set_global_emergency_stop(True)
+
     stopped = {
-        "bot": False,
+        "bot": False,  # best-effort: chỉ báo đã SIGNAL stop
         "join_groups": [],
         "feed": [],
     }
 
-    # 1) stop bot runner
+    # 1) bot runner: KHÔNG terminate/kill (cooperative stop)
     try:
         if runner_process and runner_process.is_alive():
-            runner_process.terminate()
-            runner_process.join(timeout=5)
             stopped["bot"] = True
     except Exception:
         pass
-    finally:
-        runner_process = None
 
     # 2) stop join groups processes
     join_to_stop: list[str] = []
     with _join_groups_lock:
         _prune_join_group_processes()
         join_to_stop = list(_join_groups_processes.keys())
-        for pid in join_to_stop:
-            proc = _join_groups_processes.get(pid)
-            try:
-                if proc and proc.is_alive():
-                    proc.terminate()
-                    proc.join(timeout=5)
-            except Exception:
-                pass
-            _join_groups_processes.pop(pid, None)
+        # KHÔNG terminate: chỉ ghi nhận để UI biết đang có
         stopped["join_groups"] = join_to_stop
 
     # 2b) stop feed processes
@@ -991,61 +936,144 @@ def stop_all_jobs() -> dict:
     with _feed_lock:
         _prune_feed_processes()
         feed_to_stop = list(_feed_processes.keys())
-        for pid in feed_to_stop:
-            proc = _feed_processes.get(pid)
-            try:
-                if proc and proc.is_alive():
-                    proc.terminate()
-                    proc.join(timeout=5)
-            except Exception:
-                pass
-            _feed_processes.pop(pid, None)
+        # KHÔNG terminate: feed worker đã check flag và sẽ tự thoát
         stopped["feed"] = feed_to_stop
 
-    # 3) Đóng tab NST mà KHÔNG mở profile mới:
-    # - gọi stop_profile(pid) (best-effort, không connect)
-    # - gọi stop_all_browsers() (nếu bản NST hỗ trợ)
-    nst_attempted: list[str] = []
-    try:
-        raw = _read_settings_raw()
-        profiles = raw.get("PROFILE_IDS") or {}
-        if isinstance(profiles, dict):
-            nst_attempted = [str(k).strip() for k in profiles.keys() if str(k).strip()]
-    except Exception:
-        nst_attempted = []
-
-    # Ưu tiên stop các profile đang join/feed trước, rồi stop phần còn lại
-    ordered = []
-    seen = set()
-    for pid in (join_to_stop + feed_to_stop + nst_attempted):
-        if pid and pid not in seen:
-            seen.add(pid)
-            ordered.append(pid)
-
-    nst_ok: list[str] = []
-    for pid in ordered:
-        try:
-            if stop_profile(pid):
-                nst_ok.append(pid)
-        except Exception:
-            pass
-
-    # 4) Fallback: cố gắng gọi endpoint "stop/close all" của NST (nếu bản NST hỗ trợ)
+    # 3) Đóng NST browser (best-effort)
     nst_stop_all_ok = False
+    nst_err = None
     try:
         nst_stop_all_ok = bool(stop_all_browsers())
-    except Exception:
+    except Exception as e:
+        nst_err = str(e)
         nst_stop_all_ok = False
 
     return {
         "status": "ok",
         "stopped": stopped,
-        "nst_stop_attempted": ordered,
-        "nst_stop_ok": nst_ok,
+        "nst_stop_attempted": [],
+        "nst_stop_ok": [],
         "nst_stop_all_ok": nst_stop_all_ok,
+        "nst_error": nst_err,
         # giữ field này để frontend cũ không bị crash
         "nst_force_close_results": [],
     }
+
+
+# ==============================================================================
+# CONTROL API (STOP / PAUSE / RESUME) - theo spec Boss
+# ==============================================================================
+
+class ProfileControlPayload(BaseModel):
+    profile_id: str
+
+
+class ProfilesControlPayload(BaseModel):
+    profile_ids: list[str]
+
+
+@app.get("/control/state")
+def control_get_state() -> dict:
+    return control_state.get_state()
+
+
+@app.post("/control/stop-all")
+def control_stop_all() -> dict:
+    """
+    STOP ALL = dừng khẩn cấp.
+    - set GLOBAL_EMERGENCY_STOP=true (ưu tiên cao nhất)
+    - best-effort: đóng toàn bộ NST browser
+    - KHÔNG hỏi confirm, KHÔNG delay
+    """
+    print("[UI] STOP ALL triggered")
+    control_state.set_global_emergency_stop(True)
+
+    # best-effort: đóng NST ngay để các loop Playwright tự fail và thoát
+    nst_all_ok = False
+    nst_err = None
+    try:
+        nst_all_ok = bool(stop_all_browsers())
+    except Exception as e:
+        nst_err = str(e)
+        print(f"⚠️ stop_all_browsers lỗi: {e}")
+
+    return {"status": "ok", "global_emergency_stop": True, "nst_stop_all_ok": nst_all_ok, "nst_error": nst_err}
+
+
+@app.post("/control/pause-all")
+def control_pause_all() -> dict:
+    print("[UI] PAUSE ALL triggered")
+    st = control_state.set_global_pause(True)
+    return {"status": "ok", "state": st}
+
+
+@app.post("/control/resume-all")
+def control_resume_all() -> dict:
+    print("[UI] RESUME ALL triggered")
+    st = control_state.set_global_pause(False)
+    return {"status": "ok", "state": st}
+
+
+@app.post("/control/pause-profile")
+def control_pause_profile(payload: ProfileControlPayload) -> dict:
+    pid = _norm_profile_id(payload.profile_id)
+    print(f"[UI] PAUSE profile_id={pid}")
+    st = control_state.pause_profile(pid)
+    return {"status": "ok", "state": st, "profile_id": pid}
+
+
+@app.post("/control/resume-profile")
+def control_resume_profile(payload: ProfileControlPayload) -> dict:
+    pid = _norm_profile_id(payload.profile_id)
+    print(f"[UI] RESUME profile_id={pid}")
+    st = control_state.resume_profile(pid)
+    return {"status": "ok", "state": st, "profile_id": pid}
+
+
+@app.post("/control/stop-profiles")
+def control_stop_profiles(payload: ProfilesControlPayload) -> dict:
+    """
+    STOP theo danh sách profile (dùng cho UI: tick profile -> bấm dừng).
+    - Set stopped_profiles cho từng pid
+    - Best-effort: đóng NST browser cho đúng các pid đó
+    """
+    pids = [_norm_profile_id(x) for x in (payload.profile_ids or [])]
+    pids = [p for p in pids if p]
+    print(f"[UI] STOP profiles={pids}")
+
+    st = control_state.stop_profiles(pids)
+
+    nst_ok: list[str] = []
+    nst_fail: list[dict] = []
+    for pid in pids:
+        try:
+            ok = bool(stop_profile(pid))
+            if ok:
+                nst_ok.append(pid)
+            else:
+                nst_fail.append({"profile_id": pid, "reason": "stop_profile_returned_false"})
+        except Exception as e:
+            nst_fail.append({"profile_id": pid, "reason": str(e)})
+
+    return {"status": "ok", "state": st, "stopped_profiles": pids, "nst_ok": nst_ok, "nst_fail": nst_fail}
+
+
+@app.post("/control/pause-profiles")
+def control_pause_profiles(payload: ProfilesControlPayload) -> dict:
+    pids = [_norm_profile_id(x) for x in (payload.profile_ids or [])]
+    pids = [p for p in pids if p]
+    print(f"[UI] PAUSE profiles={pids}")
+    st = control_state.pause_profiles(pids)
+    return {"status": "ok", "state": st, "paused_profiles": pids}
+
+
+@app.post("/control/resume-profiles")
+def control_resume_profiles(payload: ProfilesControlPayload) -> dict:
+    pids = [_norm_profile_id(x) for x in (payload.profile_ids or [])]
+    pids = [p for p in pids if p]
+    print(f"[UI] RESUME profiles={pids}")
+    st = control_state.resume_profiles(pids)
+    return {"status": "ok", "state": st, "resumed_profiles": pids}
 
 @app.delete("/settings/profiles/{profile_id}")
 def delete_profile(profile_id: str) -> dict:

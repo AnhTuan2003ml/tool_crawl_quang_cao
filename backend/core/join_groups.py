@@ -14,6 +14,7 @@ sys.path.append(parent_dir)
 from core.nst import connect_profile
 from core.nst import stop_profile
 from core.browser import FBController
+from core import control as control_state
 
 # Worker lấy page_id/post_id từ URL (dùng cookie theo profile_id trong settings.json)
 try:
@@ -146,6 +147,11 @@ class GroupJoiner(FBController):
     Class chuyên dụng để đi xin vào nhóm
     """
     def join_group(self, group_id):
+        # STOP/PAUSE checkpoint
+        try:
+            self.control_checkpoint("join_group_start")
+        except RuntimeError:
+            raise
         raw = str(group_id or "").strip()
         if not raw:
             print("⚠️ group rỗng, bỏ qua")
@@ -156,6 +162,7 @@ class GroupJoiner(FBController):
         print(f"🔗 Link: {url}")
         
         try:
+            self.control_checkpoint("before_goto_group")
             self.goto(url)
             time.sleep(random.uniform(3, 5)) # Chờ load trang
 
@@ -174,6 +181,7 @@ class GroupJoiner(FBController):
             
             if join_btn:
                 print("point 👉 Tìm thấy nút 'Tham gia nhóm'. Đang click...")
+                self.control_checkpoint("before_click_join_group")
                 join_btn.click()
                 
                 # ======================================================
@@ -210,6 +218,8 @@ class GroupJoiner(FBController):
                 return False
 
         except Exception as e:
+            if isinstance(e, RuntimeError) and ("EMERGENCY_STOP" in str(e) or "BROWSER_CLOSED" in str(e)):
+                raise
             print(f"❌ Lỗi khi xử lý nhóm {group_id}: {e}")
             return False
 
@@ -238,6 +248,15 @@ def run_batch_join_from_list(profile_id, group_ids):
 
     # 2. Kết nối Profile
     try:
+        # STOP/PAUSE checkpoint trước connect
+        stop, paused, reason = control_state.check_flags(profile_id)
+        if stop:
+            print(f"🛑 [JOIN] EMERGENCY_STOP trước khi connect ({reason})")
+            return
+        if paused:
+            print(f"⏸️ [JOIN] PAUSED trước khi connect ({reason})")
+            control_state.wait_if_paused(profile_id, sleep_seconds=0.5)
+
         print(f"🔌 Đang kết nối profile {profile_id}...")
         ws_url = connect_profile(profile_id)
         fb = GroupJoiner(ws_url)
@@ -246,6 +265,15 @@ def run_batch_join_from_list(profile_id, group_ids):
         
         # 3. Chạy vòng lặp
         for idx, gid in enumerate(cleaned):
+            # STOP/PAUSE checkpoint trước mỗi group
+            stop, paused, reason = control_state.check_flags(profile_id)
+            if stop:
+                print(f"🛑 [JOIN] {profile_id} EMERGENCY_STOP ({reason}) -> dừng")
+                break
+            if paused:
+                print(f"⏸️ [JOIN] {profile_id} PAUSED ({reason}) -> sleep")
+                control_state.wait_if_paused(profile_id, sleep_seconds=0.5)
+
             # 3a) Join group (hoặc skip nếu đã join)
             url = _normalize_group_url(gid)
             fb.join_group(url)
@@ -253,6 +281,7 @@ def run_batch_join_from_list(profile_id, group_ids):
             # 3b) Sau khi join/đã join -> lấy page_id bằng get_id_from_url và lưu vào backend/config/groups.json
             if get_id_from_url and url:
                 try:
+                    fb.control_checkpoint("before_get_id_from_url_group")
                     res = get_id_from_url(url, profile_id)
                     if isinstance(res, dict) and res.get("url_type") == "group":
                         page_id = str(res.get("page_id") or "").strip()
@@ -263,13 +292,25 @@ def run_batch_join_from_list(profile_id, group_ids):
                             else:
                                 print(f"⚠️ Không lưu được groups.json (profile_id={profile_id}, page_id={page_id})")
                 except Exception as e:
+                    if isinstance(e, RuntimeError) and ("EMERGENCY_STOP" in str(e) or "BROWSER_CLOSED" in str(e)):
+                        raise
                     print(f"⚠️ Lỗi get_id_from_url khi join group: {e}")
             
             # Nghỉ ngẫu nhiên (trừ khi là group cuối)
             if idx < len(cleaned) - 1:
                 sleep_time = random.uniform(10, 20) 
                 print(f"💤 Nghỉ {sleep_time:.1f}s trước khi qua nhóm tiếp theo...")
-                time.sleep(sleep_time)
+                # sleep theo chunk để vẫn stop/pause được ngay
+                slept = 0.0
+                while slept < sleep_time:
+                    stop, paused, reason = control_state.check_flags(profile_id)
+                    if stop:
+                        print(f"🛑 [JOIN] {profile_id} EMERGENCY_STOP trong sleep ({reason}) -> dừng")
+                        raise RuntimeError("EMERGENCY_STOP")
+                    if paused:
+                        control_state.wait_if_paused(profile_id, sleep_seconds=0.5)
+                    time.sleep(0.5)
+                    slept += 0.5
             
     except Exception as e:
         print(f"❌ Lỗi kết nối/browser: {e}")

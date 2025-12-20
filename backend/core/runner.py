@@ -8,6 +8,7 @@ from core.nst import connect_profile
 from core.scraper import SimpleBot
 from core.settings import get_settings
 from core.utils import clean_profile_list
+from core import control as control_state
 
 
 class AppRunner:
@@ -64,7 +65,25 @@ class AppRunner:
 
     def worker(self, profile_id):
         """Hàm xử lý cho từng profile (Process con)"""
+        # trạng thái profile
         try:
+            control_state.set_profile_state(profile_id, "RUNNING")
+        except Exception:
+            pass
+        try:
+            # STOP/PAUSE check trước khi connect
+            stop, paused, reason = control_state.check_flags(profile_id)
+            if stop:
+                print(f"🛑 [{profile_id}] EMERGENCY_STOP trước khi connect ({reason})")
+                try:
+                    control_state.set_profile_state(profile_id, "STOPPED")
+                except Exception:
+                    pass
+                return
+            if paused:
+                print(f"⏸️ [{profile_id}] PAUSED trước khi connect ({reason})")
+                control_state.wait_if_paused(profile_id, sleep_seconds=0.5)
+
             # 1. Kết nối NST
             ws = connect_profile(profile_id)
 
@@ -122,6 +141,18 @@ class AppRunner:
             
         except Exception as e:
             print(f"❌ Lỗi ở profile {profile_id}: {e}")
+            try:
+                control_state.set_profile_state(profile_id, "ERROR")
+            except Exception:
+                pass
+        finally:
+            # nếu đang emergency stop thì set STOPPED
+            try:
+                stop, _paused, _reason = control_state.check_flags(profile_id)
+                if stop:
+                    control_state.set_profile_state(profile_id, "STOPPED")
+            except Exception:
+                pass
 
     def run(self):
         """Hàm điều phối chính (Vòng lặp vĩnh cửu)"""
@@ -132,6 +163,12 @@ class AppRunner:
         print(f"∞ Kích hoạt chế độ nuôi tuần hoàn: Chạy {self.RUN_MINUTES}p -> Nghỉ {self.REST_MINUTES}p")
 
         while True:
+            # STOP ALL: thoát ngay
+            stop, _paused, _reason = control_state.check_flags(None)
+            if stop:
+                print("🛑 [RUNNER] EMERGENCY_STOP -> thoát vòng lặp AppRunner")
+                break
+
             print("="*60)
             print(f"▶️ [START] Bắt đầu phiên chạy mới lúc {time.strftime('%H:%M:%S')}")
             print("="*60)
@@ -157,4 +194,16 @@ class AppRunner:
             print("="*60 + "\n")
             
             # 4. Bot đi ngủ
-            time.sleep(rest_seconds)
+            # sleep theo chunk để vẫn check được STOP/PAUSE
+            slept = 0
+            while slept < rest_seconds:
+                stop, paused, _reason = control_state.check_flags(None)
+                if stop:
+                    print("🛑 [RUNNER] EMERGENCY_STOP trong lúc sleep -> thoát")
+                    return
+                # pause all: vẫn cho runner sống nhưng không chạy phiên mới
+                if paused:
+                    time.sleep(1)
+                    continue
+                time.sleep(1)
+                slept += 1
