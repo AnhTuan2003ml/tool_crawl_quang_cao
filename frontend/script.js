@@ -25,6 +25,7 @@ const stopBtn = document.getElementById('stopBtn');
 const runMinutesInput = document.getElementById('runMinutes');
 const intervalInput = document.getElementById('interval');
 const stopAllBtn = document.getElementById('stopAllBtn');
+const pauseAllBtn = document.getElementById('pauseAllBtn');
 const tbody = document.querySelector('#listTable tbody');
 const emptyState = document.getElementById('emptyState');
 const rowCount = document.getElementById('rowCount');
@@ -48,6 +49,8 @@ const profileList = document.getElementById('profileList');
 const addProfileRowBtn = document.getElementById('addProfileRowBtn');
 const autoJoinGroupBtn = document.getElementById('autoJoinGroupBtn');
 const stopAllSettingBtn = document.getElementById('stopAllSettingBtn');
+const stopSelectedProfilesBtn = document.getElementById('stopSelectedProfilesBtn');
+const pauseSelectedProfilesBtn = document.getElementById('pauseSelectedProfilesBtn');
 const feedAccountSettingBtn = document.getElementById('feedAccountSettingBtn');
 const scanPostsSettingBtn = document.getElementById('scanPostsSettingBtn');
 const scanGroupSettingBtn = document.getElementById('scanGroupSettingBtn');
@@ -88,6 +91,7 @@ let addRowEl = null; // Row tạm để nhập profile mới
 let joinGroupPollTimer = null;
 let feedPollTimer = null;
 let isScanning = false; // Trạng thái đang quét
+let isPausedAll = false; // Trạng thái pause all (UI)
 
 stopBtn.disabled = true;
 
@@ -236,18 +240,26 @@ function updateSettingsActionButtons() {
   const hasSelected = selected.length > 0;
 
   // Các nút "hành động" ở Setting profile: yêu cầu tick ít nhất 1 profile
-  const actionBtns = [
+  const needSelectedBtns = [
     scanPostsSettingBtn,
     scanGroupSettingBtn,
     autoJoinGroupBtn,
     feedAccountSettingBtn,
-    stopAllSettingBtn,
+    stopSelectedProfilesBtn,
+    pauseSelectedProfilesBtn,
   ].filter(Boolean);
 
-  actionBtns.forEach((b) => {
+  needSelectedBtns.forEach((b) => {
     // nếu đang loading thì giữ nguyên trạng thái disabled
     if (b.classList && b.classList.contains('btn-loading')) return;
     b.disabled = !hasSelected;
+  });
+
+  // Các nút ALL (không phụ thuộc tick)
+  const allBtns = [stopAllSettingBtn, pauseAllBtn].filter(Boolean);
+  allBtns.forEach((b) => {
+    if (b.classList && b.classList.contains('btn-loading')) return;
+    b.disabled = false;
   });
 
   // Các nút "Chạy" trong các panel cũng yêu cầu tick profile
@@ -256,6 +268,16 @@ function updateSettingsActionButtons() {
     if (b.classList && b.classList.contains('btn-loading')) return;
     b.disabled = !hasSelected;
   });
+
+  // Nếu đang PAUSE ALL thì disable các nút "Chạy" để tránh bấm lại vô nghĩa
+  if (isPausedAll) {
+    [scanPostsSettingBtn, scanGroupSettingBtn, autoJoinGroupBtn, feedAccountSettingBtn, feedStartBtn, scanStartBtn, groupScanStartBtn]
+      .filter(Boolean)
+      .forEach((b) => {
+        if (b.classList && b.classList.contains('btn-loading')) return;
+        b.disabled = true;
+      });
+  }
 
   // Nếu không có selection thì auto đóng panel để tránh người dùng nhập rồi mới biết không chạy được
   if (!hasSelected) {
@@ -360,7 +382,13 @@ function buildProfileRow(initialPid, initialInfo) {
   const groupBtn = document.createElement('button');
   groupBtn.type = 'button';
   groupBtn.className = 'btn-primary';
-  groupBtn.textContent = 'Groups';
+  groupBtn.textContent = 'Thêm Groups';
+
+  // Pause/Resume profile button (theo spec)
+  const pauseProfileBtn = document.createElement('button');
+  pauseProfileBtn.type = 'button';
+  pauseProfileBtn.className = 'btn-yellow';
+  pauseProfileBtn.textContent = 'Tạm dừng';
 
   // ===== Group editor panel (div) =====
   const groupPanel = document.createElement('div');
@@ -400,6 +428,49 @@ function buildProfileRow(initialPid, initialInfo) {
     if (Array.isArray(gs)) return gs.map((x) => String(x || '').trim()).filter(Boolean);
     return [];
   }
+
+  async function updatePauseBtnLabel() {
+    try {
+      const st = await callBackendNoAlert('/control/state', { method: 'GET' });
+      const paused = st && Array.isArray(st.paused_profiles) ? st.paused_profiles.includes(currentPid) : false;
+      if (paused) {
+        pauseProfileBtn.textContent = 'Resume';
+        pauseProfileBtn.classList.remove('btn-yellow');
+        pauseProfileBtn.classList.add('btn-success');
+      } else {
+        pauseProfileBtn.textContent = 'Pause';
+        pauseProfileBtn.classList.remove('btn-success');
+        pauseProfileBtn.classList.add('btn-yellow');
+      }
+    } catch (_) {
+      // fallback label
+      pauseProfileBtn.textContent = 'Pause';
+    }
+  }
+
+  pauseProfileBtn.addEventListener('click', async () => {
+    if (pauseProfileBtn.classList.contains('btn-loading')) return;
+    try {
+      const st = await callBackendNoAlert('/control/state', { method: 'GET' });
+      const paused = st && Array.isArray(st.paused_profiles) ? st.paused_profiles.includes(currentPid) : false;
+      if (!paused) {
+        console.log(`[UI] PAUSE profile_id=${currentPid}`);
+        setButtonLoading(pauseProfileBtn, true, 'Pausing...');
+        await callBackend('/control/pause-profile', { method: 'POST', body: JSON.stringify({ profile_id: currentPid }) });
+        showToast(`Đã pause ${currentPid}`, 'success');
+      } else {
+        console.log(`[UI] RESUME profile_id=${currentPid}`);
+        setButtonLoading(pauseProfileBtn, true, 'Resuming...');
+        await callBackend('/control/resume-profile', { method: 'POST', body: JSON.stringify({ profile_id: currentPid }) });
+        showToast(`Đã resume ${currentPid}`, 'success');
+      }
+    } catch (e) {
+      showToast('Không pause/resume profile được (kiểm tra FastAPI).', 'error');
+    } finally {
+      setButtonLoading(pauseProfileBtn, false);
+      await updatePauseBtnLabel();
+    }
+  });
 
   function setLocalGroups(pid, groups) {
     if (!profileState.profiles[pid]) profileState.profiles[pid] = { cookie: '', access_token: '', groups: [] };
@@ -620,6 +691,7 @@ function buildProfileRow(initialPid, initialInfo) {
   actions.appendChild(saveBtn);
   actions.appendChild(removeBtn);
   actions.appendChild(groupBtn);
+  actions.appendChild(pauseProfileBtn);
   actions.appendChild(cookieBtn);
   actions.appendChild(tokenBtn);
 
@@ -629,6 +701,8 @@ function buildProfileRow(initialPid, initialInfo) {
   row.appendChild(actions);
   wrap.appendChild(row);
   wrap.appendChild(groupPanel);
+  // init label
+  try { updatePauseBtnLabel(); } catch (_) { }
   return wrap;
 }
 
@@ -1029,12 +1103,18 @@ if (scanStartBtn) {
 }
 
 async function handleStopAll() {
-  if (!confirm('Dừng TẤT CẢ tác vụ và tắt toàn bộ tab NST?')) return;
+  console.log('[UI] STOP ALL triggered');
   // stop-all có thể bấm từ left panel hoặc từ setting header
   const btns = [stopAllBtn, stopAllSettingBtn].filter(Boolean);
   btns.forEach((b) => setButtonLoading(b, true, 'Đang dừng tất cả...'));
   try {
-    const res = await callBackend('/jobs/stop-all', { method: 'POST' });
+    // Ưu tiên endpoint mới theo spec, fallback endpoint cũ để khỏi vỡ UI
+    let res = null;
+    try {
+      res = await callBackend('/control/stop-all', { method: 'POST' });
+    } catch (_) {
+      res = await callBackend('/jobs/stop-all', { method: 'POST' }); // backward-compat
+    }
     const botStopped = res && res.stopped ? Boolean(res.stopped.bot) : false;
     const joinStopped = res && res.stopped && Array.isArray(res.stopped.join_groups) ? res.stopped.join_groups.length : 0;
     const nstOk = res && Array.isArray(res.nst_stop_ok) ? res.nst_stop_ok.length : 0;
@@ -1072,6 +1152,117 @@ async function handleStopAll() {
     setButtonLoading(feedStartBtn, false);
     if (feedConfigPanel) feedConfigPanel.style.display = 'none';
   }
+}
+
+async function handleStopSelectedProfiles() {
+  const selected = Object.keys(profileState.selected || {}).filter((pid) => profileState.selected[pid]);
+  if (selected.length === 0) {
+    showToast('Chọn (tick) ít nhất 1 profile để dừng.', 'error');
+    return;
+  }
+  if (!stopSelectedProfilesBtn) return;
+  if (stopSelectedProfilesBtn.classList.contains('btn-loading')) return;
+
+  console.log(`[UI] STOP selected profiles=${selected.join(',')}`);
+  setButtonLoading(stopSelectedProfilesBtn, true, 'Đang dừng...');
+
+  try {
+    const res = await callBackend('/control/stop-profiles', {
+      method: 'POST',
+      body: JSON.stringify({ profile_ids: selected }),
+    });
+
+    const okCount = res && Array.isArray(res.nst_ok) ? res.nst_ok.length : 0;
+    const failCount = res && Array.isArray(res.nst_fail) ? res.nst_fail.length : 0;
+    showToast(`Đã dừng ${selected.length} profile (NST ok=${okCount}, fail=${failCount})`, 'success', 2400);
+
+    // Nếu đang quét bằng các profile đó, UI không bị kẹt spinner
+    setScanning(false);
+  } catch (e) {
+    showToast('Không dừng được profile đã chọn (kiểm tra FastAPI).', 'error');
+  } finally {
+    setButtonLoading(stopSelectedProfilesBtn, false);
+  }
+}
+
+if (stopSelectedProfilesBtn) {
+  stopSelectedProfilesBtn.addEventListener('click', handleStopSelectedProfiles);
+}
+
+async function handlePauseSelectedProfiles() {
+  const selected = Object.keys(profileState.selected || {}).filter((pid) => profileState.selected[pid]);
+  if (selected.length === 0) {
+    showToast('Chọn (tick) ít nhất 1 profile để pause.', 'error');
+    return;
+  }
+  if (!pauseSelectedProfilesBtn) return;
+  if (pauseSelectedProfilesBtn.classList.contains('btn-loading')) return;
+
+  console.log(`[UI] PAUSE selected profiles=${selected.join(',')}`);
+  setButtonLoading(pauseSelectedProfilesBtn, true, 'Đang pause...');
+  try {
+    await callBackend('/control/pause-profiles', {
+      method: 'POST',
+      body: JSON.stringify({ profile_ids: selected }),
+    });
+    showToast(`Đã pause ${selected.length} profile`, 'success', 2200);
+  } catch (e) {
+    showToast('Không pause được profile đã tick (kiểm tra FastAPI).', 'error');
+  } finally {
+    setButtonLoading(pauseSelectedProfilesBtn, false);
+  }
+}
+
+if (pauseSelectedProfilesBtn) {
+  pauseSelectedProfilesBtn.addEventListener('click', handlePauseSelectedProfiles);
+}
+
+async function refreshControlState() {
+  try {
+    const st = await callBackendNoAlert('/control/state', { method: 'GET' });
+    if (!st) return;
+    isPausedAll = Boolean(st.global_pause);
+    try { updateSettingsActionButtons(); } catch (_) { }
+    if (pauseAllBtn) {
+      // update label
+      const icon = pauseAllBtn.querySelector('span.btn-icon');
+      const text = pauseAllBtn.querySelector('span:last-child');
+      if (isPausedAll) {
+        if (icon) icon.textContent = '▶️';
+        if (text) text.textContent = 'Tiếp tục tất cả';
+      } else {
+        if (icon) icon.textContent = '⏸️';
+        if (text) text.textContent = 'Tạm dừng tất cả';
+      }
+    }
+  } catch (_) { }
+}
+
+async function handlePauseAllToggle() {
+  if (!pauseAllBtn) return;
+  if (pauseAllBtn.classList.contains('btn-loading')) return;
+  try {
+    if (!isPausedAll) {
+      console.log('[UI] PAUSE ALL triggered');
+      setButtonLoading(pauseAllBtn, true, 'Đang tạm dừng...');
+      await callBackend('/control/pause-all', { method: 'POST' });
+      showToast('Đã tạm dừng tất cả', 'success');
+    } else {
+      console.log('[UI] RESUME ALL triggered');
+      setButtonLoading(pauseAllBtn, true, 'Đang tiếp tục...');
+      await callBackend('/control/resume-all', { method: 'POST' });
+      showToast('Đã tiếp tục tất cả', 'success');
+    }
+  } catch (e) {
+    showToast('Không pause/resume được (kiểm tra FastAPI).', 'error');
+  } finally {
+    setButtonLoading(pauseAllBtn, false);
+    await refreshControlState();
+  }
+}
+
+if (pauseAllBtn) {
+  pauseAllBtn.addEventListener('click', handlePauseAllToggle);
 }
 
 if (stopAllBtn) {
@@ -1800,6 +1991,8 @@ async function triggerBackendRun(options = {}) {
 
 async function sendStopSignal() {
   try {
+    console.log('[UI] STOP triggered');
+    // /stop đã được backend map sang STOP (GLOBAL_EMERGENCY_STOP + đóng NST best-effort)
     await callBackend('/stop');
     setBackendStatus('Đã gửi lệnh dừng backend', false);
   } catch (err) {

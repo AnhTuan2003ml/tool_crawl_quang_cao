@@ -14,6 +14,16 @@ class SimpleBot:
         
         while True:
             try:
+                # STOP/PAUSE checkpoint (ưu tiên STOP ALL)
+                try:
+                    if hasattr(self.fb, "control_checkpoint"):
+                        self.fb.control_checkpoint("before_loop")
+                except RuntimeError as ce:
+                    if "EMERGENCY_STOP" in str(ce) or "BROWSER_CLOSED" in str(ce):
+                        print("🛑 Dừng bot do control flag / browser closed")
+                        break
+                    raise
+
                 # 1. Kiểm tra thời gian chạy
                 if duration and (time.time() - start_time > duration):
                     print("⏳ Hết giờ chạy.")
@@ -44,8 +54,8 @@ class SimpleBot:
             
             except RuntimeError as e:
                 # Nếu là exception đặc biệt BROWSER_CLOSED thì dừng ngay
-                if "BROWSER_CLOSED" in str(e):
-                    print(f"🛑 Browser đã bị đóng -> Dừng bot ngay lập tức")
+                if "BROWSER_CLOSED" in str(e) or "EMERGENCY_STOP" in str(e):
+                    print(f"🛑 Dừng bot ngay lập tức ({e})")
                     break
                 raise  # Re-raise nếu không phải BROWSER_CLOSED
             except Exception as e:

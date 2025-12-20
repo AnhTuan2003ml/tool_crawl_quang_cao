@@ -7,6 +7,7 @@ from urllib.parse import urlparse, parse_qs, unquote
 import os
 import sys
 from core.settings import get_settings, SETTINGS_PATH
+from core import control as control_state
 # ==============================================================================
 # JS TOOLS & HELPER FUNCTIONS
 # ==============================================================================
@@ -225,6 +226,45 @@ class FBController:
             "lương", "phỏng vấn", "hồ sơ",
             "full-time", "part-time", "thực tập", "kế toán", "may mặc", "kcn" ,"Ứng viên " , "Ứng tuyển"
         ]
+        # cache nhẹ để tránh spam IO khi check control liên tục
+        self._last_control_check_ts = 0.0
+        self._last_control_snapshot = (False, False, "")
+
+    def control_checkpoint(self, where: str = "") -> None:
+        """
+        Ưu tiên flag theo spec:
+          1) GLOBAL_EMERGENCY_STOP -> STOP NGAY
+          2) GLOBAL_PAUSE -> SLEEP
+          3) PAUSED_PROFILES[pid] -> SLEEP
+        """
+        now = time.time()
+        if now - float(getattr(self, "_last_control_check_ts", 0.0)) > 0.35:
+            self._last_control_check_ts = now
+            self._last_control_snapshot = control_state.check_flags(getattr(self, "profile_id", None))
+
+        stop, paused, reason = self._last_control_snapshot
+
+        if stop:
+            try:
+                control_state.set_profile_state(self.profile_id, "STOPPED")
+            except Exception:
+                pass
+            print(f"🛑 [STOP] {self.profile_id} @ {where} ({reason})")
+            raise RuntimeError("EMERGENCY_STOP")
+
+        if paused:
+            try:
+                control_state.set_profile_state(self.profile_id, "PAUSED")
+            except Exception:
+                pass
+            if where:
+                print(f"⏸️ [PAUSE] {self.profile_id} @ {where} ({reason})")
+            # chờ đến khi hết pause hoặc emergency stop
+            control_state.wait_if_paused(self.profile_id, sleep_seconds=0.5)
+            try:
+                control_state.set_profile_state(self.profile_id, "RUNNING")
+            except Exception:
+                pass
 
     def connect(self):
         self.play = sync_playwright().start()
@@ -264,6 +304,7 @@ class FBController:
     def share_center_ad(self, post_handle, post_type):
             
         try:
+            self.control_checkpoint("before_share")
             viewport = self.page.viewport_size
             height = viewport['height'] if viewport else 800
             escape_step = height * 0.35  # 👈 THOÁT MODULE RÁC
@@ -286,10 +327,12 @@ class FBController:
 
             # Đợi bắt được payload URL
             for _ in range(50):
+                self.control_checkpoint("after_share_click_wait_payload")
                 if self.captured_payload_url:
                     # Gọi get_id_from_url trực tiếp từ URL payload
                     if get_id_from_url:
                         try:
+                            self.control_checkpoint("before_get_id_from_url")
                             print(f"📥 Đang gọi get_id_from_url với URL: {self.captured_payload_url}")
                             details = get_id_from_url(self.captured_payload_url, self.profile_id)
                             if details and details.get("post_id"):
@@ -299,6 +342,9 @@ class FBController:
                             else:
                                 print("⚠️ Không lấy được post_id từ get_id_from_url")
                         except Exception as e:
+                            # Không được nuốt STOP/PAUSE
+                            if isinstance(e, RuntimeError) and ("EMERGENCY_STOP" in str(e) or "BROWSER_CLOSED" in str(e)):
+                                raise
                             print(f"❌ Lỗi khi gọi get_id_from_url: {e}")
                     break
                 self.page.wait_for_timeout(150)
@@ -308,6 +354,9 @@ class FBController:
             return False
 
         except Exception as e:
+            # Không được nuốt STOP/PAUSE
+            if isinstance(e, RuntimeError) and ("EMERGENCY_STOP" in str(e) or "BROWSER_CLOSED" in str(e)):
+                raise
             print(f"❌ share_center_ad lỗi: {e}")
             self.page.keyboard.press("Escape")
             return False
@@ -382,6 +431,7 @@ class FBController:
             print("⬇️ Scan theo center-post (LOCK khi thấy xanh)")
 
             while True:
+                self.control_checkpoint("before_scroll_loop")
                 post = self.get_center_post()
 
                 # =========================
@@ -389,6 +439,7 @@ class FBController:
                 # =========================
                 if not post:
                     # đang đứng trên ref / kết bạn / module rác
+                    self.control_checkpoint("before_escape_wheel")
                     self.page.mouse.wheel(0, escape_step)
                     time.sleep(random.uniform(0.12, 0.13))
                     continue
@@ -398,6 +449,7 @@ class FBController:
                 # =========================
                 if self.check_post_is_processed(post):
                     try:
+                        self.control_checkpoint("before_normal_wheel")
                         self.page.mouse.wheel(0, normal_step)
                     except Exception as e:
                         error_msg = str(e).lower()
@@ -431,6 +483,7 @@ class FBController:
     def like_current_post(self, post_handle):
         print("❤️ Đang thực hiện Like bài viết này...")
         try:
+            self.control_checkpoint("before_like")
             element = post_handle.as_element()
             if not element: return False
             already_liked = element.query_selector('div[role="button"][aria-label="Gỡ Thích"], div[role="button"][aria-label="Remove Like"]')
@@ -442,13 +495,17 @@ class FBController:
             if like_btn:
                 self.bring_element_into_view_smooth(like_btn)
                 time.sleep(0.5)
+                self.control_checkpoint("before_like_click")
                 like_btn.click()
+                self.control_checkpoint("after_like_click")
                 print("✅ Đã Bấm Like thành công!")
                 return True
             else:
                 print("⚠️ Không tìm thấy nút Like phù hợp.")
                 return False
         except Exception as e:
+            if isinstance(e, RuntimeError) and ("EMERGENCY_STOP" in str(e) or "BROWSER_CLOSED" in str(e)):
+                raise
             print(f"❌ Lỗi Like: {e}")
             return False
 
@@ -626,6 +683,7 @@ class FBController:
         if viewport: height = viewport['height']
         else: height = 800 
         try:
+            self.control_checkpoint("before_process_post")
             print(f"🧠 Xử lý bài viết type={post_type}")
 
             # 1. Expand nội dung
@@ -689,9 +747,11 @@ class FBController:
 
             # 3. Like
             self.like_current_post(post_handle)
+            self.control_checkpoint("after_like")
 
             # 4. Share để bắt ID
             ok = self.share_center_ad(post_handle, post_type)
+            self.control_checkpoint("after_share")
             if not ok:
                 self.mark_post_as_processed(post_handle)
                 print("⚠️ Không bắt được ID -> skip")
@@ -705,6 +765,8 @@ class FBController:
             return True
 
         except Exception as e:
+            if isinstance(e, RuntimeError) and ("EMERGENCY_STOP" in str(e) or "BROWSER_CLOSED" in str(e)):
+                raise
             print(f"❌ Lỗi process_post: {e}")
             return False
 

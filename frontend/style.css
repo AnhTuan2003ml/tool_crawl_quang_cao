@@ -10,6 +10,10 @@
   --danger        : #ef4444;
   --danger-dark   : #dc2626;
   --success       : #10b981;
+  --orange        : #f97316;
+  --orange-dark   : #ea580c;
+  --pause         : #0ea5a4;
+  --pause-dark    : #0f766e;
   --bg-gradient   : linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   --card-bg       : #ffffff;
   --text-primary  : #1f2937;
@@ -492,6 +496,25 @@ button:active {
 }
 
 .btn-success:disabled {
+  background: #9ca3af;
+  cursor    : not-allowed;
+  box-shadow: none;
+  transform : none;
+}
+
+/* Stop selected (khác màu Stop all) */
+.btn-orange {
+  background: linear-gradient(135deg, var(--orange) 0%, var(--orange-dark) 100%);
+  color     : white;
+  box-shadow: 0 4px 14px 0 rgba(249, 115, 22, 0.4);
+}
+
+.btn-orange:hover {
+  box-shadow: 0 6px 20px 0 rgba(249, 115, 22, 0.5);
+  transform : translateY(-2px);
+}
+
+.btn-orange:disabled {
   background: #9ca3af;
   cursor    : not-allowed;
   box-shadow: none;
@@ -1600,6 +1623,18 @@ tbody tr:last-child td {
 }
 
 .btn-yellow:hover {
+  background: #e5e7eb;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Pause selected (khác màu Pause all) */
+.btn-pause {
+  background: rgb(14, 165, 164);
+  color     : rgb(255, 255, 255);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.btn-pause:hover {
   background: #e5e7eb;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
