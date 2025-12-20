@@ -1,4 +1,5 @@
 from multiprocessing import Process
+import time
 from typing import Optional, Any, Dict
 from pathlib import Path
 import json
@@ -6,17 +7,19 @@ import os
 import tempfile
 import threading
 import re
+from urllib.parse import quote_plus
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from core.runner import AppRunner
 from core.settings import SETTINGS_PATH
 from core.nst import connect_profile, stop_profile, stop_all_browsers
 from core.browser import FBController
 from core import control as control_state
+from core.scraper import SimpleBot
+from core.settings import get_settings
 
 app = FastAPI(title="NST Tool API", version="1.0.0")
 
@@ -29,13 +32,293 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Biến toàn cục giữ tiến trình đang chạy AppRunner
-runner_process: Optional[Process] = None
+# Bot processes (mỗi profile 1 process độc lập RUN/REST)
+_bot_lock = threading.Lock()
+_bot_processes: Dict[str, Process] = {}
 _settings_lock = threading.Lock()
 _join_groups_lock = threading.Lock()
 _join_groups_processes: Dict[str, Process] = {}
 _feed_lock = threading.Lock()
 _feed_processes: Dict[str, Process] = {}
+
+
+def _hard_stop_everything(reason: str = "") -> dict:
+    """
+    STOP kiểu "fresh start":
+    - Signal STOP ngay (set_global_emergency_stop=True) để các loop thoát nếu còn sống
+    - Đóng toàn bộ NST browser
+    - Terminate runner/join/feed processes (đóng hẳn, không giữ sleep)
+    - Reset runtime_control.json về mặc định (SẴN SÀNG)
+    """
+    global _bot_processes
+
+    print("=" * 60)
+    print(f"🛑 [HARD_STOP] {reason}".strip())
+    print("=" * 60)
+
+    # 1) Signal STOP
+    try:
+        control_state.set_global_emergency_stop(True)
+    except Exception:
+        pass
+
+    # 2) Close all NST browsers
+    nst_ok = False
+    nst_err = None
+    try:
+        nst_ok = bool(stop_all_browsers())
+    except Exception as e:
+        nst_err = str(e)
+        print(f"⚠️ stop_all_browsers lỗi: {e}")
+
+    # 3) Kill bot processes
+    bot_killed: list[str] = []
+    try:
+        with _bot_lock:
+            for pid, proc in list(_bot_processes.items()):
+                try:
+                    if proc and proc.is_alive():
+                        proc.terminate()
+                        proc.join(timeout=3)
+                        bot_killed.append(pid)
+                except Exception:
+                    pass
+                _bot_processes.pop(pid, None)
+    except Exception:
+        pass
+
+    # 4) Kill join groups processes
+    join_killed: list[str] = []
+    try:
+        with _join_groups_lock:
+            _prune_join_group_processes()
+            for pid, proc in list(_join_groups_processes.items()):
+                try:
+                    if proc and proc.is_alive():
+                        proc.terminate()
+                        proc.join(timeout=3)
+                        join_killed.append(pid)
+                except Exception:
+                    pass
+                _join_groups_processes.pop(pid, None)
+    except Exception:
+        pass
+
+    # 5) Kill feed processes
+    feed_killed: list[str] = []
+    try:
+        with _feed_lock:
+            _prune_feed_processes()
+            for pid, proc in list(_feed_processes.items()):
+                try:
+                    if proc and proc.is_alive():
+                        proc.terminate()
+                        proc.join(timeout=3)
+                        feed_killed.append(pid)
+                except Exception:
+                    pass
+                _feed_processes.pop(pid, None)
+    except Exception:
+        pass
+
+    # 6) Reset runtime state về mặc định (để lần sau bấm chạy là "mới hoàn toàn")
+    try:
+        control_state.reset_all_state()
+    except Exception:
+        # fallback: ít nhất clear emergency stop để UI không bị kẹt
+        try:
+            control_state.reset_emergency_stop(clear_stopped_profiles=True)
+        except Exception:
+            pass
+
+    return {
+        "status": "ok",
+        "nst_stop_all_ok": nst_ok,
+        "nst_error": nst_err,
+        "bot_killed": bot_killed,
+        "join_killed": join_killed,
+        "feed_killed": feed_killed,
+    }
+
+
+def _prune_bot_processes() -> None:
+    dead = []
+    for pid, proc in list(_bot_processes.items()):
+        try:
+            if not proc.is_alive():
+                dead.append(pid)
+        except Exception:
+            dead.append(pid)
+    for pid in dead:
+        _bot_processes.pop(pid, None)
+
+
+def _run_bot_profile_loop(
+    profile_id: str,
+    run_minutes: int,
+    rest_minutes: int,
+    text: str,
+    mode: str,
+) -> None:
+    """
+    Worker độc lập cho 1 profile:
+    - chạy RUN_MINUTES (active time, pause freeze)
+    - ngủ REST_MINUTES (pause freeze)
+    - lặp lại cho tới khi STOP (global hoặc stop theo profile)
+    """
+    pid = str(profile_id or "").strip()
+    if not pid:
+        return
+
+    cfg = get_settings()
+    target_url = cfg.target_url
+    m = str(mode or "feed").strip().lower()
+    if m not in ("feed", "search"):
+        m = "feed"
+    t = str(text or "").strip()
+    if m == "search" and t:
+        q = quote_plus(t)
+        target_url = f"https://www.facebook.com/search/posts/?q={q}"
+
+    run_m = int(run_minutes or 0)
+    rest_m = int(rest_minutes or 0)
+    if run_m <= 0:
+        run_m = int(getattr(cfg, "run_minutes", 30) or 30)
+    if rest_m <= 0:
+        rest_m = int(getattr(cfg, "rest_minutes", 120) or 120)
+
+    duration_seconds = max(1, run_m * 60)
+    rest_seconds = max(1, rest_m * 60)
+
+    while True:
+        # STOP/PAUSE trước khi bắt đầu phiên
+        stop, paused, reason = control_state.check_flags(pid)
+        if stop:
+            print(f"🛑 [{pid}] STOP trước khi start loop ({reason})")
+            try:
+                control_state.set_profile_state(pid, "STOPPED")
+            except Exception:
+                pass
+            return
+        if paused:
+            print(f"⏸️ [{pid}] PAUSED trước khi start loop ({reason})")
+            control_state.wait_if_paused(pid, sleep_seconds=0.5)
+
+        fb: Optional[FBController] = None
+        try:
+            control_state.set_profile_state(pid, "RUNNING")
+        except Exception:
+            pass
+
+        try:
+            ws = connect_profile(pid)
+            fb = FBController(ws)
+            fb.profile_id = pid
+            # tuyệt đối độc lập: chỉ xử lý trong profile này
+            try:
+                fb.all_profile_ids = [pid]
+            except Exception:
+                pass
+            # filter text nếu có
+            try:
+                if t:
+                    parts = []
+                    for chunk in t.replace("\n", ",").split(","):
+                        s = " ".join(str(chunk).strip().split())
+                        if s:
+                            parts.append(s)
+                    seen = set()
+                    user_keywords = []
+                    for x in parts:
+                        k = x.lower()
+                        if k in seen:
+                            continue
+                        seen.add(k)
+                        user_keywords.append(x)
+                    fb.user_keywords = user_keywords
+            except Exception:
+                pass
+            fb.connect()
+            bot = SimpleBot(fb)
+            bot.run(target_url, duration=duration_seconds)
+        except RuntimeError as e:
+            # STOP/BROWSER_CLOSED => thoát phiên
+            if "EMERGENCY_STOP" in str(e) or "BROWSER_CLOSED" in str(e):
+                print(f"🛑 [{pid}] Dừng bot ({e})")
+            else:
+                raise
+        except Exception as e:
+            print(f"❌ Lỗi ở profile {pid}: {e}")
+            try:
+                control_state.set_profile_state(pid, "ERROR")
+            except Exception:
+                pass
+        finally:
+            # đóng playwright + NST profile best-effort
+            try:
+                if fb and getattr(fb, "page", None):
+                    try:
+                        fb.page.close()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            try:
+                if fb and getattr(fb, "browser", None) and getattr(fb.browser, "contexts", None):
+                    for ctx in list(fb.browser.contexts):
+                        try:
+                            ctx.close()
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+            try:
+                if fb and getattr(fb, "browser", None):
+                    try:
+                        fb.browser.close()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            try:
+                if fb and getattr(fb, "play", None):
+                    try:
+                        fb.play.stop()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            try:
+                stop_profile(pid)
+            except Exception:
+                pass
+
+        # Check stop sau khi kết thúc phiên
+        stop, paused, reason = control_state.check_flags(pid)
+        if stop:
+            print(f"🛑 [{pid}] STOP sau phiên ({reason}) -> thoát loop")
+            try:
+                control_state.set_profile_state(pid, "STOPPED")
+            except Exception:
+                pass
+            return
+
+        # REST (độc lập theo profile) - pause freeze
+        slept = 0
+        while slept < rest_seconds:
+            stop, paused, reason = control_state.check_flags(pid)
+            if stop:
+                print(f"🛑 [{pid}] STOP trong REST ({reason}) -> thoát")
+                try:
+                    control_state.set_profile_state(pid, "STOPPED")
+                except Exception:
+                    pass
+                return
+            if paused:
+                control_state.wait_if_paused(pid, sleep_seconds=0.5)
+                continue
+            time.sleep(1)
+            slept += 1
 
 
 def _run_join_groups_worker(profile_id: str, groups: list[str]) -> None:
@@ -189,15 +472,7 @@ class RunRequest(BaseModel):
     mode: Optional[str] = None
 
 
-def _start_runner(
-    run_minutes: Optional[int] = None,
-    rest_minutes: Optional[int] = None,
-    profile_ids: Optional[list[str]] = None,
-    text: Optional[str] = None,
-    mode: Optional[str] = None,
-) -> None:
-    """Hàm wrapper để chạy vòng lặp AppRunner trong tiến trình riêng."""
-    AppRunner(run_minutes=run_minutes, rest_minutes=rest_minutes, profile_ids=profile_ids, text=text, mode=mode).run()
+## NOTE: AppRunner mode đã được thay bằng bot per-profile độc lập (xem _run_bot_profile_loop)
 
 
 @app.get("/health")
@@ -208,13 +483,9 @@ def health_check() -> dict:
 @app.post("/run")
 def run_bot(payload: Optional[RunRequest] = Body(None)) -> dict:
     """
-    Khởi động AppRunner nếu chưa chạy.
-    Chạy trong process riêng để không khóa FastAPI.
+    Start bot per-profile độc lập (mỗi profile 1 process loop RUN/REST).
     """
-    global runner_process
-
-    if runner_process and runner_process.is_alive():
-        return {"status": "running", "pid": runner_process.pid}
+    # start per-profile bot processes (độc lập)
 
     run_minutes = payload.run_minutes if payload else None
     rest_minutes = payload.rest_minutes if payload else None
@@ -230,6 +501,33 @@ def run_bot(payload: Optional[RunRequest] = Body(None)) -> dict:
     if not pids:
         raise HTTPException(status_code=400, detail="profile_ids không hợp lệ")
 
+    # Nếu user bấm CHẠY mà trước đó đã STOP, auto reset STOP để job chạy được.
+    # Chỉ resume/clear STOPPED cho đúng các profile được yêu cầu chạy.
+    try:
+        stop, _paused, reason = control_state.check_flags(None)
+        if stop:
+            print(f"🟡 [/run] GLOBAL_EMERGENCY_STOP đang bật ({reason}) -> auto reset để chạy")
+            control_state.reset_emergency_stop(clear_stopped_profiles=False)
+        # Nếu profile đang bị stop riêng lẻ thì clear để chạy được
+        control_state.resume_profiles(pids)
+    except Exception as _e:
+        pass
+
+    # Dọn state cũ trong runtime_control: chỉ giữ profile_states của đúng pids đang chạy
+    try:
+        def _keep_only_selected(st: dict) -> None:
+            ps = st.get("profile_states")
+            if not isinstance(ps, dict):
+                ps = {}
+            keep = {pid: ps.get(pid) or "RUNNING" for pid in pids}
+            st["profile_states"] = keep
+            # remove paused/stopped ngoài danh sách được chạy (tránh hiện profile lạ)
+            st["paused_profiles"] = [x for x in (st.get("paused_profiles") or []) if str(x) in set(pids)]
+            st["stopped_profiles"] = [x for x in (st.get("stopped_profiles") or []) if str(x) in set(pids)]
+        control_state._update(_keep_only_selected)  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
     # ✅ Chặn chạy nếu bất kỳ profile nào thiếu cookie/access_token
     _validate_profiles_requirements(pids, require_cookie=True, require_access_token=True)
 
@@ -240,49 +538,49 @@ def run_bot(payload: Optional[RunRequest] = Body(None)) -> dict:
     if m == "search" and not str(text or "").strip():
         raise HTTPException(status_code=400, detail="Search cần text")
 
-    # Không dùng daemon vì AppRunner tự sinh thêm Process con
-    runner_process = Process(
-        target=_start_runner,
-        args=(run_minutes, rest_minutes, pids, text, m),
-        daemon=False,
-    )
-    runner_process.start()
+    started: list[str] = []
+    skipped: list[dict] = []
+    run_m = int(run_minutes or 0) if payload else 0
+    rest_m = int(rest_minutes or 0) if payload else 0
+    txt = str(text or "")
+    md = str(m or "feed")
 
-    if not runner_process.is_alive():
-        raise HTTPException(status_code=500, detail="Không khởi động được bot")
+    with _bot_lock:
+        _prune_bot_processes()
+        for pid in pids:
+            existing = _bot_processes.get(pid)
+            if existing and existing.is_alive():
+                skipped.append({"profile_id": pid, "reason": "already_running"})
+                continue
+            proc = Process(
+                target=_run_bot_profile_loop,
+                args=(pid, run_m, rest_m, txt, md),
+                daemon=True,
+            )
+            proc.start()
+            _bot_processes[pid] = proc
+            started.append(pid)
 
-    return {"status": "started", "pid": runner_process.pid}
+    return {"status": "ok", "started": started, "skipped": skipped, "running": list(_bot_processes.keys())}
 
 
 @app.post("/stop")
 def stop_bot() -> dict:
     """
-    STOP (khẩn cấp):
-    - Set GLOBAL_EMERGENCY_STOP = true
-    - Best-effort: đóng toàn bộ NST browser (để các loop Playwright tự thoát)
-    - Không terminate/kill process (cooperative stop theo spec)
+    STOP (fresh start):
+    - Đóng hẳn mọi thứ (NST + kill runner/jobs)
+    - Reset runtime_control.json về mặc định
+    - Lần sau bấm chạy sẽ tính lại RUN/REST từ đầu (PAUSE mới là cái giữ timer)
     """
-    print("=" * 60)
-    print("🛑 [STOP] /stop triggered")
-    print("=" * 60)
-
-    control_state.set_global_emergency_stop(True)
-
-    nst_stopped = False
-    nst_error = None
-    try:
-        nst_stopped = bool(stop_all_browsers())
-    except Exception as e:
-        nst_error = str(e)
-        print(f"⚠️ stop_all_browsers lỗi: {e}")
-
-    return {"status": "ok", "global_emergency_stop": True, "nst_stopped": nst_stopped, "nst_error": nst_error}
+    return _hard_stop_everything(reason="/stop")
 
 
 @app.get("/status")
 def status() -> dict:
-    is_running = bool(runner_process and runner_process.is_alive())
-    return {"running": is_running, "pid": runner_process.pid if is_running else None}
+    with _bot_lock:
+        _prune_bot_processes()
+        running = [pid for pid, proc in _bot_processes.items() if proc and proc.is_alive()]
+    return {"running": len(running) > 0, "bot_profile_ids": running}
 
 
 @app.get("/settings")
@@ -645,6 +943,15 @@ def auto_join_groups(payload: JoinGroupsRequest) -> dict:
     Chạy auto join group cho các profile đã chọn (mỗi profile 1 process → chạy song song).
     Groups lấy từ settings.json: PROFILE_IDS[pid].groups
     """
+    # Nếu user bấm join mà trước đó đã STOP, auto reset STOP để job chạy được.
+    try:
+        stop, _paused, reason = control_state.check_flags(None)
+        if stop:
+            print(f"🟡 [/groups/join] GLOBAL_EMERGENCY_STOP đang bật ({reason}) -> auto reset để join")
+            control_state.reset_emergency_stop(clear_stopped_profiles=False)
+    except Exception:
+        pass
+
     if not payload.profile_ids:
         raise HTTPException(status_code=400, detail="profile_ids rỗng")
 
@@ -652,6 +959,12 @@ def auto_join_groups(payload: JoinGroupsRequest) -> dict:
     pids = [p for p in pids if p]
     if not pids:
         raise HTTPException(status_code=400, detail="profile_ids không hợp lệ")
+
+    # Clear STOPPED cho đúng các profile được yêu cầu join
+    try:
+        control_state.resume_profiles(pids)
+    except Exception:
+        pass
 
     # ✅ Join group chỉ cần cookie (không bắt access_token)
     _validate_profiles_requirements(pids, require_cookie=True, require_access_token=False)
@@ -795,6 +1108,16 @@ def feed_start(payload: FeedStartRequest) -> dict:
     if not pids:
         raise HTTPException(status_code=400, detail="profile_ids không hợp lệ")
 
+    # Nếu user bấm NUÔI ACC mà trước đó đã STOP, auto reset STOP để job chạy được.
+    try:
+        stop, _paused, reason = control_state.check_flags(None)
+        if stop:
+            print(f"🟡 [/feed/start] GLOBAL_EMERGENCY_STOP đang bật ({reason}) -> auto reset để chạy")
+            control_state.reset_emergency_stop(clear_stopped_profiles=False)
+        control_state.resume_profiles(pids)
+    except Exception:
+        pass
+
     # ✅ Chặn chạy nếu bất kỳ profile nào thiếu cookie/access_token
     _validate_profiles_requirements(pids, require_cookie=True, require_access_token=True)
 
@@ -872,7 +1195,16 @@ def feed_stop(payload: Optional[FeedStopRequest] = Body(None)) -> dict:
 @app.get("/jobs/status")
 def jobs_status() -> dict:
     """Trạng thái chung (để UI hiển thị/diagnose)."""
-    is_bot_running = bool(runner_process and runner_process.is_alive())
+    with _bot_lock:
+        _prune_bot_processes()
+        bot_running_pids = []
+        for pid, proc in _bot_processes.items():
+            try:
+                if proc.is_alive():
+                    bot_running_pids.append(pid)
+            except Exception:
+                pass
+    is_bot_running = len(bot_running_pids) > 0
     with _join_groups_lock:
         _prune_join_group_processes()
         join_running = []
@@ -893,7 +1225,8 @@ def jobs_status() -> dict:
                 pass
     return {
         "bot_running": is_bot_running,
-        "bot_pid": runner_process.pid if is_bot_running else None,
+        "bot_pid": None,
+        "bot_profile_ids": bot_running_pids,
         "join_groups_running": join_running,
         "feed_running": feed_running,
     }
@@ -904,60 +1237,8 @@ def stop_all_jobs() -> dict:
     """
     Dừng tất cả tác vụ nền (dùng chung cho auto join group + sau này nuôi acc).
     """
-    global runner_process
-
-    # STOP ALL theo spec: set flag trước, ưu tiên cao nhất
-    print("[UI] STOP ALL triggered (/jobs/stop-all)")
-    control_state.set_global_emergency_stop(True)
-
-    stopped = {
-        "bot": False,  # best-effort: chỉ báo đã SIGNAL stop
-        "join_groups": [],
-        "feed": [],
-    }
-
-    # 1) bot runner: KHÔNG terminate/kill (cooperative stop)
-    try:
-        if runner_process and runner_process.is_alive():
-            stopped["bot"] = True
-    except Exception:
-        pass
-
-    # 2) stop join groups processes
-    join_to_stop: list[str] = []
-    with _join_groups_lock:
-        _prune_join_group_processes()
-        join_to_stop = list(_join_groups_processes.keys())
-        # KHÔNG terminate: chỉ ghi nhận để UI biết đang có
-        stopped["join_groups"] = join_to_stop
-
-    # 2b) stop feed processes
-    feed_to_stop: list[str] = []
-    with _feed_lock:
-        _prune_feed_processes()
-        feed_to_stop = list(_feed_processes.keys())
-        # KHÔNG terminate: feed worker đã check flag và sẽ tự thoát
-        stopped["feed"] = feed_to_stop
-
-    # 3) Đóng NST browser (best-effort)
-    nst_stop_all_ok = False
-    nst_err = None
-    try:
-        nst_stop_all_ok = bool(stop_all_browsers())
-    except Exception as e:
-        nst_err = str(e)
-        nst_stop_all_ok = False
-
-    return {
-        "status": "ok",
-        "stopped": stopped,
-        "nst_stop_attempted": [],
-        "nst_stop_ok": [],
-        "nst_stop_all_ok": nst_stop_all_ok,
-        "nst_error": nst_err,
-        # giữ field này để frontend cũ không bị crash
-        "nst_force_close_results": [],
-    }
+    # Legacy endpoint: vẫn map về hard stop (fresh start) cho đúng spec mới
+    return _hard_stop_everything(reason="/jobs/stop-all")
 
 
 # ==============================================================================
@@ -989,19 +1270,7 @@ def control_stop_all() -> dict:
     - best-effort: đóng toàn bộ NST browser
     - KHÔNG hỏi confirm, KHÔNG delay
     """
-    print("[UI] STOP ALL triggered")
-    control_state.set_global_emergency_stop(True)
-
-    # best-effort: đóng NST ngay để các loop Playwright tự fail và thoát
-    nst_all_ok = False
-    nst_err = None
-    try:
-        nst_all_ok = bool(stop_all_browsers())
-    except Exception as e:
-        nst_err = str(e)
-        print(f"⚠️ stop_all_browsers lỗi: {e}")
-
-    return {"status": "ok", "global_emergency_stop": True, "nst_stop_all_ok": nst_all_ok, "nst_error": nst_err}
+    return _hard_stop_everything(reason="/control/stop-all")
 
 
 @app.post("/control/pause-all")
@@ -1041,11 +1310,28 @@ def control_stop_profiles(payload: ProfilesControlPayload) -> dict:
     - Set stopped_profiles cho từng pid
     - Best-effort: đóng NST browser cho đúng các pid đó
     """
+    global _bot_processes
     pids = [_norm_profile_id(x) for x in (payload.profile_ids or [])]
     pids = [p for p in pids if p]
     print(f"[UI] STOP profiles={pids}")
 
     st = control_state.stop_profiles(pids)
+
+    # Terminate bot process đúng profile (độc lập), không ảnh hưởng profile khác
+    try:
+        with _bot_lock:
+            _prune_bot_processes()
+            for pid in pids:
+                proc = _bot_processes.get(pid)
+                try:
+                    if proc and proc.is_alive():
+                        proc.terminate()
+                        proc.join(timeout=3)
+                except Exception:
+                    pass
+                _bot_processes.pop(pid, None)
+    except Exception:
+        pass
 
     nst_ok: list[str] = []
     nst_fail: list[dict] = []

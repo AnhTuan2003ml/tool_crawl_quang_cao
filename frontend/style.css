@@ -1164,6 +1164,24 @@ tbody tr.filtered-out {
   justify-content: flex-end;
 }
 
+.profile-state-badge {
+  display        : inline-flex;
+  align-items    : center;
+  justify-content: center;
+  padding        : 6px 10px;
+  border-radius  : 10px;
+  font-weight    : 800;
+  font-size      : 12px;
+  min-width      : 84px;
+  white-space    : nowrap;
+  color          : #fff;
+  box-shadow     : 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.profile-state-badge.state-running { background: #10b981; } /* green */
+.profile-state-badge.state-paused  { background: rgb(157, 168, 0); } /* yellow */
+.profile-state-badge.state-ready   { background: #64748b; } /* slate */
+
 .profile-row .profile-actions button {
   width    : auto;
   flex     : 0 0 auto;

@@ -87,9 +87,30 @@ def _update(mutator) -> Dict[str, Any]:
         return st
 
 
+def reset_all_state() -> Dict[str, Any]:
+    """
+    Reset toàn bộ runtime state về mặc định (SẴN SÀNG).
+    Dùng cho STOP kiểu "fresh start".
+    """
+    def _m(st: Dict[str, Any]) -> None:
+        st.clear()
+        st.update(_default_state())
+    return _update(_m)
+
+
 def set_global_emergency_stop(value: bool) -> Dict[str, Any]:
     def _m(st: Dict[str, Any]) -> None:
         st["global_emergency_stop"] = bool(value)
+        if value:
+            # Khi STOP ALL: clear pause + đưa tất cả profile_states về STOPPED để tránh "RUNNING" rác
+            st["global_pause"] = False
+            st["paused_profiles"] = []
+            ps = st.get("profile_states")
+            if not isinstance(ps, dict):
+                ps = {}
+            for k in list(ps.keys()):
+                ps[k] = "STOPPED"
+            st["profile_states"] = ps
 
     return _update(_m)
 

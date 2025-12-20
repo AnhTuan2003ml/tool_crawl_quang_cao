@@ -81,6 +81,12 @@ def stop_profile(profile_id: str) -> bool:
     
     # Kiểm tra kết quả
     if isinstance(data, dict):
+        # Idempotent: nếu browser instance không tồn tại thì coi như đã dừng rồi
+        msg_lower = str(data.get("msg") or data.get("message") or "").lower()
+        if data.get("code") == 400 and "browser instance not found" in msg_lower:
+            print(f"   ✅ [stop_profile] Browser đã đóng sẵn / không tồn tại (code=400). Coi như thành công.")
+            return True
+
         if data.get("err") is False:
             print(f"   ✅ [stop_profile] THÀNH CÔNG! err=False")
             return True
@@ -156,6 +162,12 @@ def stop_all_browsers() -> bool:
     
     # Kiểm tra kết quả
     if isinstance(data, dict):
+        # Idempotent: nếu không có browser instance nào thì coi như đã đóng hết
+        msg_lower = str(data.get("msg") or data.get("message") or "").lower()
+        if data.get("code") == 400 and "browser instance not found" in msg_lower:
+            print(f"   ✅ [stop_all_browsers] Browser đã đóng sẵn / không tồn tại (code=400). Coi như thành công.")
+            return True
+
         if data.get("err") is False:
             print(f"   ✅ [stop_all_browsers] THÀNH CÔNG! err=False")
             return True

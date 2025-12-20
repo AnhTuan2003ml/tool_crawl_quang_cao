@@ -170,7 +170,8 @@ class GroupJoiner(FBController):
             is_joined = self.page.query_selector('div[aria-label="Đã tham gia"], div[aria-label="Mời"]')
             if is_joined:
                 print(f"✅ [SKIP] Đã là thành viên của nhóm {group_id}")
-                return False
+                # coi như "thành công" để vẫn lấy page_id và lưu groups.json
+                return True
 
             # 2. Tìm nút "Tham gia nhóm"
             join_btn_selector = 'div[aria-label="Tham gia nhóm"][role="button"]'
@@ -204,15 +205,21 @@ class GroupJoiner(FBController):
                 
                 # 3. Kiểm tra lại trạng thái
                 # Nếu nút chuyển thành "Hủy yêu cầu" hoặc "Đã tham gia" -> Thành công
-                check_success = self.page.query_selector('div[aria-label="Hủy yêu cầu"], div[aria-label="Đã tham gia"]')
-                
+                check_success = None
+                try:
+                    # chờ UI cập nhật tối đa 6s (đỡ sai do load chậm)
+                    self.page.wait_for_selector('div[aria-label="Hủy yêu cầu"], div[aria-label="Đã tham gia"]', timeout=6000)
+                    check_success = self.page.query_selector('div[aria-label="Hủy yêu cầu"], div[aria-label="Đã tham gia"]')
+                except Exception:
+                    check_success = self.page.query_selector('div[aria-label="Hủy yêu cầu"], div[aria-label="Đã tham gia"]')
+
                 if check_success:
-                    print(f"✅ Đã gửi yêu cầu tham gia thành công: {group_id}")
-                else:
-                    # Nếu vẫn còn nút tham gia -> Có thể do chưa trả lời câu hỏi bắt buộc
-                    print(f"⚠️ Đã click nhưng chưa thấy đổi trạng thái (Có thể cần trả lời câu hỏi bắt buộc): {group_id}")
-                
-                return True
+                    print(f"✅ Đã gửi yêu cầu tham gia / đã tham gia: {group_id}")
+                    return True
+
+                # Nếu vẫn chưa thấy đổi trạng thái -> coi là chưa join thành công (thường do câu hỏi bắt buộc)
+                print(f"⚠️ Click join nhưng chưa thấy đổi trạng thái (có thể cần trả lời câu hỏi): {group_id}")
+                return False
             else:
                 print(f"❌ Không tìm thấy nút tham gia (Có thể nhóm kín, bị chặn, hoặc layout khác).")
                 return False
@@ -276,10 +283,17 @@ def run_batch_join_from_list(profile_id, group_ids):
 
             # 3a) Join group (hoặc skip nếu đã join)
             url = _normalize_group_url(gid)
-            fb.join_group(url)
+            joined_ok = False
+            try:
+                joined_ok = bool(fb.join_group(url))
+            except Exception as e:
+                if isinstance(e, RuntimeError) and ("EMERGENCY_STOP" in str(e) or "BROWSER_CLOSED" in str(e)):
+                    raise
+                print(f"⚠️ Lỗi join_group: {e}")
+                joined_ok = False
 
-            # 3b) Sau khi join/đã join -> lấy page_id bằng get_id_from_url và lưu vào backend/config/groups.json
-            if get_id_from_url and url:
+            # 3b) Chỉ khi join thành công/đã là member -> lấy page_id và lưu groups.json
+            if joined_ok and get_id_from_url and url:
                 try:
                     fb.control_checkpoint("before_get_id_from_url_group")
                     res = get_id_from_url(url, profile_id)
