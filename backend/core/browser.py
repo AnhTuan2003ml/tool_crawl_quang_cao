@@ -217,9 +217,8 @@ class FBController:
         self.user_keywords = []
         cfg = get_settings()
         self.all_profile_ids = cfg.profile_ids
-        # [THAY ĐỔI] Tách thành 2 biến để quản lý ưu tiên
-        self.captured_payload_url = None  # ID từ Request (Dự phòng)
-        self.captured_response_id = None # ID từ Response (Ưu tiên)
+        # Chỉ bắt URL payload từ request
+        self.captured_payload_url = None
         
         self.job_keywords = [
             "tuyển dụng", "tuyển nhân viên", "tuyển gấp", "việc làm", "tuyển",
@@ -245,35 +244,21 @@ class FBController:
 
     # ===================== [CORE] NETWORK SNIFFER =====================
     def start_network_sniffer(self):
-        print("🛰  Đã kích hoạt Sniffer: Chế độ Response > Payload URL...")
+        print("🛰  Đã kích hoạt Sniffer: Chế độ bắt Payload URL...")
 
-        # 1. BẮT URL TỪ REQUEST (DỰ PHÒNG CHO VIEW-SOURCE)
+        # BẮT URL TỪ REQUEST (chỉ bắt URL có chứa "share")
         def on_request(request):
             if "facebook.com/api/graphql" in request.url and request.method == "POST":
                 try:
                     raw_url = parse_graphql_payload(request.post_data)
                     if raw_url:
-                        # Chỉ lưu nếu nó giống link bài viết
-                        if "facebook.com" in raw_url or "pfbid" in raw_url:
+                        # Chỉ lưu nếu URL có chứa "share" (ví dụ: https://www.facebook.com/share/p/1HYNUE6FzL/)
+                        if "/share/" in raw_url:
                             self.captured_payload_url = raw_url
-                            # print(f"🔗 [DEBUG] Bắt được Link tiềm năng: {raw_url[:50]}...")
+                            print(f"🔗 [DEBUG] Bắt được Share URL: {raw_url}")
                 except: pass
 
-        # 2. BẮT ID TỪ RESPONSE (ƯU TIÊN TUYỆT ĐỐI)
-        def on_response(response):
-            if "facebook.com/api/graphql" in response.url and response.status == 200:
-                if not self.captured_response_id:
-                    try:
-                        data = response.json()
-                        preview_data = data.get("data", {}).get("xma_preview_data", {})
-                        pid = preview_data.get("post_id")
-                        if pid:
-                            self.captured_response_id = str(pid)
-                            print(f"🎯 [RES-Json] Bắt dính ID CHÍNH THỨC: {self.captured_response_id}")
-                    except: pass
-
         self.page.on("request", on_request)
-        self.page.on("response", on_response)
 
     # ===================== SHARE & CHỜ ID (LOGIC MỚI) =====================
     def share_center_ad(self, post_handle, post_type):
@@ -282,10 +267,9 @@ class FBController:
             viewport = self.page.viewport_size
             height = viewport['height'] if viewport else 800
             escape_step = height * 0.35  # 👈 THOÁT MODULE RÁC
-            print("🚀 Share → bắt ID (Response → Payload → ViewSource)")
+            print("🚀 Share → bắt Payload URL → gọi get_id_from_url")
 
             self.captured_payload_url = None
-            self.captured_response_id = None
 
             share_btn = post_handle.query_selector(
                 'xpath=.//div[@data-ad-rendering-role="share_button"]/ancestor::div[@role="button"]'
@@ -300,25 +284,26 @@ class FBController:
             self.page.wait_for_timeout(300)
             share_btn.click()
 
-            # ===== ƯU TIÊN RESPONSE =====
+            # Đợi bắt được payload URL
             for _ in range(50):
-                if self.captured_response_id:
-                    self.dispatch_get_id_for_all_profiles(self.captured_response_id)
-                    self.save_post_id(self.captured_response_id, post_type)
-                    self.page.keyboard.press("Escape")
-                    return True
+                if self.captured_payload_url:
+                    # Gọi get_id_from_url trực tiếp từ URL payload
+                    if get_id_from_url:
+                        try:
+                            print(f"📥 Đang gọi get_id_from_url với URL: {self.captured_payload_url}")
+                            details = get_id_from_url(self.captured_payload_url, self.profile_id)
+                            if details and details.get("post_id"):
+                                self.save_post_id_from_details(details, post_type)
+                                self.page.keyboard.press("Escape")
+                                return True
+                            else:
+                                print("⚠️ Không lấy được post_id từ get_id_from_url")
+                        except Exception as e:
+                            print(f"❌ Lỗi khi gọi get_id_from_url: {e}")
+                    break
                 self.page.wait_for_timeout(150)
 
-            # ===== FALLBACK VIEW-SOURCE =====
-            if self.captured_payload_url:
-                source_id = self.get_id_blocking_mode(self.captured_payload_url)
-                if source_id:
-                    self.dispatch_get_id_for_all_profiles(source_id)
-                    self.save_post_id(source_id, post_type)
-                    self.page.keyboard.press("Escape")
-                    return True
-
-            print("⚠️ Không lấy được ID")
+            print("⚠️ Không lấy được Payload URL")
             self.page.keyboard.press("Escape")
             return False
 
@@ -328,8 +313,17 @@ class FBController:
             return False
 
     # ===================== CÁC HÀM KHÁC GIỮ NGUYÊN =====================
-    def save_post_id(self, post_id, post_type):
+    def save_post_id_from_details(self, details, post_type):
+        """
+        Lưu post từ dict details trả về từ get_id_from_url
+        details chứa: post_id, owning_profile, post_text
+        """
         try:
+            post_id = details.get("post_id")
+            if not post_id:
+                print("⚠️ Không có post_id trong details")
+                return False
+                
             folder = "data/post_ids"
             os.makedirs(folder, exist_ok=True)
             filepath = f"{folder}/{self.profile_id}.json"
@@ -349,21 +343,7 @@ class FBController:
                     print(f"🔁 ID {post_id} đã tồn tại -> bỏ qua.")
                     return False
 
-            # 2. [NEW] Gọi Worker lấy thông tin chi tiết
-            print(f"📥 Đang fetch chi tiết bài viết {post_id} (chờ worker)...")
-            
-            # Tạo link giả lập để worker xử lý
-            target_url = f"https://www.facebook.com/{post_id}"
-            
-            details = {}
-            if get_id_from_url:
-                try:
-                    # Truyền profile_id để worker dùng đúng cookie của trình duyệt đang chạy
-                    details = get_id_from_url(target_url, self.profile_id)
-                except Exception as e:
-                    print(f"⚠️ Lỗi khi gọi get_id_from_url: {e}")
-            
-            # 3. [NEW] Format dữ liệu JSON theo yêu cầu
+            # 2. Format dữ liệu JSON theo yêu cầu
             # Map flag: green -> xanh, yellow -> vàng
             flag_vn = "xanh" if post_type == "green" else "vàng" if post_type == "yellow" else post_type
             
@@ -385,12 +365,9 @@ class FBController:
 
             print(f"💾 Đã lưu Post {post_id} | Chủ bài: {owning_profile.get('name', 'N/A')}")
             
-            # Dispatch cho các profile khác (nếu Sếp dùng logic cũ)
-            self.dispatch_get_id_for_all_profiles(post_id)
-            
             return True
         except Exception as e:
-            print(f"❌ Lỗi save_post_id: {e}")
+            print(f"❌ Lỗi save_post_id_from_details: {e}")
             return False
 
 
@@ -721,79 +698,6 @@ class FBController:
         except:
             return False
     
-    def get_id_blocking_mode(self, url):
-        """
-        Mở tab mới -> Soi Code -> Tìm chữ "post_id" đầu tiên -> Trả về ngay.
-        """
-        print(f"⛔ [BLOCKING] Tạm dừng để soi source URL: {url}")
-        new_page = None
-        found_id = None
-        
-        try:
-            context = self.page.context
-            # 1. Mở tab mới
-            new_page = context.new_page()
-            
-            # 2. Truy cập view-source (Treo bot ở đây chờ tải xong mới chạy tiếp)
-            target = f"view-source:{url}"
-            print("    -> Đang tải source code (Chờ DOMContentLoaded)...")
-            new_page.goto(target, wait_until='domcontentloaded', timeout=20000)
-            
-            # 3. Lấy toàn bộ HTML
-            content = new_page.content()
-            
-            # 4. TÌM KIẾM CHÍNH XÁC "post_id"
-            # re.search mặc định sẽ quét từ trên xuống dưới và trả về kết quả ĐẦU TIÊN nó thấy.
-            # Đúng ý Sếp: Thấy cái đầu là chốt luôn.
-            
-            # Pattern 1: Dạng chuẩn "post_id":"12345"
-            match = re.search(r'"post_id":"(\d+)"', content)
-            
-            if match:
-                found_id = match.group(1)
-                print(f"    -> 💉 BẮT ĐƯỢC ID ĐẦU TIÊN (post_id): {found_id}")
-            else:
-                # Fallback: Nếu không thấy "post_id" thì mới tìm "story_fbid" (dự phòng)
-                match_sub = re.search(r'"story_fbid":"(\d+)"', content)
-                if match_sub:
-                    found_id = match_sub.group(1)
-                    print(f"    -> 💉 Không có post_id, lấy tạm story_fbid: {found_id}")
-
-            if not found_id:
-                print("    -> ⚠️ Không tìm thấy ID nào trong source.")
-
-        except Exception as e:
-            print(f"    -> ❌ Lỗi khi soi source: {e}")
-        finally:
-            # 5. Đóng tab ngay lập tức
-            if new_page: 
-                new_page.close()
-                print("    -> Đã đóng tab soi code. Quay lại tab chính...")
-                
-        return found_id
-    
-    
-    def dispatch_get_id_for_all_profiles(self, post_id: str):
-        """
-        Khi đã có post_id → gọi get_id cho toàn bộ PROFILE_IDS
-        """
-        print(f"📡 Dispatch get_id cho post_id={post_id}")
-
-        for pid in self.all_profile_ids:
-            # ❌ Bỏ qua profile hiện tại (tránh tự bắn vào mình)
-            if pid == self.profile_id:
-                continue
-
-            try:
-                # Worker `get_id_from_url(url, profile_id)` cần URL chứ không phải post_id.
-                # Tạo link giả lập giống `save_post_id()` để worker parse tiếp.
-                target_url = f"https://www.facebook.com/{post_id}"
-                print(f"   ➜ Gọi get_id_from_url(url={target_url}, profile_id={pid})")
-                get_id_from_url(target_url, pid)
-            except Exception as e:
-                print(f"   ❌ Lỗi get_id với profile {pid}: {e}")
-                
-                
     def bring_element_into_view_smooth(self, element):
         """
         Kiểm tra element (nút Share) có trong màn hình không.
