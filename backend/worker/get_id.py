@@ -48,7 +48,8 @@ def get_post_id(video_url, profile_id, cookies=None):
         owning_profile_dict: {"__typename": "...", "name": "...", "id": "..."} hoặc None
     """
     # Sử dụng HTML source để lấy thông tin (với cookies)
-    post_id, owning_profile, post_text = get_post_id_from_html(video_url, profile_id, cookies)
+    # Bây giờ hàm nội bộ trả thêm final_url để kiểm tra reel
+    post_id, owning_profile, post_text, final_url = get_post_id_from_html(video_url, profile_id, cookies)
     
     # Decode Unicode escape sequences trong owning_profile name nếu có
     if owning_profile and "name" in owning_profile:
@@ -64,7 +65,7 @@ def get_post_id(video_url, profile_id, cookies=None):
                 except:
                     pass
     
-    return post_id, owning_profile, post_text
+    return post_id, owning_profile, post_text, final_url
 
 
 def get_post_id_from_html(url, profile_id, cookies=None):
@@ -134,6 +135,9 @@ def get_post_id_from_html(url, profile_id, cookies=None):
         
         html_content = response.text
         print(f"✅ Đã lấy HTML content ({len(html_content)} ký tự)")
+        # final_url (sau redirect nếu có)
+        final_url = getattr(response, "url", "") or url
+        print(f"🔁 Final URL sau request: {final_url}")
         
         # Debug: Tìm các pattern có thể có trong HTML
         # Facebook có thể escape hoặc encode khác
@@ -350,7 +354,67 @@ def get_post_id_from_html(url, profile_id, cookies=None):
         else:
             print("⚠️ Không trích được nội dung bài post từ HTML")
 
-        return post_id, owning_profile, post_text
+        # Nếu final_url chứa 'reel' => xếp loại reel: không lấy post_text/owning_profile đầy đủ,
+        # mà đặt owning_profile = {"__typename":"User","name": None, "id": "<actor_id>"} nếu tìm được actor_id
+        try:
+            if "reel" in str(final_url).lower():
+                print(f"🔔 Final URL chứa 'reel' -> xử lý như reel/video: {final_url}")
+                actor_id = None
+                # Tìm trực tiếp các pattern actor_id trong HTML (không parse JSON)
+                # 1) targets array scan (balanced) tìm "actor_id"
+                try:
+                    for m in re.finditer(r'"targets"\s*:', html_content):
+                        idx = html_content.find('[', m.end())
+                        if idx == -1:
+                            continue
+                        i = idx + 1
+                        depth = 1
+                        while i < len(html_content) and depth > 0:
+                            if html_content[i] == '[':
+                                depth += 1
+                            elif html_content[i] == ']':
+                                depth -= 1
+                            i += 1
+                        if depth != 0:
+                            continue
+                        array_text = html_content[idx:i]
+                        mm = re.search(r'"actor_id"\s*:\s*["\']?(\d+)', array_text)
+                        if mm:
+                            actor_id = mm.group(1)
+                            print(f"🔎 Tìm thấy actor_id trong targets scan: {actor_id}")
+                            break
+                except Exception:
+                    pass
+
+                # 2) fallback: các pattern khác (content_owner_id_new, actor_id, actor.id)
+                if not actor_id:
+                    m = re.search(r'"content_owner_id_new"\s*:\s*"?(\\?\d+)"?', html_content)
+                    if m:
+                        actor_id = m.group(1).replace('\\', '')
+                        print(f"🔎 Tìm thấy actor_id từ content_owner_id_new: {actor_id}")
+                if not actor_id:
+                    m2 = re.search(r'"actor_id"\s*:\s*["\']?(\d+)', html_content)
+                    if m2:
+                        actor_id = m2.group(1)
+                        print(f"🔎 Tìm thấy actor_id bằng regex: {actor_id}")
+                if not actor_id:
+                    m3 = re.search(r'"actor"\s*:\s*\{\s*"id"\s*:\s*["\']?(\d+)', html_content)
+                    if m3:
+                        actor_id = m3.group(1)
+                        print(f"🔎 Tìm thấy actor.id bằng regex: {actor_id}")
+
+                owning_profile_reel = None
+                if actor_id:
+                    owning_profile_reel = {"__typename": "User", "name": None, "id": actor_id}
+                    print(f"👤 Đặt owning_profile từ actor_id: {actor_id}")
+                else:
+                    print("⚠️ Không tìm thấy actor_id trong HTML để đặt owning_profile cho reel.")
+
+                return post_id, owning_profile_reel, None, final_url
+        except Exception:
+            pass
+
+        return post_id, owning_profile, post_text, final_url
             
     except Exception as e:
         print(f"❌ Lỗi khi lấy HTML source: {e}")
@@ -545,12 +609,28 @@ def get_id_from_url(url, profile_id):
         # Tất cả các URL khác đều là post
         result["url_type"] = "post"
         
-        # Lấy post_id, owning_profile và post_text từ HTML source (với cookies)
-        post_id, owning_profile, post_text = get_post_id(url, profile_id, cookies)
-        
+        # Lấy post_id, owning_profile, post_text, final_url từ HTML source (với cookies)
+        post_id, owning_profile, post_text, final_url = get_post_id(url, profile_id, cookies)
+
         result["post_id"] = post_id
         result["owning_profile"] = owning_profile
         result["post_text"] = post_text
+
+        # Nếu final_url chứa 'reel' => xếp loại reel, không lấy post_text và đặt owning_profile từ actor_id
+        try:
+            if final_url and "reel" in str(final_url).lower():
+                result["url_type"] = "reel"
+                if owning_profile and isinstance(owning_profile, dict) and owning_profile.get("id"):
+                    result["owning_profile"] = owning_profile
+                else:
+                    result["owning_profile"] = None
+                # actor_id nếu có
+                if owning_profile and isinstance(owning_profile, dict):
+                    result["actor_id"] = owning_profile.get("id")
+                result["post_text"] = None
+                print(f"🔔 Xếp loại URL là 'reel' (final_url: {final_url}) actor_id: {result.get('actor_id')}")
+        except Exception:
+            pass
         
         # In kết quả cuối cùng
         if post_id:
@@ -584,6 +664,7 @@ if __name__ == "__main__":
     # result = get_id_from_url(group_url, profile_id)
     
     # Test với video/post URL
-    url = "https://www.facebook.com/122217299666284213"
+    # url = "https://www.facebook.com/share/p/18AKfiXuZM/"
+    url = "https://www.facebook.com/share/r/1EsjjiYvn6/"
     result = get_id_from_url(url, profile_id)
     print("heLLO" ,result)
