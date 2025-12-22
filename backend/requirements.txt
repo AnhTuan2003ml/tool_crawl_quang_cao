@@ -3,3 +3,5 @@ playwright
 pyperclip
 fastapi
 uvicorn
+selenium
+zstandard
