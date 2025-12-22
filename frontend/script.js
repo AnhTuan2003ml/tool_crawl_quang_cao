@@ -284,6 +284,10 @@ function applyControlStateToProfileRows(st) {
   });
 }
 
+/**
+ * Central function để quản lý button states cho pause/stop
+ * Đảm bảo logic nhất quán và tránh race conditions
+ */
 function updateStopPauseButtonsByJobs() {
   const jobs = lastJobsStatus || {};
   const botHasProfiles = Array.isArray(jobs && jobs.bot_profile_ids) && jobs.bot_profile_ids.length > 0;
@@ -294,48 +298,48 @@ function updateStopPauseButtonsByJobs() {
   );
   const hasSelected = getSelectedProfileIds().length > 0;
   
-  // Nếu đang chạy info collector thì luôn enable các nút pause/dừng
+  // Kiểm tra info collector đang chạy từ backend
+  let infoCollectorRunning = false;
+  try {
+    // Check từ progress API để đảm bảo chính xác
+    // Note: Không dùng isInfoCollectorRunning vì có thể bị out of sync
+    // Sẽ check async trong updateInfoProgress
+  } catch (_) { }
+  
+  // Nếu đang chạy info collector (local flag) hoặc có session running thì enable buttons
   const shouldEnableButtons = sessionRunning || isInfoCollectorRunning;
 
-  // Chỉ khi có tiến trình chạy mới cho bấm STOP/PAUSE
-  const stopBtns = [stopBtn, stopAllSettingBtn].filter(Boolean);
-  stopBtns.forEach((b) => {
-    if (b.classList && b.classList.contains('btn-loading')) return;
-    b.disabled = !shouldEnableButtons;
-    if (shouldEnableButtons) {
-      b.style.opacity = '1';
-      b.style.pointerEvents = 'auto';
-      b.style.cursor = 'pointer';
+  /**
+   * Helper function để set button state một cách nhất quán
+   */
+  function setButtonState(btn, enabled, skipIfLoading = true) {
+    if (!btn) return;
+    if (skipIfLoading && btn.classList && btn.classList.contains('btn-loading')) {
+      return; // Giữ nguyên state nếu đang loading
     }
-  });
-
-  const pauseBtns = [pauseAllBtn].filter(Boolean);
-  pauseBtns.forEach((b) => {
-    if (b.classList && b.classList.contains('btn-loading')) return;
-    b.disabled = !shouldEnableButtons;
-    if (shouldEnableButtons) {
-      b.style.opacity = '1';
-      b.style.pointerEvents = 'auto';
-      b.style.cursor = 'pointer';
-    }
-  });
-
-  if (pauseSelectedProfilesBtn && !pauseSelectedProfilesBtn.classList.contains('btn-loading')) {
-    pauseSelectedProfilesBtn.disabled = !shouldEnableButtons || !hasSelected;
-    if (shouldEnableButtons && hasSelected) {
-      pauseSelectedProfilesBtn.style.opacity = '1';
-      pauseSelectedProfilesBtn.style.pointerEvents = 'auto';
-      pauseSelectedProfilesBtn.style.cursor = 'pointer';
+    
+    btn.disabled = !enabled;
+    if (enabled) {
+      btn.style.opacity = '1';
+      btn.style.pointerEvents = 'auto';
+      btn.style.cursor = 'pointer';
+    } else {
+      btn.style.opacity = '0.5';
+      btn.style.pointerEvents = 'none';
+      btn.style.cursor = 'not-allowed';
     }
   }
-  if (stopSelectedProfilesBtn && !stopSelectedProfilesBtn.classList.contains('btn-loading')) {
-    stopSelectedProfilesBtn.disabled = !shouldEnableButtons || !hasSelected;
-    if (shouldEnableButtons && hasSelected) {
-      stopSelectedProfilesBtn.style.opacity = '1';
-      stopSelectedProfilesBtn.style.pointerEvents = 'auto';
-      stopSelectedProfilesBtn.style.cursor = 'pointer';
-    }
-  }
+
+  // STOP ALL buttons (left panel + settings header)
+  setButtonState(stopBtn, shouldEnableButtons);
+  setButtonState(stopAllSettingBtn, shouldEnableButtons);
+
+  // PAUSE ALL button
+  setButtonState(pauseAllBtn, shouldEnableButtons);
+
+  // Selected profiles buttons (cần cả hasSelected)
+  setButtonState(pauseSelectedProfilesBtn, shouldEnableButtons && hasSelected);
+  setButtonState(stopSelectedProfilesBtn, shouldEnableButtons && hasSelected);
 }
 
 // ==== Settings (frontend-only) ====
@@ -1265,9 +1269,10 @@ if (scanStartBtn) {
   });
 }
 
-async function handleStopAll() {
-  console.log('[UI] STOP ALL triggered');
-  // Reset flag info collector nếu đang chạy
+/**
+ * Helper function để reset info collector state
+ */
+function resetInfoCollectorState() {
   isInfoCollectorRunning = false;
   // Reset loading của các nút info collector
   if (runAllInfoBtn) setButtonLoading(runAllInfoBtn, false);
@@ -1286,9 +1291,18 @@ async function handleStopAll() {
   if (progressToast && (!scanToast || scanToast.style.display === 'none')) {
     progressToast.style.display = 'none';
   }
+}
+
+async function handleStopAll() {
+  console.log('[UI] STOP ALL triggered');
+  
+  // Reset info collector state ngay lập tức
+  resetInfoCollectorState();
+  
   // stop-all có thể bấm từ left panel hoặc từ setting header
   const btns = [stopAllBtn, stopAllSettingBtn].filter(Boolean);
   btns.forEach((b) => setButtonLoading(b, true, 'Đang dừng tất cả...'));
+  
   try {
     // Ưu tiên endpoint mới theo spec, fallback endpoint cũ để khỏi vỡ UI
     let res = null;
@@ -1333,6 +1347,14 @@ async function handleStopAll() {
     setButtonLoading(feedAccountSettingBtn, false);
     setButtonLoading(feedStartBtn, false);
     if (feedConfigPanel) feedConfigPanel.style.display = 'none';
+    
+    // Refresh state và update buttons
+    try {
+      const jobs = await callBackendNoAlert('/jobs/status', { method: 'GET' });
+      if (jobs) lastJobsStatus = jobs;
+    } catch (_) { }
+    try { await refreshControlState(); } catch (_) { }
+    updateStopPauseButtonsByJobs(); // Update buttons sau khi reset state
   }
 }
 
@@ -1345,25 +1367,9 @@ async function handleStopSelectedProfiles() {
   if (!stopSelectedProfilesBtn) return;
   if (stopSelectedProfilesBtn.classList.contains('btn-loading')) return;
 
-  // Reset flag info collector nếu đang chạy
-  isInfoCollectorRunning = false;
-  // Reset loading của các nút info collector
-  if (runAllInfoBtn) setButtonLoading(runAllInfoBtn, false);
-  if (runSelectedInfoBtn) setButtonLoading(runSelectedInfoBtn, false);
-  // Dừng poll tiến trình
-  if (infoProgressInterval) {
-    clearInterval(infoProgressInterval);
-    infoProgressInterval = null;
-  }
-  // Ẩn toast tiến trình
-  const infoToast = document.getElementById('infoProgressToast');
-  const progressToast = document.getElementById('progressToast');
-  if (infoToast) infoToast.style.display = 'none';
-  // Ẩn progressToast nếu cả 2 toast đều ẩn
-  const scanToast = document.getElementById('scanStatsToast');
-  if (progressToast && (!scanToast || scanToast.style.display === 'none')) {
-    progressToast.style.display = 'none';
-  }
+  // Reset info collector state nếu đang chạy (có thể stop info collector)
+  resetInfoCollectorState();
+  
   console.log(`[UI] STOP selected profiles=${selected.join(',')}`);
   setButtonLoading(stopSelectedProfilesBtn, true, 'Đang dừng...');
 
@@ -1383,7 +1389,7 @@ async function handleStopSelectedProfiles() {
       if (jobs) lastJobsStatus = jobs;
     } catch (_) { }
     try { await refreshControlState(); } catch (_) { }
-    try { updateStopPauseButtonsByJobs(); } catch (_) { }
+    updateStopPauseButtonsByJobs(); // Update buttons sau khi refresh state
     // Nếu không còn bot_profile_ids thì UI quét phải về "Sẵn sàng"
     try {
       const botHasProfiles = Array.isArray(lastJobsStatus && lastJobsStatus.bot_profile_ids) && lastJobsStatus.bot_profile_ids.length > 0;
@@ -1398,6 +1404,7 @@ async function handleStopSelectedProfiles() {
     showToast('Không dừng được profile đã chọn (kiểm tra FastAPI).', 'error');
   } finally {
     setButtonLoading(stopSelectedProfilesBtn, false);
+    updateStopPauseButtonsByJobs(); // Update buttons sau khi hoàn thành
   }
 }
 
@@ -1429,7 +1436,10 @@ async function handlePauseSelectedProfiles() {
     showToast('Không pause được profile đã tick (kiểm tra FastAPI).', 'error');
   } finally {
     setButtonLoading(pauseSelectedProfilesBtn, false);
-    try { await refreshControlState(); } catch (_) { }
+    try { 
+      await refreshControlState(); 
+      updateStopPauseButtonsByJobs(); // Update buttons sau khi refresh state
+    } catch (_) { }
   }
 }
 
@@ -1585,8 +1595,11 @@ async function resyncUiFromBackendAfterReload() {
 async function handlePauseAllToggle() {
   if (!pauseAllBtn) return;
   if (pauseAllBtn.classList.contains('btn-loading')) return;
+  
+  const wasPaused = isPausedAll;
+  
   try {
-    if (!isPausedAll) {
+    if (!wasPaused) {
       console.log('[UI] PAUSE ALL triggered');
       setButtonLoading(pauseAllBtn, true, 'Đang tạm dừng...');
       // update UI ngay để tránh user thấy "đang quét" khi đã pause
@@ -1603,10 +1616,14 @@ async function handlePauseAllToggle() {
       showToast('Đã tiếp tục tất cả', 'success');
     }
   } catch (e) {
+    // Rollback UI state nếu có lỗi
+    isPausedAll = wasPaused;
+    syncRunningLabelsWithPauseState();
     showToast('Không pause/resume được (kiểm tra FastAPI).', 'error');
   } finally {
     setButtonLoading(pauseAllBtn, false);
     await refreshControlState();
+    updateStopPauseButtonsByJobs(); // Update buttons sau khi refresh state
   }
 }
 
@@ -2854,7 +2871,14 @@ async function updateScanStats() {
 async function updateInfoProgress() {
   try {
     const res = await callBackendNoAlert('/info/progress', { method: 'GET' });
-    if (!res) return;
+    if (!res) {
+      // Nếu không có response, reset state
+      if (isInfoCollectorRunning) {
+        resetInfoCollectorState();
+        updateStopPauseButtonsByJobs();
+      }
+      return;
+    }
     
     const toast = document.getElementById('infoProgressToast');
     const text = document.getElementById('infoProgressToastText');
@@ -2862,6 +2886,17 @@ async function updateInfoProgress() {
     const progressToast = document.getElementById('progressToast');
     
     if (!toast || !text || !progressToast) return;
+    
+    // Sync isInfoCollectorRunning với backend state
+    const backendRunning = Boolean(res.is_running);
+    if (isInfoCollectorRunning !== backendRunning) {
+      isInfoCollectorRunning = backendRunning;
+      if (!backendRunning) {
+        // Backend đã dừng, reset state
+        resetInfoCollectorState();
+      }
+      updateStopPauseButtonsByJobs();
+    }
     
     if (res.is_running && res.total > 0) {
       const current = res.current || 0;
@@ -2891,7 +2926,11 @@ async function updateInfoProgress() {
       }
     }
   } catch (e) {
-    // Ignore errors
+    // Nếu có lỗi khi check progress, có thể backend đã dừng
+    if (isInfoCollectorRunning) {
+      resetInfoCollectorState();
+      updateStopPauseButtonsByJobs();
+    }
   }
 }
 
@@ -2906,23 +2945,18 @@ async function runInfoCollector(mode = 'all') {
     return;
   }
 
-  // Đánh dấu đang chạy và enable các nút pause/dừng
+  // Đánh dấu đang chạy
   isInfoCollectorRunning = true;
-  [pauseAllBtn, pauseSelectedProfilesBtn, stopAllSettingBtn, stopSelectedProfilesBtn].forEach((b) => {
-    if (b) {
-      b.disabled = false;
-      b.style.opacity = '1';
-      b.style.pointerEvents = 'auto';
-      b.style.cursor = 'pointer';
-    }
-  });
-
+  
   setButtonLoading(btn, true, 'Đang lấy thông tin...');
   
   // Bắt đầu poll tiến trình
   if (infoProgressInterval) clearInterval(infoProgressInterval);
   updateInfoProgress(); // Cập nhật ngay lập tức
   infoProgressInterval = setInterval(updateInfoProgress, 2000); // Poll mỗi 2 giây
+  
+  // Update buttons để enable pause/stop buttons
+  updateStopPauseButtonsByJobs();
   
   try {
     const body = { mode: isSelected ? 'selected' : 'all' };
@@ -2938,6 +2972,9 @@ async function runInfoCollector(mode = 'all') {
       msgParts.push(`posts: ${summary.total_posts_processed}`);
     }
     showToast(msgParts.join(' | '), 'success', 2200);
+    
+    // Reset flag sau khi hoàn thành thành công
+    resetInfoCollectorState();
   } catch (e) {
     console.error('Error in runInfoCollector:', e);
     // Kiểm tra nếu là lỗi "không có dữ liệu bài viết"
@@ -2951,25 +2988,12 @@ async function runInfoCollector(mode = 'all') {
       const displayMsg = e?.message || e?.detail || 'Không chạy được lấy thông tin (check backend).';
       showToast(displayMsg, 'error', 3000);
     }
+    // Reset flag khi có lỗi
+    resetInfoCollectorState();
   } finally {
     setButtonLoading(btn, false);
-    // Dừng poll tiến trình
-    if (infoProgressInterval) {
-      clearInterval(infoProgressInterval);
-      infoProgressInterval = null;
-    }
-    // Ẩn toast tiến trình
-    const infoToast = document.getElementById('infoProgressToast');
-    const progressToast = document.getElementById('progressToast');
-    if (infoToast) infoToast.style.display = 'none';
-    // Ẩn progressToast nếu cả 2 toast đều ẩn
-    const scanToast = document.getElementById('scanStatsToast');
-    if (progressToast && (!scanToast || scanToast.style.display === 'none')) {
-      progressToast.style.display = 'none';
-    }
-    // Giữ các nút pause/dừng enabled để user có thể bấm dừng
-    // Chỉ reset flag khi user thực sự dừng hoặc hoàn thành
-    // isInfoCollectorRunning sẽ được reset khi user bấm stop/pause
+    // Update buttons sau khi reset state
+    updateStopPauseButtonsByJobs();
   }
 }
 

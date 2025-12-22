@@ -2,6 +2,7 @@ import time
 import random
 import os
 from core import control as control_state
+from core.control import smart_sleep
 
 class SimpleBot:
     def __init__(self, fb):
@@ -11,42 +12,21 @@ class SimpleBot:
         """
         Sleep nhưng check pause: chỉ tính thời gian không pause vào active_time.
         active_time_list và last_check_time_list là list để pass by reference.
+        Sử dụng smart_sleep để handle STOP/PAUSE.
         """
-        remaining = total_seconds
-        chunk = 0.5  # Sleep theo chunk 0.5s để check pause thường xuyên
-        
-        while remaining > 0:
-            sleep_chunk = min(chunk, remaining)
-            
-            # Check pause TRƯỚC sleep: nếu đang pause thì không sleep, chỉ đợi
-            stop, paused_before, _reason = control_state.check_flags(profile_id)
-            if stop:
-                raise RuntimeError("EMERGENCY_STOP")
-            
-            if paused_before:
-                # Đang pause: không sleep, chỉ đợi và không tính vào active_time
-                time.sleep(sleep_chunk)
-                last_check_time_list[0] = time.time()
-                remaining -= sleep_chunk
-                continue
-            
-            # Không pause: sleep và tính vào active_time
-            start_chunk = time.time()
-            time.sleep(sleep_chunk)
-            end_chunk = time.time()
-            actual_elapsed = end_chunk - start_chunk
-            
-            # Check pause SAU sleep: nếu pause trong lúc sleep thì không tính
-            stop, paused_after, _reason = control_state.check_flags(profile_id)
-            if stop:
-                raise RuntimeError("EMERGENCY_STOP")
-            
-            # Chỉ cộng vào active_time nếu không pause cả trước và sau
-            if not paused_after:
-                active_time_list[0] += actual_elapsed
-            
-            last_check_time_list[0] = end_chunk
-            remaining -= sleep_chunk
+        start_time = time.time()
+        try:
+            smart_sleep(total_seconds, profile_id)
+            # Nếu smart_sleep return bình thường (không pause), tính vào active_time
+            end_time = time.time()
+            elapsed = end_time - start_time
+            active_time_list[0] += elapsed
+            last_check_time_list[0] = end_time
+        except RuntimeError as e:
+            if "EMERGENCY_STOP" in str(e):
+                raise
+            # Nếu pause thì không tính vào active_time
+            last_check_time_list[0] = time.time()
 
     def run(self, url, duration=None):
         print(f"🚀 Đang truy cập: {url}")

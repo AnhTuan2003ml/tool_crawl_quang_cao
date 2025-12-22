@@ -15,6 +15,7 @@ from core.nst import connect_profile
 from core.nst import stop_profile
 from core.browser import FBController, JS_EXPAND_SCRIPT, JS_CHECK_AND_HIGHLIGHT_SCOPED
 from core.scraper import SimpleBot
+from core.control import smart_sleep
 
 # ==============================================================================
 # "HÀNH VI NGƯỜI THẬT": thi thoảng mở Thông báo rồi Back (8–15 phút/lần)
@@ -154,9 +155,11 @@ def open_notifications_random_then_back(
 
     # Chờ panel render
     try:
-        page.wait_for_timeout(5000)
-    except Exception:
-        time.sleep(5)
+        smart_sleep(5.0, fb.profile_id)
+    except RuntimeError as e:
+        if "EMERGENCY_STOP" in str(e):
+            raise
+        smart_sleep(5.0, fb.profile_id)
 
     if not click_random_notification(fb):
         return False
@@ -164,9 +167,11 @@ def open_notifications_random_then_back(
     delay = int(wait_seconds) if wait_seconds is not None else random.randint(10, 15)
     print(f"⏳ Đợi {delay}s rồi back")
     try:
-        page.wait_for_timeout(delay * 1000)
-    except Exception:
-        time.sleep(delay)
+        smart_sleep(float(delay), fb.profile_id)
+    except RuntimeError as e:
+        if "EMERGENCY_STOP" in str(e):
+            raise
+        smart_sleep(float(delay), fb.profile_id)
 
     # ===== BACK =====
     try:
@@ -184,10 +189,15 @@ def open_notifications_random_then_back(
 
     try:
         print("🔄 Reload feed để reset state")
-        time.sleep(random.uniform(1.5, 3.0))  # human-like
+        smart_sleep(random.uniform(1.5, 3.0), fb.profile_id)  # human-like
         page.reload(wait_until="domcontentloaded")
-        page.wait_for_timeout(3000)
+        smart_sleep(3.0, fb.profile_id)
         return True
+    except RuntimeError as e:
+        if "EMERGENCY_STOP" in str(e):
+            raise
+        print(f"⚠️ Reload fail: {e}")
+        return False
     except Exception as e:
         print(f"⚠️ Reload fail: {e}")
         return False
@@ -197,17 +207,20 @@ class HumanLikeBot(SimpleBot):
     """
     Kế thừa SimpleBot để gắn nhịp mở Thông báo 8–15 phút/lần,
     CHỈ trigger sau khi đã xử lý xong 1 post + nghỉ tự nhiên.
+    Sử dụng ACTIVE TIME thay vì wall-clock time.
     """
     def run(self, url, duration=None):
         print(f"🚀 Đang truy cập: {url}")
         self.fb.goto(url)
 
-        start_time = time.time()
-        next_notify_time = time.time() + _random_notification_interval_seconds()
+        # ACTIVE TIME tracking (chỉ tăng khi không pause)
+        active_time = 0.0
+        next_notify_active_time = _random_notification_interval_seconds()
 
         while True:
             try:
-                if duration and (time.time() - start_time > duration):
+                # Check duration bằng ACTIVE TIME
+                if duration and active_time >= duration:
                     print("⏳ Hết giờ chạy.")
                     break
 
@@ -218,22 +231,48 @@ class HumanLikeBot(SimpleBot):
 
                     delay = random.uniform(5.0, 8.0)
                     print(f"😴 Nghỉ sau khi xử lý bài {delay:.1f}s")
-                    time.sleep(delay)
+                    try:
+                        smart_sleep(delay, self.fb.profile_id)
+                        # Chỉ tăng active_time khi smart_sleep return bình thường (không pause)
+                        active_time += delay
+                    except RuntimeError as e:
+                        if "EMERGENCY_STOP" in str(e):
+                            raise
+                        # Nếu pause thì không tăng active_time
 
                     # ===== ĐIỂM CHỐT: chỉ mở thông báo sau DONE + nghỉ =====
-                    if time.time() >= next_notify_time:
+                    if active_time >= next_notify_active_time:
                         # Chỉ reload sau khi back nếu đang chạy Feed (trang chủ).
                         is_feed = str(url or "").strip().rstrip("/") == "https://www.facebook.com"
-                        open_notifications_random_then_back(self.fb, reload_after_back=is_feed)
-                        next_notify_time = time.time() + _random_notification_interval_seconds()
+                        try:
+                            open_notifications_random_then_back(self.fb, reload_after_back=is_feed)
+                            next_notify_active_time = active_time + _random_notification_interval_seconds()
+                        except RuntimeError as e:
+                            if "EMERGENCY_STOP" in str(e):
+                                raise
                 else:
                     delay = random.uniform(3.0, 5.0)
                     print(f"😴 Không có bài – nghỉ {delay:.1f}s")
-                    time.sleep(delay)
+                    try:
+                        smart_sleep(delay, self.fb.profile_id)
+                        # Chỉ tăng active_time khi smart_sleep return bình thường (không pause)
+                        active_time += delay
+                    except RuntimeError as e:
+                        if "EMERGENCY_STOP" in str(e):
+                            raise
+                        # Nếu pause thì không tăng active_time
 
-            except Exception as e:
+            except RuntimeError as e:
+                if "EMERGENCY_STOP" in str(e):
+                    print("🛑 Dừng do EMERGENCY_STOP")
+                    raise
                 print(f"❌ Lỗi vòng lặp: {e}")
-                time.sleep(2)
+                try:
+                    smart_sleep(2.0, self.fb.profile_id)
+                    active_time += 2.0
+                except RuntimeError as stop_e:
+                    if "EMERGENCY_STOP" in str(stop_e):
+                        raise
 
 def _parse_location_terms(raw_text: str, strip_terms: Optional[list[str]] = None) -> list[str]:
     """
@@ -411,8 +450,19 @@ def _run_bot_logic(profile_id, url, raw_text, duration_minutes, all_profile_ids=
         print(f"▶️ Bắt đầu lướt trong {duration_minutes} phút...")
         duration_seconds = duration_minutes * 60
         
-        bot.run(url, duration=duration_seconds)
+        try:
+            bot.run(url, duration=duration_seconds)
+        except RuntimeError as e:
+            if "EMERGENCY_STOP" in str(e):
+                print("🛑 Dừng bot do EMERGENCY_STOP")
+                return
+            raise
         
+    except RuntimeError as e:
+        if "EMERGENCY_STOP" in str(e):
+            print("🛑 Dừng runner do EMERGENCY_STOP")
+            return
+        print(f"❌ Lỗi Runner: {e}")
     except Exception as e:
         print(f"❌ Lỗi Runner: {e}")
     finally:

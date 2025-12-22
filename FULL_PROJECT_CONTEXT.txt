@@ -38,6 +38,8 @@ tool_crawl_quang_cao/
                 all_results_20251222_220621.json
                 all_results_20251222_221333.json
                 all_results_20251222_221814.json
+                all_results_20251222_222956.json
+                all_results_20251222_223649.json
         worker/
             check_cookies.py
             get_all_info.py
@@ -167,6 +169,7 @@ from core.settings import SETTINGS_PATH
 from core.nst import connect_profile, stop_profile, stop_all_browsers
 from core.browser import FBController
 from core import control as control_state
+from core.control import smart_sleep
 from core.scraper import SimpleBot
 from core.settings import get_settings
 from worker.get_all_info import get_all_info_from_post_ids_dir, get_info_for_profile_ids
@@ -344,135 +347,141 @@ def _run_bot_profile_loop(
     duration_seconds = max(1, run_m * 60)
     rest_seconds = max(1, rest_m * 60)
 
-    while True:
-        # STOP/PAUSE trước khi bắt đầu phiên
-        stop, paused, reason = control_state.check_flags(pid)
-        if stop:
-            print(f"🛑 [{pid}] STOP trước khi start loop ({reason})")
-            try:
-                control_state.set_profile_state(pid, "STOPPED")
-            except Exception:
-                pass
-            return
-        if paused:
-            print(f"⏸️ [{pid}] PAUSED trước khi start loop ({reason})")
-            control_state.wait_if_paused(pid, sleep_seconds=0.5)
-
-        fb: Optional[FBController] = None
-        try:
-            control_state.set_profile_state(pid, "RUNNING")
-        except Exception:
-            pass
-
-        try:
-            ws = connect_profile(pid)
-            fb = FBController(ws)
-            fb.profile_id = pid
-            # tuyệt đối độc lập: chỉ xử lý trong profile này
-            try:
-                fb.all_profile_ids = [pid]
-            except Exception:
-                pass
-            # filter text nếu có
-            try:
-                if t:
-                    parts = []
-                    for chunk in t.replace("\n", ",").split(","):
-                        s = " ".join(str(chunk).strip().split())
-                        if s:
-                            parts.append(s)
-                    seen = set()
-                    user_keywords = []
-                    for x in parts:
-                        k = x.lower()
-                        if k in seen:
-                            continue
-                        seen.add(k)
-                        user_keywords.append(x)
-                    fb.user_keywords = user_keywords
-            except Exception:
-                pass
-            fb.connect()
-            bot = SimpleBot(fb)
-            bot.run(target_url, duration=duration_seconds)
-        except RuntimeError as e:
-            # STOP/BROWSER_CLOSED => thoát phiên
-            if "EMERGENCY_STOP" in str(e) or "BROWSER_CLOSED" in str(e):
-                print(f"🛑 [{pid}] Dừng bot ({e})")
-            else:
-                raise
-        except Exception as e:
-            print(f"❌ Lỗi ở profile {pid}: {e}")
-            try:
-                control_state.set_profile_state(pid, "ERROR")
-            except Exception:
-                pass
-        finally:
-            # đóng playwright + NST profile best-effort
-            try:
-                if fb and getattr(fb, "page", None):
-                    try:
-                        fb.page.close()
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-            try:
-                if fb and getattr(fb, "browser", None) and getattr(fb.browser, "contexts", None):
-                    for ctx in list(fb.browser.contexts):
-                        try:
-                            ctx.close()
-                        except Exception:
-                            pass
-            except Exception:
-                pass
-            try:
-                if fb and getattr(fb, "browser", None):
-                    try:
-                        fb.browser.close()
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-            try:
-                if fb and getattr(fb, "play", None):
-                    try:
-                        fb.play.stop()
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-            try:
-                stop_profile(pid)
-            except Exception:
-                pass
-
-        # Check stop sau khi kết thúc phiên
-        stop, paused, reason = control_state.check_flags(pid)
-        if stop:
-            print(f"🛑 [{pid}] STOP sau phiên ({reason}) -> thoát loop")
-            try:
-                control_state.set_profile_state(pid, "STOPPED")
-            except Exception:
-                pass
-            return
-
-        # REST (độc lập theo profile) - pause freeze
-        slept = 0
-        while slept < rest_seconds:
+    try:
+        while True:
+            # STOP/PAUSE trước khi bắt đầu phiên
             stop, paused, reason = control_state.check_flags(pid)
             if stop:
-                print(f"🛑 [{pid}] STOP trong REST ({reason}) -> thoát")
+                print(f"🛑 [{pid}] STOP trước khi start loop ({reason})")
                 try:
                     control_state.set_profile_state(pid, "STOPPED")
                 except Exception:
                     pass
                 return
             if paused:
+                print(f"⏸️ [{pid}] PAUSED trước khi start loop ({reason})")
                 control_state.wait_if_paused(pid, sleep_seconds=0.5)
-                continue
-            time.sleep(1)
-            slept += 1
+
+            fb: Optional[FBController] = None
+            try:
+                control_state.set_profile_state(pid, "RUNNING")
+            except Exception:
+                pass
+
+            try:
+                ws = connect_profile(pid)
+                fb = FBController(ws)
+                fb.profile_id = pid
+                # tuyệt đối độc lập: chỉ xử lý trong profile này
+                try:
+                    fb.all_profile_ids = [pid]
+                except Exception:
+                    pass
+                # filter text nếu có
+                try:
+                    if t:
+                        parts = []
+                        for chunk in t.replace("\n", ",").split(","):
+                            s = " ".join(str(chunk).strip().split())
+                            if s:
+                                parts.append(s)
+                        seen = set()
+                        user_keywords = []
+                        for x in parts:
+                            k = x.lower()
+                            if k in seen:
+                                continue
+                            seen.add(k)
+                            user_keywords.append(x)
+                        fb.user_keywords = user_keywords
+                except Exception:
+                    pass
+                fb.connect()
+                bot = SimpleBot(fb)
+                bot.run(target_url, duration=duration_seconds)
+            except RuntimeError as e:
+                # STOP/BROWSER_CLOSED => thoát phiên
+                if "EMERGENCY_STOP" in str(e) or "BROWSER_CLOSED" in str(e):
+                    print(f"🛑 [{pid}] Dừng bot ({e})")
+                    return
+                raise
+            except Exception as e:
+                print(f"❌ Lỗi ở profile {pid}: {e}")
+                try:
+                    control_state.set_profile_state(pid, "ERROR")
+                except Exception:
+                    pass
+            finally:
+                # đóng playwright + NST profile best-effort
+                try:
+                    if fb and getattr(fb, "page", None):
+                        try:
+                            fb.page.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    if fb and getattr(fb, "browser", None) and getattr(fb.browser, "contexts", None):
+                        for ctx in list(fb.browser.contexts):
+                            try:
+                                ctx.close()
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                try:
+                    if fb and getattr(fb, "browser", None):
+                        try:
+                            fb.browser.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    if fb and getattr(fb, "play", None):
+                        try:
+                            fb.play.stop()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    stop_profile(pid)
+                except Exception:
+                    pass
+
+            # Check stop sau khi kết thúc phiên
+            stop, paused, reason = control_state.check_flags(pid)
+            if stop:
+                print(f"🛑 [{pid}] STOP sau phiên ({reason}) -> thoát loop")
+                try:
+                    control_state.set_profile_state(pid, "STOPPED")
+                except Exception:
+                    pass
+                return
+
+            # REST (độc lập theo profile) - pause freeze
+            try:
+                smart_sleep(rest_seconds, pid)
+            except RuntimeError as e:
+                if "EMERGENCY_STOP" in str(e):
+                    print(f"🛑 [{pid}] STOP trong REST -> thoát")
+                    try:
+                        control_state.set_profile_state(pid, "STOPPED")
+                    except Exception:
+                        pass
+                    return
+                raise
+    except RuntimeError as e:
+        if "EMERGENCY_STOP" in str(e):
+            print(f"🛑 [{pid}] EMERGENCY_STOP trong loop -> thoát")
+            try:
+                control_state.set_profile_state(pid, "STOPPED")
+            except Exception:
+                pass
+            return
+        raise
 
 
 def _run_join_groups_worker(profile_id: str, groups: list[str]) -> None:
@@ -505,38 +514,44 @@ def _run_feed_worker(
         if run_m <= 0:
             run_m = 30
 
-        while True:
-            # STOP/PAUSE checkpoint
-            stop, paused, reason = control_state.check_flags(profile_id)
-            if stop:
-                print(f"🛑 [FEED] {profile_id} EMERGENCY_STOP ({reason}) -> dừng worker")
-                break
-            if paused:
-                print(f"⏸️ [FEED] {profile_id} PAUSED ({reason}) -> sleep")
-                control_state.wait_if_paused(profile_id, sleep_seconds=0.5)
-
-            if m == "search":
-                search_and_like(profile_id, text or "", duration_minutes=run_m, all_profile_ids=all_profile_ids)
-            else:
-                feed_and_like(profile_id, text or "", duration_minutes=run_m, all_profile_ids=all_profile_ids)
-
-            if rest_m <= 0:
-                break
-
-            # nghỉ rồi chạy lại (process có thể bị terminate bởi stop-all)
-            import time as _t
-            # sleep theo chunk để vẫn dừng được ngay
-            slept = 0
-            while slept < rest_m * 60:
+        try:
+            while True:
+                # STOP/PAUSE checkpoint
                 stop, paused, reason = control_state.check_flags(profile_id)
                 if stop:
-                    print(f"🛑 [FEED] {profile_id} EMERGENCY_STOP trong sleep ({reason}) -> dừng")
-                    return
+                    print(f"🛑 [FEED] {profile_id} EMERGENCY_STOP ({reason}) -> dừng worker")
+                    break
                 if paused:
-                    _t.sleep(1)
-                    continue
-                _t.sleep(1)
-                slept += 1
+                    print(f"⏸️ [FEED] {profile_id} PAUSED ({reason}) -> sleep")
+                    control_state.wait_if_paused(profile_id, sleep_seconds=0.5)
+
+                try:
+                    if m == "search":
+                        search_and_like(profile_id, text or "", duration_minutes=run_m, all_profile_ids=all_profile_ids)
+                    else:
+                        feed_and_like(profile_id, text or "", duration_minutes=run_m, all_profile_ids=all_profile_ids)
+                except RuntimeError as e:
+                    if "EMERGENCY_STOP" in str(e):
+                        print(f"🛑 [FEED] {profile_id} EMERGENCY_STOP trong bot ({reason}) -> dừng")
+                        return
+                    raise
+
+                if rest_m <= 0:
+                    break
+
+                # nghỉ rồi chạy lại (pause freeze)
+                try:
+                    smart_sleep(rest_m * 60, profile_id)
+                except RuntimeError as e:
+                    if "EMERGENCY_STOP" in str(e):
+                        print(f"🛑 [FEED] {profile_id} EMERGENCY_STOP trong REST -> dừng")
+                        return
+                    raise
+        except RuntimeError as e:
+            if "EMERGENCY_STOP" in str(e):
+                print(f"🛑 [FEED] {profile_id} EMERGENCY_STOP trong loop -> dừng")
+                return
+            raise
     except Exception as exc:
         print(f"❌ Feed worker lỗi ({profile_id}): {exc}")
 
@@ -1467,7 +1482,19 @@ def get_info_progress() -> dict:
     """
     Lấy tiến trình khi đang lấy thông tin (số bài đã xử lý / tổng số bài)
     """
-    from backend.worker.get_all_info import INFO_PROGRESS
+    try:
+        from worker.get_all_info import INFO_PROGRESS
+    except ImportError:
+        try:
+            from backend.worker.get_all_info import INFO_PROGRESS
+        except ImportError:
+            # Fallback nếu không import được
+            INFO_PROGRESS = {
+                "is_running": False,
+                "current": 0,
+                "total": 0,
+                "current_file": "",
+            }
     
     return {
         "is_running": INFO_PROGRESS.get("is_running", False),
@@ -1757,6 +1784,7 @@ import os
 import sys
 from core.settings import get_settings, SETTINGS_PATH
 from core import control as control_state
+from core.control import smart_sleep
 # ==============================================================================
 # JS TOOLS & HELPER FUNCTIONS
 # ==============================================================================
@@ -2067,11 +2095,11 @@ class FBController:
             if not share_btn:
                 print("⚠️ Không tìm thấy nút Share")
                 self.scroll_past_post(post_handle)
-                time.sleep(random.uniform(0.12, 0.13))
+                smart_sleep(random.uniform(0.12, 0.13), profile_id)
                 return False
 
             self.bring_element_into_view_smooth(share_btn)
-            self.page.wait_for_timeout(300)
+            smart_sleep(0.3, profile_id)  # 300ms = 0.3s
             share_btn.click()
 
             # Đợi bắt được payload URL
@@ -2096,7 +2124,7 @@ class FBController:
                                 raise
                             print(f"❌ Lỗi khi gọi get_id_from_url: {e}")
                     break
-                self.page.wait_for_timeout(150)
+                smart_sleep(0.15, profile_id)  # 150ms = 0.15s
 
             print("⚠️ Không lấy được Payload URL")
             self.page.keyboard.press("Escape")
@@ -2190,7 +2218,7 @@ class FBController:
                     # đang đứng trên ref / kết bạn / module rác
                     self.control_checkpoint("before_escape_wheel")
                     self.page.mouse.wheel(0, escape_step)
-                    time.sleep(random.uniform(0.12, 0.13))
+                    smart_sleep(random.uniform(0.12, 0.13), self.profile_id)
                     continue
 
                 # =========================
@@ -2205,7 +2233,7 @@ class FBController:
                         if any(keyword in error_msg for keyword in ["closed", "disconnected", "target page", "context or browser"]):
                             raise RuntimeError("BROWSER_CLOSED") from e
                         raise
-                    time.sleep(random.uniform(0.08, 0.15))
+                    smart_sleep(random.uniform(0.08, 0.15), self.profile_id)
                     continue
 
                 # =========================
@@ -2256,7 +2284,7 @@ class FBController:
             like_btn = element.query_selector(selector)
             if like_btn:
                 self.bring_element_into_view_smooth(like_btn)
-                time.sleep(0.5)
+                smart_sleep(0.5, self.profile_id)
                 self.control_checkpoint("before_like_click")
                 like_btn.click()
                 self.control_checkpoint("after_like_click")
@@ -2452,7 +2480,7 @@ class FBController:
             expanded = self.page.evaluate(JS_EXPAND_SCRIPT, post_handle)
             if expanded > 0:
                 print(f"📖 Đã mở {expanded} 'Xem thêm'")
-                time.sleep(1.2)
+                smart_sleep(1.2, self.profile_id)
 
             # 2. Check keyword (chung cho cả ads & thường)
             has_keyword = self.page.evaluate(
@@ -2582,7 +2610,7 @@ class FBController:
                 
                 # Cuộn mượt
                 self.page.mouse.wheel(0, scroll_distance)
-                time.sleep(0.5) # Chờ render lại
+                smart_sleep(0.5, self.profile_id)  # Chờ render lại
                 return True
             
             return True
@@ -2618,12 +2646,12 @@ class FBController:
                 step_dist = scroll_distance / steps
                 for _ in range(steps):
                     self.page.mouse.wheel(0, step_dist)
-                    time.sleep(0.1)
+                    smart_sleep(0.1, self.profile_id)
             else:
                 self.page.mouse.wheel(0, scroll_distance)
                 
             print(f"    -> 📉 Đã cuộn qua bài (height={int(post_height)}px)")
-            time.sleep(1) # Chờ bài mới load
+            smart_sleep(1.0, self.profile_id)  # Chờ bài mới load
 
         except Exception as e:
             print(f"⚠️ Lỗi scroll_past_post: {e}")
@@ -2947,6 +2975,43 @@ def wait_if_paused(profile_id: Optional[str], sleep_seconds: float = 0.5) -> Non
         time.sleep(max(0.2, float(sleep_seconds)))
 
 
+def smart_sleep(seconds: float, profile_id: Optional[str] = None) -> None:
+    """
+    Sleep thông minh với khả năng STOP/PAUSE:
+    - Sleep theo chunk 0.5s
+    - Check STOP/PAUSE mỗi chunk
+    - Nếu STOP: raise RuntimeError("EMERGENCY_STOP") ngay lập tức
+    - Nếu PAUSE: block trong wait_if_paused và KHÔNG giảm remaining time
+    - Nếu NORMAL: sleep chunk và giảm remaining time
+    
+    Args:
+        seconds: Tổng số giây cần sleep
+        profile_id: Profile ID để check STOP/PAUSE (optional)
+    
+    Raises:
+        RuntimeError: Nếu bị STOP (message = "EMERGENCY_STOP")
+    """
+    remaining = float(seconds)
+    chunk = 0.5
+    pid = str(profile_id or "").strip() if profile_id else None
+    
+    while remaining > 0:
+        stop, paused, _reason = check_flags(pid)
+        
+        if stop:
+            raise RuntimeError("EMERGENCY_STOP")
+        
+        if paused:
+            # PAUSE: block trong wait_if_paused, KHÔNG giảm remaining time
+            wait_if_paused(pid, sleep_seconds=chunk)
+            continue
+        
+        # NORMAL: sleep chunk và giảm remaining time
+        sleep_time = min(chunk, remaining)
+        time.sleep(sleep_time)
+        remaining -= sleep_time
+
+
 
 --- END FILE: backend\core\control.py ---
 
@@ -2968,6 +3033,7 @@ from core.nst import connect_profile
 from core.nst import stop_profile
 from core.browser import FBController
 from core import control as control_state
+from core.control import smart_sleep
 
 # Worker lấy page_id/post_id từ URL (dùng cookie theo profile_id trong settings.json)
 try:
@@ -3117,7 +3183,7 @@ class GroupJoiner(FBController):
         try:
             self.control_checkpoint("before_goto_group")
             self.goto(url)
-            time.sleep(random.uniform(3, 5)) # Chờ load trang
+            smart_sleep(random.uniform(3, 5), self.profile_id)  # Chờ load trang
 
             # 1. Kiểm tra xem đã tham gia chưa
             is_joined = self.page.query_selector('div[aria-label="Đã tham gia"], div[aria-label="Mời"]')
@@ -3267,17 +3333,13 @@ def run_batch_join_from_list(profile_id, group_ids):
             if idx < len(cleaned) - 1:
                 sleep_time = random.uniform(10, 20) 
                 print(f"💤 Nghỉ {sleep_time:.1f}s trước khi qua nhóm tiếp theo...")
-                # sleep theo chunk để vẫn stop/pause được ngay
-                slept = 0.0
-                while slept < sleep_time:
-                    stop, paused, reason = control_state.check_flags(profile_id)
-                    if stop:
-                        print(f"🛑 [JOIN] {profile_id} EMERGENCY_STOP trong sleep ({reason}) -> dừng")
-                        raise RuntimeError("EMERGENCY_STOP")
-                    if paused:
-                        control_state.wait_if_paused(profile_id, sleep_seconds=0.5)
-                    time.sleep(0.5)
-                    slept += 0.5
+                try:
+                    smart_sleep(sleep_time, profile_id)
+                except RuntimeError as e:
+                    if "EMERGENCY_STOP" in str(e):
+                        print(f"🛑 [JOIN] {profile_id} EMERGENCY_STOP trong sleep -> dừng")
+                        raise
+                    raise
             
     except Exception as e:
         print(f"❌ Lỗi kết nối/browser: {e}")
@@ -3823,6 +3885,7 @@ import time
 import random
 import os
 from core import control as control_state
+from core.control import smart_sleep
 
 class SimpleBot:
     def __init__(self, fb):
@@ -3832,42 +3895,21 @@ class SimpleBot:
         """
         Sleep nhưng check pause: chỉ tính thời gian không pause vào active_time.
         active_time_list và last_check_time_list là list để pass by reference.
+        Sử dụng smart_sleep để handle STOP/PAUSE.
         """
-        remaining = total_seconds
-        chunk = 0.5  # Sleep theo chunk 0.5s để check pause thường xuyên
-        
-        while remaining > 0:
-            sleep_chunk = min(chunk, remaining)
-            
-            # Check pause TRƯỚC sleep: nếu đang pause thì không sleep, chỉ đợi
-            stop, paused_before, _reason = control_state.check_flags(profile_id)
-            if stop:
-                raise RuntimeError("EMERGENCY_STOP")
-            
-            if paused_before:
-                # Đang pause: không sleep, chỉ đợi và không tính vào active_time
-                time.sleep(sleep_chunk)
-                last_check_time_list[0] = time.time()
-                remaining -= sleep_chunk
-                continue
-            
-            # Không pause: sleep và tính vào active_time
-            start_chunk = time.time()
-            time.sleep(sleep_chunk)
-            end_chunk = time.time()
-            actual_elapsed = end_chunk - start_chunk
-            
-            # Check pause SAU sleep: nếu pause trong lúc sleep thì không tính
-            stop, paused_after, _reason = control_state.check_flags(profile_id)
-            if stop:
-                raise RuntimeError("EMERGENCY_STOP")
-            
-            # Chỉ cộng vào active_time nếu không pause cả trước và sau
-            if not paused_after:
-                active_time_list[0] += actual_elapsed
-            
-            last_check_time_list[0] = end_chunk
-            remaining -= sleep_chunk
+        start_time = time.time()
+        try:
+            smart_sleep(total_seconds, profile_id)
+            # Nếu smart_sleep return bình thường (không pause), tính vào active_time
+            end_time = time.time()
+            elapsed = end_time - start_time
+            active_time_list[0] += elapsed
+            last_check_time_list[0] = end_time
+        except RuntimeError as e:
+            if "EMERGENCY_STOP" in str(e):
+                raise
+            # Nếu pause thì không tính vào active_time
+            last_check_time_list[0] = time.time()
 
     def run(self, url, duration=None):
         print(f"🚀 Đang truy cập: {url}")
@@ -3974,6 +4016,7 @@ from core.nst import connect_profile
 from core.nst import stop_profile
 from core.browser import FBController, JS_EXPAND_SCRIPT, JS_CHECK_AND_HIGHLIGHT_SCOPED
 from core.scraper import SimpleBot
+from core.control import smart_sleep
 
 # ==============================================================================
 # "HÀNH VI NGƯỜI THẬT": thi thoảng mở Thông báo rồi Back (8–15 phút/lần)
@@ -4113,9 +4156,11 @@ def open_notifications_random_then_back(
 
     # Chờ panel render
     try:
-        page.wait_for_timeout(5000)
-    except Exception:
-        time.sleep(5)
+        smart_sleep(5.0, fb.profile_id)
+    except RuntimeError as e:
+        if "EMERGENCY_STOP" in str(e):
+            raise
+        smart_sleep(5.0, fb.profile_id)
 
     if not click_random_notification(fb):
         return False
@@ -4123,9 +4168,11 @@ def open_notifications_random_then_back(
     delay = int(wait_seconds) if wait_seconds is not None else random.randint(10, 15)
     print(f"⏳ Đợi {delay}s rồi back")
     try:
-        page.wait_for_timeout(delay * 1000)
-    except Exception:
-        time.sleep(delay)
+        smart_sleep(float(delay), fb.profile_id)
+    except RuntimeError as e:
+        if "EMERGENCY_STOP" in str(e):
+            raise
+        smart_sleep(float(delay), fb.profile_id)
 
     # ===== BACK =====
     try:
@@ -4143,10 +4190,15 @@ def open_notifications_random_then_back(
 
     try:
         print("🔄 Reload feed để reset state")
-        time.sleep(random.uniform(1.5, 3.0))  # human-like
+        smart_sleep(random.uniform(1.5, 3.0), fb.profile_id)  # human-like
         page.reload(wait_until="domcontentloaded")
-        page.wait_for_timeout(3000)
+        smart_sleep(3.0, fb.profile_id)
         return True
+    except RuntimeError as e:
+        if "EMERGENCY_STOP" in str(e):
+            raise
+        print(f"⚠️ Reload fail: {e}")
+        return False
     except Exception as e:
         print(f"⚠️ Reload fail: {e}")
         return False
@@ -4156,17 +4208,20 @@ class HumanLikeBot(SimpleBot):
     """
     Kế thừa SimpleBot để gắn nhịp mở Thông báo 8–15 phút/lần,
     CHỈ trigger sau khi đã xử lý xong 1 post + nghỉ tự nhiên.
+    Sử dụng ACTIVE TIME thay vì wall-clock time.
     """
     def run(self, url, duration=None):
         print(f"🚀 Đang truy cập: {url}")
         self.fb.goto(url)
 
-        start_time = time.time()
-        next_notify_time = time.time() + _random_notification_interval_seconds()
+        # ACTIVE TIME tracking (chỉ tăng khi không pause)
+        active_time = 0.0
+        next_notify_active_time = _random_notification_interval_seconds()
 
         while True:
             try:
-                if duration and (time.time() - start_time > duration):
+                # Check duration bằng ACTIVE TIME
+                if duration and active_time >= duration:
                     print("⏳ Hết giờ chạy.")
                     break
 
@@ -4177,22 +4232,48 @@ class HumanLikeBot(SimpleBot):
 
                     delay = random.uniform(5.0, 8.0)
                     print(f"😴 Nghỉ sau khi xử lý bài {delay:.1f}s")
-                    time.sleep(delay)
+                    try:
+                        smart_sleep(delay, self.fb.profile_id)
+                        # Chỉ tăng active_time khi smart_sleep return bình thường (không pause)
+                        active_time += delay
+                    except RuntimeError as e:
+                        if "EMERGENCY_STOP" in str(e):
+                            raise
+                        # Nếu pause thì không tăng active_time
 
                     # ===== ĐIỂM CHỐT: chỉ mở thông báo sau DONE + nghỉ =====
-                    if time.time() >= next_notify_time:
+                    if active_time >= next_notify_active_time:
                         # Chỉ reload sau khi back nếu đang chạy Feed (trang chủ).
                         is_feed = str(url or "").strip().rstrip("/") == "https://www.facebook.com"
-                        open_notifications_random_then_back(self.fb, reload_after_back=is_feed)
-                        next_notify_time = time.time() + _random_notification_interval_seconds()
+                        try:
+                            open_notifications_random_then_back(self.fb, reload_after_back=is_feed)
+                            next_notify_active_time = active_time + _random_notification_interval_seconds()
+                        except RuntimeError as e:
+                            if "EMERGENCY_STOP" in str(e):
+                                raise
                 else:
                     delay = random.uniform(3.0, 5.0)
                     print(f"😴 Không có bài – nghỉ {delay:.1f}s")
-                    time.sleep(delay)
+                    try:
+                        smart_sleep(delay, self.fb.profile_id)
+                        # Chỉ tăng active_time khi smart_sleep return bình thường (không pause)
+                        active_time += delay
+                    except RuntimeError as e:
+                        if "EMERGENCY_STOP" in str(e):
+                            raise
+                        # Nếu pause thì không tăng active_time
 
-            except Exception as e:
+            except RuntimeError as e:
+                if "EMERGENCY_STOP" in str(e):
+                    print("🛑 Dừng do EMERGENCY_STOP")
+                    raise
                 print(f"❌ Lỗi vòng lặp: {e}")
-                time.sleep(2)
+                try:
+                    smart_sleep(2.0, self.fb.profile_id)
+                    active_time += 2.0
+                except RuntimeError as stop_e:
+                    if "EMERGENCY_STOP" in str(stop_e):
+                        raise
 
 def _parse_location_terms(raw_text: str, strip_terms: Optional[list[str]] = None) -> list[str]:
     """
@@ -4370,8 +4451,19 @@ def _run_bot_logic(profile_id, url, raw_text, duration_minutes, all_profile_ids=
         print(f"▶️ Bắt đầu lướt trong {duration_minutes} phút...")
         duration_seconds = duration_minutes * 60
         
-        bot.run(url, duration=duration_seconds)
+        try:
+            bot.run(url, duration=duration_seconds)
+        except RuntimeError as e:
+            if "EMERGENCY_STOP" in str(e):
+                print("🛑 Dừng bot do EMERGENCY_STOP")
+                return
+            raise
         
+    except RuntimeError as e:
+        if "EMERGENCY_STOP" in str(e):
+            print("🛑 Dừng runner do EMERGENCY_STOP")
+            return
+        print(f"❌ Lỗi Runner: {e}")
     except Exception as e:
         print(f"❌ Lỗi Runner: {e}")
     finally:
@@ -4574,11 +4666,15 @@ def clean_profile_list(raw):
 --- START FILE: backend\data\runtime_control.json ---
 {
   "global_emergency_stop": false,
-  "global_pause": false,
-  "paused_profiles": [],
+  "global_pause": true,
+  "paused_profiles": [
+    "b77da63d-af55-43c2-ab7f-364250b20e30"
+  ],
   "stopped_profiles": [],
-  "profile_states": {},
-  "updated_at": "2025-12-22T15:32:33.510761+00:00"
+  "profile_states": {
+    "b77da63d-af55-43c2-ab7f-364250b20e30": "PAUSED"
+  },
+  "updated_at": "2025-12-22T15:50:24.599788+00:00"
 }
 
 --- END FILE: backend\data\runtime_control.json ---
@@ -11326,6 +11422,2327 @@ def clean_profile_list(raw):
 }
 --- END FILE: backend\data\results\all_results_20251222_221814.json ---
 
+--- START FILE: backend\data\results\all_results_20251222_222956.json ---
+{
+  "total_files": 1,
+  "results_by_file": {
+    "b77da63d-af55-43c2-ab7f-364250b20e30.json": [
+      {
+        "post_id": "24955032474094131",
+        "flag": "vàng",
+        "text": "[BSV] Tuyển dụng NV cho Tập Đoàn VIETTEL: - NV VĂN PHÒNG làm giờ hành chính 💰 Thu nhập 8-15tr. Chưa tính lương thưởng - Làm tại trụ sở VIETTEL HCM - Địa chỉ làm việc: 158/2A Hoàng Hoa Thám, phường 12, Q.Tân Bình 👉 không yêu cầu kinh nghiệm 👉 Chế độ phúc lợi tốt ✅ Chấm để nhận JD Thông tin contact: ✫ Liên hệ bộ phận tuyển dụng : 0922312726 Mr Nhiệm ✫ Email: truonghuunhiem@bs24vietnam.vn",
+        "owning_profile": {
+          "__typename": "User",
+          "name": "Gia Minh",
+          "id": "61568481862081"
+        },
+        "source_file": "b77da63d-af55-43c2-ab7f-364250b20e30.json",
+        "profile_id": "b77da63d-af55-43c2-ab7f-364250b20e30",
+        "reactions": [
+          {
+            "id": "100044138143352",
+            "name": "Khánh Phương"
+          },
+          {
+            "id": "61555926982278",
+            "name": "Việc Làm Phú Mỹ"
+          },
+          {
+            "id": "61556361794883",
+            "name": "Ngô Hà"
+          },
+          {
+            "id": "61557564590049",
+            "name": "Trần Quốc Tú"
+          },
+          {
+            "id": "61558261029036",
+            "name": "Pun Meo"
+          },
+          {
+            "id": "61561883510251",
+            "name": "Channie Quinh"
+          },
+          {
+            "id": "61563309960672",
+            "name": "Đặng Hải Long"
+          },
+          {
+            "id": "61564917926512",
+            "name": "L.A Club Bida & Coffee Chill"
+          },
+          {
+            "id": "61565563724536",
+            "name": "Nguyễn Châu"
+          },
+          {
+            "id": "61572284594958",
+            "name": "Sunny Nguyễn"
+          },
+          {
+            "id": "61573721417341",
+            "name": "Nguyễn Bá Gia"
+          },
+          {
+            "id": "61574207106597",
+            "name": "Trần Linhh"
+          },
+          {
+            "id": "61576229670272",
+            "name": "Linh Hoang"
+          },
+          {
+            "id": "61577279735800",
+            "name": "Quỳnh Anh Hr"
+          },
+          {
+            "id": "61580336013397",
+            "name": "Tuyển dụng Hoa Sen"
+          },
+          {
+            "id": "61581536426647",
+            "name": "Nguyễn Phụng"
+          },
+          {
+            "id": "61582805619015",
+            "name": "Tuyển Dụng ACC GROUP"
+          },
+          {
+            "id": "61583305625966",
+            "name": "Thanh Thảo"
+          },
+          {
+            "id": "61583764201891",
+            "name": "Trương Trương"
+          },
+          {
+            "id": "61584608215620",
+            "name": "Thảo Thảo"
+          },
+          {
+            "id": "100001457361807",
+            "name": "Bình Nguyễn"
+          },
+          {
+            "id": "100002952513568",
+            "name": "Hung Nguyen Van"
+          },
+          {
+            "id": "100004481532439",
+            "name": "Tâm Nguyễn"
+          },
+          {
+            "id": "100004482543910",
+            "name": "Thùy Duyên"
+          },
+          {
+            "id": "100005340428521",
+            "name": "Đào Kim Dung"
+          },
+          {
+            "id": "100005469367692",
+            "name": "Hải Trần"
+          },
+          {
+            "id": "100005516567580",
+            "name": "Nguyễn Song Hải My"
+          },
+          {
+            "id": "100005955429677",
+            "name": "Đào Cẩm Tú"
+          },
+          {
+            "id": "100006028202461",
+            "name": "Nguyễn Quang Đăng"
+          },
+          {
+            "id": "100006251405539",
+            "name": "Ái Thảo"
+          },
+          {
+            "id": "100006269208618",
+            "name": "Ngọc Ji"
+          },
+          {
+            "id": "100006289146409",
+            "name": "Lê Thị Ngọc Tuyết"
+          },
+          {
+            "id": "100006726301264",
+            "name": "Hữu Vinh"
+          },
+          {
+            "id": "100006842225833",
+            "name": "Nguyễn Công Tuấn"
+          },
+          {
+            "id": "100007223975129",
+            "name": "Hoàng Ngọc Vân"
+          },
+          {
+            "id": "100008214033618",
+            "name": "Phươngg Thuỳy"
+          },
+          {
+            "id": "100008470120812",
+            "name": "Hen Lai Sau"
+          },
+          {
+            "id": "100008819281046",
+            "name": "Tường Vi"
+          },
+          {
+            "id": "100010908542354",
+            "name": "Trương Yến Ngọc"
+          },
+          {
+            "id": "100011164030217",
+            "name": "Phan Hằng"
+          },
+          {
+            "id": "100011299489100",
+            "name": "Nhã Hàn"
+          },
+          {
+            "id": "100011388368250",
+            "name": "Ngọ Nguyễn"
+          },
+          {
+            "id": "100011467005548",
+            "name": "Mai Lê Thuý Anh"
+          },
+          {
+            "id": "100011626330258",
+            "name": "Chini Yang"
+          },
+          {
+            "id": "100012223865593",
+            "name": "Bùi Phi Khanh"
+          },
+          {
+            "id": "100012229563696",
+            "name": "Huy Nguyễn"
+          },
+          {
+            "id": "100013120636790",
+            "name": "Nguyễn Hậu"
+          },
+          {
+            "id": "100013203721316",
+            "name": "Thu Hoài"
+          },
+          {
+            "id": "100013824304893",
+            "name": "Vân Trinh"
+          },
+          {
+            "id": "100013891117509",
+            "name": "Nguyễn Tuấn Thanh Tùng"
+          },
+          {
+            "id": "100014181169457",
+            "name": "Anh Thi"
+          },
+          {
+            "id": "100014186708092",
+            "name": "Thanh Phát"
+          },
+          {
+            "id": "100014468773048",
+            "name": "Ngoc Ngoc"
+          },
+          {
+            "id": "100015023324224",
+            "name": "Thảo Vy"
+          },
+          {
+            "id": "100021958921727",
+            "name": "Nguyễn Thơm"
+          },
+          {
+            "id": "100022909296508",
+            "name": "Thu Hoài"
+          },
+          {
+            "id": "100023342140984",
+            "name": "Ngô Thị Thanh Thủy"
+          },
+          {
+            "id": "100025315715732",
+            "name": "Dang Hai Hoang"
+          },
+          {
+            "id": "100026564893365",
+            "name": "Trần Thị Châu Giang"
+          },
+          {
+            "id": "100029755934272",
+            "name": "Nguyễn Yến Nhi"
+          },
+          {
+            "id": "100034383453231",
+            "name": "Thanh Mai"
+          },
+          {
+            "id": "100035525660779",
+            "name": "Trần Chương"
+          },
+          {
+            "id": "100038020578188",
+            "name": "Pii An"
+          },
+          {
+            "id": "100039707792352",
+            "name": "Hà Thanh Mỹ Trần"
+          },
+          {
+            "id": "100055043149966",
+            "name": "Tiến Võ"
+          },
+          {
+            "id": "100056627937098",
+            "name": "Minh Uyên"
+          },
+          {
+            "id": "100056634771689",
+            "name": "Huỳnh Quyên"
+          },
+          {
+            "id": "100057082697388",
+            "name": "Quỳnh Quỳnh"
+          },
+          {
+            "id": "100060628333297",
+            "name": "Nhất Long"
+          },
+          {
+            "id": "100063156952990",
+            "name": "John Cris"
+          },
+          {
+            "id": "100068553722908",
+            "name": "Ngoc Anh"
+          },
+          {
+            "id": "100070362357401",
+            "name": "Mai Phương"
+          },
+          {
+            "id": "100073323880572",
+            "name": "Quỳnh Như"
+          },
+          {
+            "id": "100078738384859",
+            "name": "Hoàng Nam"
+          },
+          {
+            "id": "100079433324177",
+            "name": "Vu Hai Anh"
+          },
+          {
+            "id": "100082436944869",
+            "name": "Võ Thành Lập"
+          },
+          {
+            "id": "100083490734727",
+            "name": "Nguyễn Nhi"
+          },
+          {
+            "id": "100086954269137",
+            "name": "Ngoc Khanh"
+          },
+          {
+            "id": "100088595622359",
+            "name": "Bún Bún"
+          },
+          {
+            "id": "100094453605425",
+            "name": "Minh Thu"
+          },
+          {
+            "id": "100095678641731",
+            "name": "Thanh Thảo"
+          }
+        ],
+        "comments": [],
+        "reactions_count": 81,
+        "comments_count": 0,
+        "reactions_count_before_filter": 81,
+        "comments_count_before_filter": 0,
+        "status": "success"
+      },
+      {
+        "post_id": "2198533247305479",
+        "flag": "vàng",
+        "text": "Vị trí tuyển dụng: Làm việc 8 tiếng 🥰 •Nhân viên than Full : 8.500.000vnd ( Tuyển nhân viên làm việc lâu dài ) •Nhân viên Lễ tân Full ca gãy hoặc chuyên ca 12h~20h30 . Lương thoả thuận •Nhân viên phục vụ: Nhân viên fulltime Nhà hàng Hàn Quốc Ca gãy 10h-14h/17h-22h hoặc 9h-14h/17h-21h ( nghỉ trưa 3 tiếng ) hoặc Ca part xoay ca linh động 10h-14h và 18h - 22h. Hoặc part 12h-16h30 và 13h - 17h30. - Chế độ, quyền lợi: Lương cơ bản + ăn ca 2 bữa + hỗ trợ tiền đi lại + 100% TIỀN TIP. Làm 26ngày/tháng - Đối với nhân viên full sau 6 tháng hưởng phép năm, và đối với tất cả nhân viên ngày Lễ Tết x 400% lương + thưởng . Thu nhập từ 6-10tr •Môi trường trẻ trung, thân thiện, đồng nghiệp dễ thương •Cơ hội học hỏi kỹ năng giao tiếp, phục vụ chuyên nghiệp Yêu cầu: •Không yêu cầu kinh nghiệm (sẽ được đào tạo) •Nhanh nhẹn, chăm chỉ, có tinh thần trách nhiệm •Thái độ vui vẻ, lịch sự với khách hàng 📍 Địa chỉ: Nhà hàng GOJUMONG CASUAL tầng 6 Lotte Liễu Giai 📞 Liên hệ trực tiếp hoặc zalo: Quản lý Mrs Trang: 0987.469.405",
+        "owning_profile": {
+          "__typename": "User",
+          "name": "Trang Lê",
+          "id": "100006577548369"
+        },
+        "source_file": "b77da63d-af55-43c2-ab7f-364250b20e30.json",
+        "profile_id": "b77da63d-af55-43c2-ab7f-364250b20e30",
+        "reactions": [
+          {
+            "id": "100044138143352",
+            "name": "Khánh Phương"
+          },
+          {
+            "id": "61563280557067",
+            "name": "Nguyễn Hùng Cường"
+          },
+          {
+            "id": "61574450648872",
+            "name": "Thuý Hà"
+          },
+          {
+            "id": "61576353419525",
+            "name": "Hoàng Quốc Việt"
+          },
+          {
+            "id": "61582825323894",
+            "name": "Ngọc Linh - Nem Nướng Nha Trang "
+          },
+          {
+            "id": "100003640788400",
+            "name": "Hai Dang"
+          },
+          {
+            "id": "100005960256358",
+            "name": "Vũ Thị Bích Lệ"
+          },
+          {
+            "id": "100009222477267",
+            "name": "Phạm Việt Anh"
+          },
+          {
+            "id": "100015201542172",
+            "name": "Nguyễn Loan"
+          },
+          {
+            "id": "100025139152808",
+            "name": "Tuoi Bui"
+          },
+          {
+            "id": "100027238878170",
+            "name": "Cẩm Tú"
+          },
+          {
+            "id": "100029778233874",
+            "name": "Hằng Ni"
+          },
+          {
+            "id": "100042693051495",
+            "name": "Nguyễn Trang"
+          },
+          {
+            "id": "100046940032349",
+            "name": "Lương Ánh"
+          },
+          {
+            "id": "100048126162429",
+            "name": "Kim Phụng"
+          },
+          {
+            "id": "100049220042731",
+            "name": "Bình Dương Lê"
+          }
+        ],
+        "comments": [
+          {
+            "id": "100023363242962",
+            "name": "Tin Tin",
+            "text": "Trang Lê có tuyển nhân viên bếp không ạ",
+            "created_time_vn": "2025-11-22 17:30:19"
+          },
+          {
+            "id": "100028298443377",
+            "name": "Bùi Linh",
+            "text": "📣 NHÀ HÀNG UMAI OMAKASE DỤNG – PHỤC VỤ NỮ\n\n✨ Vị trí: Nhân viên phục vụ nữ\n⏰ Thời gian: Fulltime 10h -14h, 17h - 22h\n\nYêu cầu:\n • Ngoại hình ưa nhìn, nhanh nhẹn\n • Siêng năng, chịu khó, hỗ trợ đồng đội tốt\n • Không cần kinh nghiệm (sẽ được đào tạo)\n\nQuyền lợi:\n • Lương 8tr ( 28 công ) + thưởng theo năng lực\n • Môi trường làm việc chuyên nghiệp, thân thiện\n • Tip mỗi ngày\n\n📍 ĐỊA ĐIỂM LÀM VIỆC: Nhà hàng UMAI OMAKASE 11 Mạc Thái Tông, Cầu Giấy, Hà Nội\n📞 LIÊN HỆ ỨNG TUYỂN: Mr Linh Sđt: 0949213939",
+            "created_time_vn": "2025-12-06 17:02:45"
+          },
+          {
+            "id": "100013761460826",
+            "name": "Hương Ly",
+            "text": "📢NHÀ HÀNG ONGI JIAJANG – QUÁN MỲ TƯƠNG ĐEN HÀN QUỐC TUYỂN DỤNG GẤP\n📍 Địa chỉ làm việc: 230 Nguyễn Văn Tuyết, Đống Đa, Hà Nội \n📍Giờ làm: 10h-13h30 và 16h30-22h\nHiện tại nhà hàng đang cần bổ sung nhân sự cho các vị trí sau:\n1️⃣ Quản lý\n2️⃣ Phụ bếp (BAO ĂN Ở)\n3️⃣ Nhân viên phục vụ (Part-time/Full-time) (BAO ĂN CA)\n📱 ứng tuyển Zl: 0877 213 681 (Hương Ly)",
+            "created_time_vn": "2025-11-20 09:49:55"
+          },
+          {
+            "id": "100020526768178",
+            "name": "Cẩm Tú",
+            "text": "TUYỂN DỤNG TẠI NHÀ HÀNG BBQ ONG MAP Q2✨\nSố lượng tuyển dụng:\n🤵🏻 Vị trí nhân viên phục vụ full time và part time\n⭐ Không yêu cầu kinh nghiệm, sẽ được đào tạo \n⭐ Ưu tiên những bạn có thể giao tiếp tiếng hàn, nhanh nhẹn, chăm chỉ, tính cách vui vẻ, hoà đồng\n\n* Full time\n⭐ Lương: 9.000.000 - 14.000.000 \n⭐️ Thời gian làm việc: 12h -10h và 15h - 1h \n⭐ Bonus từ 2.000.000/ tháng\n\n* Part time\n⭐ Lương 33k/h - 36k/h + bonus cao\n⭐️ Thời gian làm việc: 11h - 15h, 18h- 23h và 18h - 1h \n\n🏠 ĐỊA ĐIỂM LÀM VIỆC:\n45 Song Hành, An Phú, Q2\nBBQ ÔNG MẬP Quận 2\n38 Trần Ngọc Diện, Thảo Điền, Q2\nBBQ Ông Mập Thảo Điền 뚱보집 타오디엔\n\n💬Liên hệ: 0909886320- Thư",
+            "created_time_vn": "2025-12-01 13:54:32"
+          },
+          {
+            "id": "100082569921800",
+            "name": "Minh Huyền",
+            "text": "Trung tâm Anh ngữ EFIS English (Chùa Láng) hiện đang tuyển:\n• Giảng viên Tiếng Anh giao tiếp\n• Chuyên viên Tư vấn\n• Marketing SEO\n• Event – Social\n\nBạn nào quan tâm comment hoặc inbox mình gửi JD chi tiết nhé 🌱",
+            "created_time_vn": "2025-12-22 09:05:44"
+          }
+        ],
+        "reactions_count": 16,
+        "comments_count": 5,
+        "reactions_count_before_filter": 16,
+        "comments_count_before_filter": 7,
+        "status": "success"
+      }
+    ]
+  },
+  "total_posts_processed": 2,
+  "total_reactions": 97,
+  "total_comments": 5
+}
+--- END FILE: backend\data\results\all_results_20251222_222956.json ---
+
+--- START FILE: backend\data\results\all_results_20251222_223649.json ---
+{
+  "total_files": 1,
+  "results_by_file": {
+    "b77da63d-af55-43c2-ab7f-364250b20e30.json": [
+      {
+        "post_id": "24955032474094131",
+        "flag": "vàng",
+        "text": "[BSV] Tuyển dụng NV cho Tập Đoàn VIETTEL: - NV VĂN PHÒNG làm giờ hành chính 💰 Thu nhập 8-15tr. Chưa tính lương thưởng - Làm tại trụ sở VIETTEL HCM - Địa chỉ làm việc: 158/2A Hoàng Hoa Thám, phường 12, Q.Tân Bình 👉 không yêu cầu kinh nghiệm 👉 Chế độ phúc lợi tốt ✅ Chấm để nhận JD Thông tin contact: ✫ Liên hệ bộ phận tuyển dụng : 0922312726 Mr Nhiệm ✫ Email: truonghuunhiem@bs24vietnam.vn",
+        "owning_profile": {
+          "__typename": "User",
+          "name": "Gia Minh",
+          "id": "61568481862081"
+        },
+        "source_file": "b77da63d-af55-43c2-ab7f-364250b20e30.json",
+        "profile_id": "b77da63d-af55-43c2-ab7f-364250b20e30",
+        "reactions": [
+          {
+            "id": "100044138143352",
+            "name": "Khánh Phương"
+          },
+          {
+            "id": "61555926982278",
+            "name": "Việc Làm Phú Mỹ"
+          },
+          {
+            "id": "61556361794883",
+            "name": "Ngô Hà"
+          },
+          {
+            "id": "61557564590049",
+            "name": "Trần Quốc Tú"
+          },
+          {
+            "id": "61558261029036",
+            "name": "Pun Meo"
+          },
+          {
+            "id": "61561883510251",
+            "name": "Channie Quinh"
+          },
+          {
+            "id": "61563309960672",
+            "name": "Đặng Hải Long"
+          },
+          {
+            "id": "61564917926512",
+            "name": "L.A Club Bida & Coffee Chill"
+          },
+          {
+            "id": "61565563724536",
+            "name": "Nguyễn Châu"
+          },
+          {
+            "id": "61572284594958",
+            "name": "Sunny Nguyễn"
+          },
+          {
+            "id": "61573721417341",
+            "name": "Nguyễn Bá Gia"
+          },
+          {
+            "id": "61574207106597",
+            "name": "Trần Linhh"
+          },
+          {
+            "id": "61576229670272",
+            "name": "Linh Hoang"
+          },
+          {
+            "id": "61577279735800",
+            "name": "Quỳnh Anh Hr"
+          },
+          {
+            "id": "61580336013397",
+            "name": "Tuyển dụng Hoa Sen"
+          },
+          {
+            "id": "61581536426647",
+            "name": "Nguyễn Phụng"
+          },
+          {
+            "id": "61582805619015",
+            "name": "Tuyển Dụng ACC GROUP"
+          },
+          {
+            "id": "61583305625966",
+            "name": "Thanh Thảo"
+          },
+          {
+            "id": "61583764201891",
+            "name": "Trương Trương"
+          },
+          {
+            "id": "61584608215620",
+            "name": "Thảo Thảo"
+          },
+          {
+            "id": "100001457361807",
+            "name": "Bình Nguyễn"
+          },
+          {
+            "id": "100002952513568",
+            "name": "Hung Nguyen Van"
+          },
+          {
+            "id": "100004481532439",
+            "name": "Tâm Nguyễn"
+          },
+          {
+            "id": "100004482543910",
+            "name": "Thùy Duyên"
+          },
+          {
+            "id": "100005340428521",
+            "name": "Đào Kim Dung"
+          },
+          {
+            "id": "100005469367692",
+            "name": "Hải Trần"
+          },
+          {
+            "id": "100005516567580",
+            "name": "Nguyễn Song Hải My"
+          },
+          {
+            "id": "100005955429677",
+            "name": "Đào Cẩm Tú"
+          },
+          {
+            "id": "100006028202461",
+            "name": "Nguyễn Quang Đăng"
+          },
+          {
+            "id": "100006251405539",
+            "name": "Ái Thảo"
+          },
+          {
+            "id": "100006269208618",
+            "name": "Ngọc Ji"
+          },
+          {
+            "id": "100006289146409",
+            "name": "Lê Thị Ngọc Tuyết"
+          },
+          {
+            "id": "100006726301264",
+            "name": "Hữu Vinh"
+          },
+          {
+            "id": "100006842225833",
+            "name": "Nguyễn Công Tuấn"
+          },
+          {
+            "id": "100007223975129",
+            "name": "Hoàng Ngọc Vân"
+          },
+          {
+            "id": "100008214033618",
+            "name": "Phươngg Thuỳy"
+          },
+          {
+            "id": "100008470120812",
+            "name": "Hen Lai Sau"
+          },
+          {
+            "id": "100008819281046",
+            "name": "Tường Vi"
+          },
+          {
+            "id": "100010908542354",
+            "name": "Trương Yến Ngọc"
+          },
+          {
+            "id": "100011164030217",
+            "name": "Phan Hằng"
+          },
+          {
+            "id": "100011299489100",
+            "name": "Nhã Hàn"
+          },
+          {
+            "id": "100011388368250",
+            "name": "Ngọ Nguyễn"
+          },
+          {
+            "id": "100011467005548",
+            "name": "Mai Lê Thuý Anh"
+          },
+          {
+            "id": "100011626330258",
+            "name": "Chini Yang"
+          },
+          {
+            "id": "100012223865593",
+            "name": "Bùi Phi Khanh"
+          },
+          {
+            "id": "100012229563696",
+            "name": "Huy Nguyễn"
+          },
+          {
+            "id": "100013120636790",
+            "name": "Nguyễn Hậu"
+          },
+          {
+            "id": "100013203721316",
+            "name": "Thu Hoài"
+          },
+          {
+            "id": "100013824304893",
+            "name": "Vân Trinh"
+          },
+          {
+            "id": "100013891117509",
+            "name": "Nguyễn Tuấn Thanh Tùng"
+          },
+          {
+            "id": "100014181169457",
+            "name": "Anh Thi"
+          },
+          {
+            "id": "100014186708092",
+            "name": "Thanh Phát"
+          },
+          {
+            "id": "100014468773048",
+            "name": "Ngoc Ngoc"
+          },
+          {
+            "id": "100015023324224",
+            "name": "Thảo Vy"
+          },
+          {
+            "id": "100021958921727",
+            "name": "Nguyễn Thơm"
+          },
+          {
+            "id": "100022909296508",
+            "name": "Thu Hoài"
+          },
+          {
+            "id": "100023342140984",
+            "name": "Ngô Thị Thanh Thủy"
+          },
+          {
+            "id": "100025315715732",
+            "name": "Dang Hai Hoang"
+          },
+          {
+            "id": "100026564893365",
+            "name": "Trần Thị Châu Giang"
+          },
+          {
+            "id": "100029755934272",
+            "name": "Nguyễn Yến Nhi"
+          },
+          {
+            "id": "100034383453231",
+            "name": "Thanh Mai"
+          },
+          {
+            "id": "100035525660779",
+            "name": "Trần Chương"
+          },
+          {
+            "id": "100038020578188",
+            "name": "Pii An"
+          },
+          {
+            "id": "100039707792352",
+            "name": "Hà Thanh Mỹ Trần"
+          },
+          {
+            "id": "100055043149966",
+            "name": "Tiến Võ"
+          },
+          {
+            "id": "100056627937098",
+            "name": "Minh Uyên"
+          },
+          {
+            "id": "100056634771689",
+            "name": "Huỳnh Quyên"
+          },
+          {
+            "id": "100057082697388",
+            "name": "Quỳnh Quỳnh"
+          },
+          {
+            "id": "100060628333297",
+            "name": "Nhất Long"
+          },
+          {
+            "id": "100063156952990",
+            "name": "John Cris"
+          },
+          {
+            "id": "100068553722908",
+            "name": "Ngoc Anh"
+          },
+          {
+            "id": "100070362357401",
+            "name": "Mai Phương"
+          },
+          {
+            "id": "100073323880572",
+            "name": "Quỳnh Như"
+          },
+          {
+            "id": "100078738384859",
+            "name": "Hoàng Nam"
+          },
+          {
+            "id": "100079433324177",
+            "name": "Vu Hai Anh"
+          },
+          {
+            "id": "100082436944869",
+            "name": "Võ Thành Lập"
+          },
+          {
+            "id": "100083490734727",
+            "name": "Nguyễn Nhi"
+          },
+          {
+            "id": "100086954269137",
+            "name": "Ngoc Khanh"
+          },
+          {
+            "id": "100088595622359",
+            "name": "Bún Bún"
+          },
+          {
+            "id": "100094453605425",
+            "name": "Minh Thu"
+          },
+          {
+            "id": "100095678641731",
+            "name": "Thanh Thảo"
+          }
+        ],
+        "comments": [],
+        "reactions_count": 81,
+        "comments_count": 0,
+        "reactions_count_before_filter": 81,
+        "comments_count_before_filter": 0,
+        "status": "success"
+      },
+      {
+        "post_id": "2198533247305479",
+        "flag": "vàng",
+        "text": "Vị trí tuyển dụng: Làm việc 8 tiếng 🥰 •Nhân viên than Full : 8.500.000vnd ( Tuyển nhân viên làm việc lâu dài ) •Nhân viên Lễ tân Full ca gãy hoặc chuyên ca 12h~20h30 . Lương thoả thuận •Nhân viên phục vụ: Nhân viên fulltime Nhà hàng Hàn Quốc Ca gãy 10h-14h/17h-22h hoặc 9h-14h/17h-21h ( nghỉ trưa 3 tiếng ) hoặc Ca part xoay ca linh động 10h-14h và 18h - 22h. Hoặc part 12h-16h30 và 13h - 17h30. - Chế độ, quyền lợi: Lương cơ bản + ăn ca 2 bữa + hỗ trợ tiền đi lại + 100% TIỀN TIP. Làm 26ngày/tháng - Đối với nhân viên full sau 6 tháng hưởng phép năm, và đối với tất cả nhân viên ngày Lễ Tết x 400% lương + thưởng . Thu nhập từ 6-10tr •Môi trường trẻ trung, thân thiện, đồng nghiệp dễ thương •Cơ hội học hỏi kỹ năng giao tiếp, phục vụ chuyên nghiệp Yêu cầu: •Không yêu cầu kinh nghiệm (sẽ được đào tạo) •Nhanh nhẹn, chăm chỉ, có tinh thần trách nhiệm •Thái độ vui vẻ, lịch sự với khách hàng 📍 Địa chỉ: Nhà hàng GOJUMONG CASUAL tầng 6 Lotte Liễu Giai 📞 Liên hệ trực tiếp hoặc zalo: Quản lý Mrs Trang: 0987.469.405",
+        "owning_profile": {
+          "__typename": "User",
+          "name": "Trang Lê",
+          "id": "100006577548369"
+        },
+        "source_file": "b77da63d-af55-43c2-ab7f-364250b20e30.json",
+        "profile_id": "b77da63d-af55-43c2-ab7f-364250b20e30",
+        "reactions": [
+          {
+            "id": "100044138143352",
+            "name": "Khánh Phương"
+          },
+          {
+            "id": "61563280557067",
+            "name": "Nguyễn Hùng Cường"
+          },
+          {
+            "id": "61574450648872",
+            "name": "Thuý Hà"
+          },
+          {
+            "id": "61576353419525",
+            "name": "Hoàng Quốc Việt"
+          },
+          {
+            "id": "61582825323894",
+            "name": "Ngọc Linh - Nem Nướng Nha Trang "
+          },
+          {
+            "id": "100003640788400",
+            "name": "Hai Dang"
+          },
+          {
+            "id": "100005960256358",
+            "name": "Vũ Thị Bích Lệ"
+          },
+          {
+            "id": "100009222477267",
+            "name": "Phạm Việt Anh"
+          },
+          {
+            "id": "100015201542172",
+            "name": "Nguyễn Loan"
+          },
+          {
+            "id": "100025139152808",
+            "name": "Tuoi Bui"
+          },
+          {
+            "id": "100027238878170",
+            "name": "Cẩm Tú"
+          },
+          {
+            "id": "100029778233874",
+            "name": "Hằng Ni"
+          },
+          {
+            "id": "100042693051495",
+            "name": "Nguyễn Trang"
+          },
+          {
+            "id": "100046940032349",
+            "name": "Lương Ánh"
+          },
+          {
+            "id": "100048126162429",
+            "name": "Kim Phụng"
+          },
+          {
+            "id": "100049220042731",
+            "name": "Bình Dương Lê"
+          }
+        ],
+        "comments": [
+          {
+            "id": "100023363242962",
+            "name": "Tin Tin",
+            "text": "Trang Lê có tuyển nhân viên bếp không ạ",
+            "created_time_vn": "2025-11-22 17:30:19"
+          },
+          {
+            "id": "100028298443377",
+            "name": "Bùi Linh",
+            "text": "📣 NHÀ HÀNG UMAI OMAKASE DỤNG – PHỤC VỤ NỮ\n\n✨ Vị trí: Nhân viên phục vụ nữ\n⏰ Thời gian: Fulltime 10h -14h, 17h - 22h\n\nYêu cầu:\n • Ngoại hình ưa nhìn, nhanh nhẹn\n • Siêng năng, chịu khó, hỗ trợ đồng đội tốt\n • Không cần kinh nghiệm (sẽ được đào tạo)\n\nQuyền lợi:\n • Lương 8tr ( 28 công ) + thưởng theo năng lực\n • Môi trường làm việc chuyên nghiệp, thân thiện\n • Tip mỗi ngày\n\n📍 ĐỊA ĐIỂM LÀM VIỆC: Nhà hàng UMAI OMAKASE 11 Mạc Thái Tông, Cầu Giấy, Hà Nội\n📞 LIÊN HỆ ỨNG TUYỂN: Mr Linh Sđt: 0949213939",
+            "created_time_vn": "2025-12-06 17:02:45"
+          },
+          {
+            "id": "100013761460826",
+            "name": "Hương Ly",
+            "text": "📢NHÀ HÀNG ONGI JIAJANG – QUÁN MỲ TƯƠNG ĐEN HÀN QUỐC TUYỂN DỤNG GẤP\n📍 Địa chỉ làm việc: 230 Nguyễn Văn Tuyết, Đống Đa, Hà Nội \n📍Giờ làm: 10h-13h30 và 16h30-22h\nHiện tại nhà hàng đang cần bổ sung nhân sự cho các vị trí sau:\n1️⃣ Quản lý\n2️⃣ Phụ bếp (BAO ĂN Ở)\n3️⃣ Nhân viên phục vụ (Part-time/Full-time) (BAO ĂN CA)\n📱 ứng tuyển Zl: 0877 213 681 (Hương Ly)",
+            "created_time_vn": "2025-11-20 09:49:55"
+          },
+          {
+            "id": "100020526768178",
+            "name": "Cẩm Tú",
+            "text": "TUYỂN DỤNG TẠI NHÀ HÀNG BBQ ONG MAP Q2✨\nSố lượng tuyển dụng:\n🤵🏻 Vị trí nhân viên phục vụ full time và part time\n⭐ Không yêu cầu kinh nghiệm, sẽ được đào tạo \n⭐ Ưu tiên những bạn có thể giao tiếp tiếng hàn, nhanh nhẹn, chăm chỉ, tính cách vui vẻ, hoà đồng\n\n* Full time\n⭐ Lương: 9.000.000 - 14.000.000 \n⭐️ Thời gian làm việc: 12h -10h và 15h - 1h \n⭐ Bonus từ 2.000.000/ tháng\n\n* Part time\n⭐ Lương 33k/h - 36k/h + bonus cao\n⭐️ Thời gian làm việc: 11h - 15h, 18h- 23h và 18h - 1h \n\n🏠 ĐỊA ĐIỂM LÀM VIỆC:\n45 Song Hành, An Phú, Q2\nBBQ ÔNG MẬP Quận 2\n38 Trần Ngọc Diện, Thảo Điền, Q2\nBBQ Ông Mập Thảo Điền 뚱보집 타오디엔\n\n💬Liên hệ: 0909886320- Thư",
+            "created_time_vn": "2025-12-01 13:54:32"
+          },
+          {
+            "id": "100082569921800",
+            "name": "Minh Huyền",
+            "text": "Trung tâm Anh ngữ EFIS English (Chùa Láng) hiện đang tuyển:\n• Giảng viên Tiếng Anh giao tiếp\n• Chuyên viên Tư vấn\n• Marketing SEO\n• Event – Social\n\nBạn nào quan tâm comment hoặc inbox mình gửi JD chi tiết nhé 🌱",
+            "created_time_vn": "2025-12-22 09:05:44"
+          }
+        ],
+        "reactions_count": 16,
+        "comments_count": 5,
+        "reactions_count_before_filter": 16,
+        "comments_count_before_filter": 7,
+        "status": "success"
+      },
+      {
+        "post_id": "24955032474094131",
+        "flag": "vàng",
+        "text": "[BSV] Tuyển dụng NV cho Tập Đoàn VIETTEL: - NV VĂN PHÒNG làm giờ hành chính 💰 Thu nhập 8-15tr. Chưa tính lương thưởng - Làm tại trụ sở VIETTEL HCM - Địa chỉ làm việc: 158/2A Hoàng Hoa Thám, phường 12, Q.Tân Bình 👉 không yêu cầu kinh nghiệm 👉 Chế độ phúc lợi tốt ✅ Chấm để nhận JD Thông tin contact: ✫ Liên hệ bộ phận tuyển dụng : 0922312726 Mr Nhiệm ✫ Email: truonghuunhiem@bs24vietnam.vn",
+        "owning_profile": {
+          "__typename": "User",
+          "name": "Gia Minh",
+          "id": "61568481862081"
+        },
+        "source_file": "b77da63d-af55-43c2-ab7f-364250b20e30.json",
+        "profile_id": "b77da63d-af55-43c2-ab7f-364250b20e30",
+        "reactions": [
+          {
+            "id": "100044138143352",
+            "name": "Khánh Phương"
+          },
+          {
+            "id": "61555926982278",
+            "name": "Việc Làm Phú Mỹ"
+          },
+          {
+            "id": "61556361794883",
+            "name": "Ngô Hà"
+          },
+          {
+            "id": "61557564590049",
+            "name": "Trần Quốc Tú"
+          },
+          {
+            "id": "61558261029036",
+            "name": "Pun Meo"
+          },
+          {
+            "id": "61561883510251",
+            "name": "Channie Quinh"
+          },
+          {
+            "id": "61563309960672",
+            "name": "Đặng Hải Long"
+          },
+          {
+            "id": "61564917926512",
+            "name": "L.A Club Bida & Coffee Chill"
+          },
+          {
+            "id": "61565563724536",
+            "name": "Nguyễn Châu"
+          },
+          {
+            "id": "61572284594958",
+            "name": "Sunny Nguyễn"
+          },
+          {
+            "id": "61573721417341",
+            "name": "Nguyễn Bá Gia"
+          },
+          {
+            "id": "61574207106597",
+            "name": "Trần Linhh"
+          },
+          {
+            "id": "61576229670272",
+            "name": "Linh Hoang"
+          },
+          {
+            "id": "61577279735800",
+            "name": "Quỳnh Anh Hr"
+          },
+          {
+            "id": "61580336013397",
+            "name": "Tuyển dụng Hoa Sen"
+          },
+          {
+            "id": "61581536426647",
+            "name": "Nguyễn Phụng"
+          },
+          {
+            "id": "61582805619015",
+            "name": "Tuyển Dụng ACC GROUP"
+          },
+          {
+            "id": "61583305625966",
+            "name": "Thanh Thảo"
+          },
+          {
+            "id": "61583764201891",
+            "name": "Trương Trương"
+          },
+          {
+            "id": "61584608215620",
+            "name": "Thảo Thảo"
+          },
+          {
+            "id": "100001457361807",
+            "name": "Bình Nguyễn"
+          },
+          {
+            "id": "100002952513568",
+            "name": "Hung Nguyen Van"
+          },
+          {
+            "id": "100004481532439",
+            "name": "Tâm Nguyễn"
+          },
+          {
+            "id": "100004482543910",
+            "name": "Thùy Duyên"
+          },
+          {
+            "id": "100005340428521",
+            "name": "Đào Kim Dung"
+          },
+          {
+            "id": "100005469367692",
+            "name": "Hải Trần"
+          },
+          {
+            "id": "100005516567580",
+            "name": "Nguyễn Song Hải My"
+          },
+          {
+            "id": "100005955429677",
+            "name": "Đào Cẩm Tú"
+          },
+          {
+            "id": "100006028202461",
+            "name": "Nguyễn Quang Đăng"
+          },
+          {
+            "id": "100006251405539",
+            "name": "Ái Thảo"
+          },
+          {
+            "id": "100006269208618",
+            "name": "Ngọc Ji"
+          },
+          {
+            "id": "100006289146409",
+            "name": "Lê Thị Ngọc Tuyết"
+          },
+          {
+            "id": "100006726301264",
+            "name": "Hữu Vinh"
+          },
+          {
+            "id": "100006842225833",
+            "name": "Nguyễn Công Tuấn"
+          },
+          {
+            "id": "100007223975129",
+            "name": "Hoàng Ngọc Vân"
+          },
+          {
+            "id": "100008214033618",
+            "name": "Phươngg Thuỳy"
+          },
+          {
+            "id": "100008470120812",
+            "name": "Hen Lai Sau"
+          },
+          {
+            "id": "100008819281046",
+            "name": "Tường Vi"
+          },
+          {
+            "id": "100010908542354",
+            "name": "Trương Yến Ngọc"
+          },
+          {
+            "id": "100011164030217",
+            "name": "Phan Hằng"
+          },
+          {
+            "id": "100011299489100",
+            "name": "Nhã Hàn"
+          },
+          {
+            "id": "100011388368250",
+            "name": "Ngọ Nguyễn"
+          },
+          {
+            "id": "100011467005548",
+            "name": "Mai Lê Thuý Anh"
+          },
+          {
+            "id": "100011626330258",
+            "name": "Chini Yang"
+          },
+          {
+            "id": "100012223865593",
+            "name": "Bùi Phi Khanh"
+          },
+          {
+            "id": "100012229563696",
+            "name": "Huy Nguyễn"
+          },
+          {
+            "id": "100013120636790",
+            "name": "Nguyễn Hậu"
+          },
+          {
+            "id": "100013203721316",
+            "name": "Thu Hoài"
+          },
+          {
+            "id": "100013824304893",
+            "name": "Vân Trinh"
+          },
+          {
+            "id": "100013891117509",
+            "name": "Nguyễn Tuấn Thanh Tùng"
+          },
+          {
+            "id": "100014181169457",
+            "name": "Anh Thi"
+          },
+          {
+            "id": "100014186708092",
+            "name": "Thanh Phát"
+          },
+          {
+            "id": "100014468773048",
+            "name": "Ngoc Ngoc"
+          },
+          {
+            "id": "100015023324224",
+            "name": "Thảo Vy"
+          },
+          {
+            "id": "100021958921727",
+            "name": "Nguyễn Thơm"
+          },
+          {
+            "id": "100022909296508",
+            "name": "Thu Hoài"
+          },
+          {
+            "id": "100023342140984",
+            "name": "Ngô Thị Thanh Thủy"
+          },
+          {
+            "id": "100025315715732",
+            "name": "Dang Hai Hoang"
+          },
+          {
+            "id": "100026564893365",
+            "name": "Trần Thị Châu Giang"
+          },
+          {
+            "id": "100029755934272",
+            "name": "Nguyễn Yến Nhi"
+          },
+          {
+            "id": "100034383453231",
+            "name": "Thanh Mai"
+          },
+          {
+            "id": "100035525660779",
+            "name": "Trần Chương"
+          },
+          {
+            "id": "100038020578188",
+            "name": "Pii An"
+          },
+          {
+            "id": "100039707792352",
+            "name": "Hà Thanh Mỹ Trần"
+          },
+          {
+            "id": "100055043149966",
+            "name": "Tiến Võ"
+          },
+          {
+            "id": "100056627937098",
+            "name": "Minh Uyên"
+          },
+          {
+            "id": "100056634771689",
+            "name": "Huỳnh Quyên"
+          },
+          {
+            "id": "100057082697388",
+            "name": "Quỳnh Quỳnh"
+          },
+          {
+            "id": "100060628333297",
+            "name": "Nhất Long"
+          },
+          {
+            "id": "100063156952990",
+            "name": "John Cris"
+          },
+          {
+            "id": "100068553722908",
+            "name": "Ngoc Anh"
+          },
+          {
+            "id": "100070362357401",
+            "name": "Mai Phương"
+          },
+          {
+            "id": "100073323880572",
+            "name": "Quỳnh Như"
+          },
+          {
+            "id": "100078738384859",
+            "name": "Hoàng Nam"
+          },
+          {
+            "id": "100079433324177",
+            "name": "Vu Hai Anh"
+          },
+          {
+            "id": "100082436944869",
+            "name": "Võ Thành Lập"
+          },
+          {
+            "id": "100083490734727",
+            "name": "Nguyễn Nhi"
+          },
+          {
+            "id": "100086954269137",
+            "name": "Ngoc Khanh"
+          },
+          {
+            "id": "100088595622359",
+            "name": "Bún Bún"
+          },
+          {
+            "id": "100094453605425",
+            "name": "Minh Thu"
+          },
+          {
+            "id": "100095678641731",
+            "name": "Thanh Thảo"
+          }
+        ],
+        "comments": [],
+        "reactions_count": 81,
+        "comments_count": 0,
+        "reactions_count_before_filter": 81,
+        "comments_count_before_filter": 0,
+        "status": "success"
+      },
+      {
+        "post_id": "2198533247305479",
+        "flag": "vàng",
+        "text": "Vị trí tuyển dụng: Làm việc 8 tiếng 🥰 •Nhân viên than Full : 8.500.000vnd ( Tuyển nhân viên làm việc lâu dài ) •Nhân viên Lễ tân Full ca gãy hoặc chuyên ca 12h~20h30 . Lương thoả thuận •Nhân viên phục vụ: Nhân viên fulltime Nhà hàng Hàn Quốc Ca gãy 10h-14h/17h-22h hoặc 9h-14h/17h-21h ( nghỉ trưa 3 tiếng ) hoặc Ca part xoay ca linh động 10h-14h và 18h - 22h. Hoặc part 12h-16h30 và 13h - 17h30. - Chế độ, quyền lợi: Lương cơ bản + ăn ca 2 bữa + hỗ trợ tiền đi lại + 100% TIỀN TIP. Làm 26ngày/tháng - Đối với nhân viên full sau 6 tháng hưởng phép năm, và đối với tất cả nhân viên ngày Lễ Tết x 400% lương + thưởng . Thu nhập từ 6-10tr •Môi trường trẻ trung, thân thiện, đồng nghiệp dễ thương •Cơ hội học hỏi kỹ năng giao tiếp, phục vụ chuyên nghiệp Yêu cầu: •Không yêu cầu kinh nghiệm (sẽ được đào tạo) •Nhanh nhẹn, chăm chỉ, có tinh thần trách nhiệm •Thái độ vui vẻ, lịch sự với khách hàng 📍 Địa chỉ: Nhà hàng GOJUMONG CASUAL tầng 6 Lotte Liễu Giai 📞 Liên hệ trực tiếp hoặc zalo: Quản lý Mrs Trang: 0987.469.405",
+        "owning_profile": {
+          "__typename": "User",
+          "name": "Trang Lê",
+          "id": "100006577548369"
+        },
+        "source_file": "b77da63d-af55-43c2-ab7f-364250b20e30.json",
+        "profile_id": "b77da63d-af55-43c2-ab7f-364250b20e30",
+        "reactions": [
+          {
+            "id": "100044138143352",
+            "name": "Khánh Phương"
+          },
+          {
+            "id": "61563280557067",
+            "name": "Nguyễn Hùng Cường"
+          },
+          {
+            "id": "61574450648872",
+            "name": "Thuý Hà"
+          },
+          {
+            "id": "61576353419525",
+            "name": "Hoàng Quốc Việt"
+          },
+          {
+            "id": "61582825323894",
+            "name": "Ngọc Linh - Nem Nướng Nha Trang "
+          },
+          {
+            "id": "100003640788400",
+            "name": "Hai Dang"
+          },
+          {
+            "id": "100005960256358",
+            "name": "Vũ Thị Bích Lệ"
+          },
+          {
+            "id": "100009222477267",
+            "name": "Phạm Việt Anh"
+          },
+          {
+            "id": "100015201542172",
+            "name": "Nguyễn Loan"
+          },
+          {
+            "id": "100025139152808",
+            "name": "Tuoi Bui"
+          },
+          {
+            "id": "100027238878170",
+            "name": "Cẩm Tú"
+          },
+          {
+            "id": "100029778233874",
+            "name": "Hằng Ni"
+          },
+          {
+            "id": "100042693051495",
+            "name": "Nguyễn Trang"
+          },
+          {
+            "id": "100046940032349",
+            "name": "Lương Ánh"
+          },
+          {
+            "id": "100048126162429",
+            "name": "Kim Phụng"
+          },
+          {
+            "id": "100049220042731",
+            "name": "Bình Dương Lê"
+          }
+        ],
+        "comments": [
+          {
+            "id": "100023363242962",
+            "name": "Tin Tin",
+            "text": "Trang Lê có tuyển nhân viên bếp không ạ",
+            "created_time_vn": "2025-11-22 17:30:19"
+          },
+          {
+            "id": "100028298443377",
+            "name": "Bùi Linh",
+            "text": "📣 NHÀ HÀNG UMAI OMAKASE DỤNG – PHỤC VỤ NỮ\n\n✨ Vị trí: Nhân viên phục vụ nữ\n⏰ Thời gian: Fulltime 10h -14h, 17h - 22h\n\nYêu cầu:\n • Ngoại hình ưa nhìn, nhanh nhẹn\n • Siêng năng, chịu khó, hỗ trợ đồng đội tốt\n • Không cần kinh nghiệm (sẽ được đào tạo)\n\nQuyền lợi:\n • Lương 8tr ( 28 công ) + thưởng theo năng lực\n • Môi trường làm việc chuyên nghiệp, thân thiện\n • Tip mỗi ngày\n\n📍 ĐỊA ĐIỂM LÀM VIỆC: Nhà hàng UMAI OMAKASE 11 Mạc Thái Tông, Cầu Giấy, Hà Nội\n📞 LIÊN HỆ ỨNG TUYỂN: Mr Linh Sđt: 0949213939",
+            "created_time_vn": "2025-12-06 17:02:45"
+          },
+          {
+            "id": "100013761460826",
+            "name": "Hương Ly",
+            "text": "📢NHÀ HÀNG ONGI JIAJANG – QUÁN MỲ TƯƠNG ĐEN HÀN QUỐC TUYỂN DỤNG GẤP\n📍 Địa chỉ làm việc: 230 Nguyễn Văn Tuyết, Đống Đa, Hà Nội \n📍Giờ làm: 10h-13h30 và 16h30-22h\nHiện tại nhà hàng đang cần bổ sung nhân sự cho các vị trí sau:\n1️⃣ Quản lý\n2️⃣ Phụ bếp (BAO ĂN Ở)\n3️⃣ Nhân viên phục vụ (Part-time/Full-time) (BAO ĂN CA)\n📱 ứng tuyển Zl: 0877 213 681 (Hương Ly)",
+            "created_time_vn": "2025-11-20 09:49:55"
+          },
+          {
+            "id": "100020526768178",
+            "name": "Cẩm Tú",
+            "text": "TUYỂN DỤNG TẠI NHÀ HÀNG BBQ ONG MAP Q2✨\nSố lượng tuyển dụng:\n🤵🏻 Vị trí nhân viên phục vụ full time và part time\n⭐ Không yêu cầu kinh nghiệm, sẽ được đào tạo \n⭐ Ưu tiên những bạn có thể giao tiếp tiếng hàn, nhanh nhẹn, chăm chỉ, tính cách vui vẻ, hoà đồng\n\n* Full time\n⭐ Lương: 9.000.000 - 14.000.000 \n⭐️ Thời gian làm việc: 12h -10h và 15h - 1h \n⭐ Bonus từ 2.000.000/ tháng\n\n* Part time\n⭐ Lương 33k/h - 36k/h + bonus cao\n⭐️ Thời gian làm việc: 11h - 15h, 18h- 23h và 18h - 1h \n\n🏠 ĐỊA ĐIỂM LÀM VIỆC:\n45 Song Hành, An Phú, Q2\nBBQ ÔNG MẬP Quận 2\n38 Trần Ngọc Diện, Thảo Điền, Q2\nBBQ Ông Mập Thảo Điền 뚱보집 타오디엔\n\n💬Liên hệ: 0909886320- Thư",
+            "created_time_vn": "2025-12-01 13:54:32"
+          },
+          {
+            "id": "100082569921800",
+            "name": "Minh Huyền",
+            "text": "Trung tâm Anh ngữ EFIS English (Chùa Láng) hiện đang tuyển:\n• Giảng viên Tiếng Anh giao tiếp\n• Chuyên viên Tư vấn\n• Marketing SEO\n• Event – Social\n\nBạn nào quan tâm comment hoặc inbox mình gửi JD chi tiết nhé 🌱",
+            "created_time_vn": "2025-12-22 09:05:44"
+          }
+        ],
+        "reactions_count": 16,
+        "comments_count": 5,
+        "reactions_count_before_filter": 16,
+        "comments_count_before_filter": 7,
+        "status": "success"
+      },
+      {
+        "post_id": "24955032474094131",
+        "flag": "vàng",
+        "text": "[BSV] Tuyển dụng NV cho Tập Đoàn VIETTEL: - NV VĂN PHÒNG làm giờ hành chính 💰 Thu nhập 8-15tr. Chưa tính lương thưởng - Làm tại trụ sở VIETTEL HCM - Địa chỉ làm việc: 158/2A Hoàng Hoa Thám, phường 12, Q.Tân Bình 👉 không yêu cầu kinh nghiệm 👉 Chế độ phúc lợi tốt ✅ Chấm để nhận JD Thông tin contact: ✫ Liên hệ bộ phận tuyển dụng : 0922312726 Mr Nhiệm ✫ Email: truonghuunhiem@bs24vietnam.vn",
+        "owning_profile": {
+          "__typename": "User",
+          "name": "Gia Minh",
+          "id": "61568481862081"
+        },
+        "source_file": "b77da63d-af55-43c2-ab7f-364250b20e30.json",
+        "profile_id": "b77da63d-af55-43c2-ab7f-364250b20e30",
+        "reactions": [
+          {
+            "id": "100044138143352",
+            "name": "Khánh Phương"
+          },
+          {
+            "id": "61555926982278",
+            "name": "Việc Làm Phú Mỹ"
+          },
+          {
+            "id": "61556361794883",
+            "name": "Ngô Hà"
+          },
+          {
+            "id": "61557564590049",
+            "name": "Trần Quốc Tú"
+          },
+          {
+            "id": "61558261029036",
+            "name": "Pun Meo"
+          },
+          {
+            "id": "61561883510251",
+            "name": "Channie Quinh"
+          },
+          {
+            "id": "61563309960672",
+            "name": "Đặng Hải Long"
+          },
+          {
+            "id": "61564917926512",
+            "name": "L.A Club Bida & Coffee Chill"
+          },
+          {
+            "id": "61565563724536",
+            "name": "Nguyễn Châu"
+          },
+          {
+            "id": "61572284594958",
+            "name": "Sunny Nguyễn"
+          },
+          {
+            "id": "61573721417341",
+            "name": "Nguyễn Bá Gia"
+          },
+          {
+            "id": "61574207106597",
+            "name": "Trần Linhh"
+          },
+          {
+            "id": "61576229670272",
+            "name": "Linh Hoang"
+          },
+          {
+            "id": "61577279735800",
+            "name": "Quỳnh Anh Hr"
+          },
+          {
+            "id": "61580336013397",
+            "name": "Tuyển dụng Hoa Sen"
+          },
+          {
+            "id": "61581536426647",
+            "name": "Nguyễn Phụng"
+          },
+          {
+            "id": "61582805619015",
+            "name": "Tuyển Dụng ACC GROUP"
+          },
+          {
+            "id": "61583305625966",
+            "name": "Thanh Thảo"
+          },
+          {
+            "id": "61583764201891",
+            "name": "Trương Trương"
+          },
+          {
+            "id": "61584608215620",
+            "name": "Thảo Thảo"
+          },
+          {
+            "id": "100001457361807",
+            "name": "Bình Nguyễn"
+          },
+          {
+            "id": "100002952513568",
+            "name": "Hung Nguyen Van"
+          },
+          {
+            "id": "100004481532439",
+            "name": "Tâm Nguyễn"
+          },
+          {
+            "id": "100004482543910",
+            "name": "Thùy Duyên"
+          },
+          {
+            "id": "100005340428521",
+            "name": "Đào Kim Dung"
+          },
+          {
+            "id": "100005469367692",
+            "name": "Hải Trần"
+          },
+          {
+            "id": "100005516567580",
+            "name": "Nguyễn Song Hải My"
+          },
+          {
+            "id": "100005955429677",
+            "name": "Đào Cẩm Tú"
+          },
+          {
+            "id": "100006028202461",
+            "name": "Nguyễn Quang Đăng"
+          },
+          {
+            "id": "100006251405539",
+            "name": "Ái Thảo"
+          },
+          {
+            "id": "100006269208618",
+            "name": "Ngọc Ji"
+          },
+          {
+            "id": "100006289146409",
+            "name": "Lê Thị Ngọc Tuyết"
+          },
+          {
+            "id": "100006726301264",
+            "name": "Hữu Vinh"
+          },
+          {
+            "id": "100006842225833",
+            "name": "Nguyễn Công Tuấn"
+          },
+          {
+            "id": "100007223975129",
+            "name": "Hoàng Ngọc Vân"
+          },
+          {
+            "id": "100008214033618",
+            "name": "Phươngg Thuỳy"
+          },
+          {
+            "id": "100008470120812",
+            "name": "Hen Lai Sau"
+          },
+          {
+            "id": "100008819281046",
+            "name": "Tường Vi"
+          },
+          {
+            "id": "100010908542354",
+            "name": "Trương Yến Ngọc"
+          },
+          {
+            "id": "100011164030217",
+            "name": "Phan Hằng"
+          },
+          {
+            "id": "100011299489100",
+            "name": "Nhã Hàn"
+          },
+          {
+            "id": "100011388368250",
+            "name": "Ngọ Nguyễn"
+          },
+          {
+            "id": "100011467005548",
+            "name": "Mai Lê Thuý Anh"
+          },
+          {
+            "id": "100011626330258",
+            "name": "Chini Yang"
+          },
+          {
+            "id": "100012223865593",
+            "name": "Bùi Phi Khanh"
+          },
+          {
+            "id": "100012229563696",
+            "name": "Huy Nguyễn"
+          },
+          {
+            "id": "100013120636790",
+            "name": "Nguyễn Hậu"
+          },
+          {
+            "id": "100013203721316",
+            "name": "Thu Hoài"
+          },
+          {
+            "id": "100013824304893",
+            "name": "Vân Trinh"
+          },
+          {
+            "id": "100013891117509",
+            "name": "Nguyễn Tuấn Thanh Tùng"
+          },
+          {
+            "id": "100014181169457",
+            "name": "Anh Thi"
+          },
+          {
+            "id": "100014186708092",
+            "name": "Thanh Phát"
+          },
+          {
+            "id": "100014468773048",
+            "name": "Ngoc Ngoc"
+          },
+          {
+            "id": "100015023324224",
+            "name": "Thảo Vy"
+          },
+          {
+            "id": "100021958921727",
+            "name": "Nguyễn Thơm"
+          },
+          {
+            "id": "100022909296508",
+            "name": "Thu Hoài"
+          },
+          {
+            "id": "100023342140984",
+            "name": "Ngô Thị Thanh Thủy"
+          },
+          {
+            "id": "100025315715732",
+            "name": "Dang Hai Hoang"
+          },
+          {
+            "id": "100026564893365",
+            "name": "Trần Thị Châu Giang"
+          },
+          {
+            "id": "100029755934272",
+            "name": "Nguyễn Yến Nhi"
+          },
+          {
+            "id": "100034383453231",
+            "name": "Thanh Mai"
+          },
+          {
+            "id": "100035525660779",
+            "name": "Trần Chương"
+          },
+          {
+            "id": "100038020578188",
+            "name": "Pii An"
+          },
+          {
+            "id": "100039707792352",
+            "name": "Hà Thanh Mỹ Trần"
+          },
+          {
+            "id": "100055043149966",
+            "name": "Tiến Võ"
+          },
+          {
+            "id": "100056627937098",
+            "name": "Minh Uyên"
+          },
+          {
+            "id": "100056634771689",
+            "name": "Huỳnh Quyên"
+          },
+          {
+            "id": "100057082697388",
+            "name": "Quỳnh Quỳnh"
+          },
+          {
+            "id": "100060628333297",
+            "name": "Nhất Long"
+          },
+          {
+            "id": "100063156952990",
+            "name": "John Cris"
+          },
+          {
+            "id": "100068553722908",
+            "name": "Ngoc Anh"
+          },
+          {
+            "id": "100070362357401",
+            "name": "Mai Phương"
+          },
+          {
+            "id": "100073323880572",
+            "name": "Quỳnh Như"
+          },
+          {
+            "id": "100078738384859",
+            "name": "Hoàng Nam"
+          },
+          {
+            "id": "100079433324177",
+            "name": "Vu Hai Anh"
+          },
+          {
+            "id": "100082436944869",
+            "name": "Võ Thành Lập"
+          },
+          {
+            "id": "100083490734727",
+            "name": "Nguyễn Nhi"
+          },
+          {
+            "id": "100086954269137",
+            "name": "Ngoc Khanh"
+          },
+          {
+            "id": "100088595622359",
+            "name": "Bún Bún"
+          },
+          {
+            "id": "100094453605425",
+            "name": "Minh Thu"
+          },
+          {
+            "id": "100095678641731",
+            "name": "Thanh Thảo"
+          }
+        ],
+        "comments": [],
+        "reactions_count": 81,
+        "comments_count": 0,
+        "reactions_count_before_filter": 81,
+        "comments_count_before_filter": 0,
+        "status": "success"
+      },
+      {
+        "post_id": "2198533247305479",
+        "flag": "vàng",
+        "text": "Vị trí tuyển dụng: Làm việc 8 tiếng 🥰 •Nhân viên than Full : 8.500.000vnd ( Tuyển nhân viên làm việc lâu dài ) •Nhân viên Lễ tân Full ca gãy hoặc chuyên ca 12h~20h30 . Lương thoả thuận •Nhân viên phục vụ: Nhân viên fulltime Nhà hàng Hàn Quốc Ca gãy 10h-14h/17h-22h hoặc 9h-14h/17h-21h ( nghỉ trưa 3 tiếng ) hoặc Ca part xoay ca linh động 10h-14h và 18h - 22h. Hoặc part 12h-16h30 và 13h - 17h30. - Chế độ, quyền lợi: Lương cơ bản + ăn ca 2 bữa + hỗ trợ tiền đi lại + 100% TIỀN TIP. Làm 26ngày/tháng - Đối với nhân viên full sau 6 tháng hưởng phép năm, và đối với tất cả nhân viên ngày Lễ Tết x 400% lương + thưởng . Thu nhập từ 6-10tr •Môi trường trẻ trung, thân thiện, đồng nghiệp dễ thương •Cơ hội học hỏi kỹ năng giao tiếp, phục vụ chuyên nghiệp Yêu cầu: •Không yêu cầu kinh nghiệm (sẽ được đào tạo) •Nhanh nhẹn, chăm chỉ, có tinh thần trách nhiệm •Thái độ vui vẻ, lịch sự với khách hàng 📍 Địa chỉ: Nhà hàng GOJUMONG CASUAL tầng 6 Lotte Liễu Giai 📞 Liên hệ trực tiếp hoặc zalo: Quản lý Mrs Trang: 0987.469.405",
+        "owning_profile": {
+          "__typename": "User",
+          "name": "Trang Lê",
+          "id": "100006577548369"
+        },
+        "source_file": "b77da63d-af55-43c2-ab7f-364250b20e30.json",
+        "profile_id": "b77da63d-af55-43c2-ab7f-364250b20e30",
+        "reactions": [
+          {
+            "id": "100044138143352",
+            "name": "Khánh Phương"
+          },
+          {
+            "id": "61563280557067",
+            "name": "Nguyễn Hùng Cường"
+          },
+          {
+            "id": "61574450648872",
+            "name": "Thuý Hà"
+          },
+          {
+            "id": "61576353419525",
+            "name": "Hoàng Quốc Việt"
+          },
+          {
+            "id": "61582825323894",
+            "name": "Ngọc Linh - Nem Nướng Nha Trang "
+          },
+          {
+            "id": "100003640788400",
+            "name": "Hai Dang"
+          },
+          {
+            "id": "100005960256358",
+            "name": "Vũ Thị Bích Lệ"
+          },
+          {
+            "id": "100009222477267",
+            "name": "Phạm Việt Anh"
+          },
+          {
+            "id": "100015201542172",
+            "name": "Nguyễn Loan"
+          },
+          {
+            "id": "100025139152808",
+            "name": "Tuoi Bui"
+          },
+          {
+            "id": "100027238878170",
+            "name": "Cẩm Tú"
+          },
+          {
+            "id": "100029778233874",
+            "name": "Hằng Ni"
+          },
+          {
+            "id": "100042693051495",
+            "name": "Nguyễn Trang"
+          },
+          {
+            "id": "100046940032349",
+            "name": "Lương Ánh"
+          },
+          {
+            "id": "100048126162429",
+            "name": "Kim Phụng"
+          },
+          {
+            "id": "100049220042731",
+            "name": "Bình Dương Lê"
+          }
+        ],
+        "comments": [
+          {
+            "id": "100023363242962",
+            "name": "Tin Tin",
+            "text": "Trang Lê có tuyển nhân viên bếp không ạ",
+            "created_time_vn": "2025-11-22 17:30:19"
+          },
+          {
+            "id": "100028298443377",
+            "name": "Bùi Linh",
+            "text": "📣 NHÀ HÀNG UMAI OMAKASE DỤNG – PHỤC VỤ NỮ\n\n✨ Vị trí: Nhân viên phục vụ nữ\n⏰ Thời gian: Fulltime 10h -14h, 17h - 22h\n\nYêu cầu:\n • Ngoại hình ưa nhìn, nhanh nhẹn\n • Siêng năng, chịu khó, hỗ trợ đồng đội tốt\n • Không cần kinh nghiệm (sẽ được đào tạo)\n\nQuyền lợi:\n • Lương 8tr ( 28 công ) + thưởng theo năng lực\n • Môi trường làm việc chuyên nghiệp, thân thiện\n • Tip mỗi ngày\n\n📍 ĐỊA ĐIỂM LÀM VIỆC: Nhà hàng UMAI OMAKASE 11 Mạc Thái Tông, Cầu Giấy, Hà Nội\n📞 LIÊN HỆ ỨNG TUYỂN: Mr Linh Sđt: 0949213939",
+            "created_time_vn": "2025-12-06 17:02:45"
+          },
+          {
+            "id": "100013761460826",
+            "name": "Hương Ly",
+            "text": "📢NHÀ HÀNG ONGI JIAJANG – QUÁN MỲ TƯƠNG ĐEN HÀN QUỐC TUYỂN DỤNG GẤP\n📍 Địa chỉ làm việc: 230 Nguyễn Văn Tuyết, Đống Đa, Hà Nội \n📍Giờ làm: 10h-13h30 và 16h30-22h\nHiện tại nhà hàng đang cần bổ sung nhân sự cho các vị trí sau:\n1️⃣ Quản lý\n2️⃣ Phụ bếp (BAO ĂN Ở)\n3️⃣ Nhân viên phục vụ (Part-time/Full-time) (BAO ĂN CA)\n📱 ứng tuyển Zl: 0877 213 681 (Hương Ly)",
+            "created_time_vn": "2025-11-20 09:49:55"
+          },
+          {
+            "id": "100020526768178",
+            "name": "Cẩm Tú",
+            "text": "TUYỂN DỤNG TẠI NHÀ HÀNG BBQ ONG MAP Q2✨\nSố lượng tuyển dụng:\n🤵🏻 Vị trí nhân viên phục vụ full time và part time\n⭐ Không yêu cầu kinh nghiệm, sẽ được đào tạo \n⭐ Ưu tiên những bạn có thể giao tiếp tiếng hàn, nhanh nhẹn, chăm chỉ, tính cách vui vẻ, hoà đồng\n\n* Full time\n⭐ Lương: 9.000.000 - 14.000.000 \n⭐️ Thời gian làm việc: 12h -10h và 15h - 1h \n⭐ Bonus từ 2.000.000/ tháng\n\n* Part time\n⭐ Lương 33k/h - 36k/h + bonus cao\n⭐️ Thời gian làm việc: 11h - 15h, 18h- 23h và 18h - 1h \n\n🏠 ĐỊA ĐIỂM LÀM VIỆC:\n45 Song Hành, An Phú, Q2\nBBQ ÔNG MẬP Quận 2\n38 Trần Ngọc Diện, Thảo Điền, Q2\nBBQ Ông Mập Thảo Điền 뚱보집 타오디엔\n\n💬Liên hệ: 0909886320- Thư",
+            "created_time_vn": "2025-12-01 13:54:32"
+          },
+          {
+            "id": "100082569921800",
+            "name": "Minh Huyền",
+            "text": "Trung tâm Anh ngữ EFIS English (Chùa Láng) hiện đang tuyển:\n• Giảng viên Tiếng Anh giao tiếp\n• Chuyên viên Tư vấn\n• Marketing SEO\n• Event – Social\n\nBạn nào quan tâm comment hoặc inbox mình gửi JD chi tiết nhé 🌱",
+            "created_time_vn": "2025-12-22 09:05:44"
+          }
+        ],
+        "reactions_count": 16,
+        "comments_count": 5,
+        "reactions_count_before_filter": 16,
+        "comments_count_before_filter": 7,
+        "status": "success"
+      },
+      {
+        "post_id": "24955032474094131",
+        "flag": "vàng",
+        "text": "[BSV] Tuyển dụng NV cho Tập Đoàn VIETTEL: - NV VĂN PHÒNG làm giờ hành chính 💰 Thu nhập 8-15tr. Chưa tính lương thưởng - Làm tại trụ sở VIETTEL HCM - Địa chỉ làm việc: 158/2A Hoàng Hoa Thám, phường 12, Q.Tân Bình 👉 không yêu cầu kinh nghiệm 👉 Chế độ phúc lợi tốt ✅ Chấm để nhận JD Thông tin contact: ✫ Liên hệ bộ phận tuyển dụng : 0922312726 Mr Nhiệm ✫ Email: truonghuunhiem@bs24vietnam.vn",
+        "owning_profile": {
+          "__typename": "User",
+          "name": "Gia Minh",
+          "id": "61568481862081"
+        },
+        "source_file": "b77da63d-af55-43c2-ab7f-364250b20e30.json",
+        "profile_id": "b77da63d-af55-43c2-ab7f-364250b20e30",
+        "reactions": [
+          {
+            "id": "100044138143352",
+            "name": "Khánh Phương"
+          },
+          {
+            "id": "61555926982278",
+            "name": "Việc Làm Phú Mỹ"
+          },
+          {
+            "id": "61556361794883",
+            "name": "Ngô Hà"
+          },
+          {
+            "id": "61557564590049",
+            "name": "Trần Quốc Tú"
+          },
+          {
+            "id": "61558261029036",
+            "name": "Pun Meo"
+          },
+          {
+            "id": "61561883510251",
+            "name": "Channie Quinh"
+          },
+          {
+            "id": "61563309960672",
+            "name": "Đặng Hải Long"
+          },
+          {
+            "id": "61564917926512",
+            "name": "L.A Club Bida & Coffee Chill"
+          },
+          {
+            "id": "61565563724536",
+            "name": "Nguyễn Châu"
+          },
+          {
+            "id": "61572284594958",
+            "name": "Sunny Nguyễn"
+          },
+          {
+            "id": "61573721417341",
+            "name": "Nguyễn Bá Gia"
+          },
+          {
+            "id": "61574207106597",
+            "name": "Trần Linhh"
+          },
+          {
+            "id": "61576229670272",
+            "name": "Linh Hoang"
+          },
+          {
+            "id": "61577279735800",
+            "name": "Quỳnh Anh Hr"
+          },
+          {
+            "id": "61580336013397",
+            "name": "Tuyển dụng Hoa Sen"
+          },
+          {
+            "id": "61581536426647",
+            "name": "Nguyễn Phụng"
+          },
+          {
+            "id": "61582805619015",
+            "name": "Tuyển Dụng ACC GROUP"
+          },
+          {
+            "id": "61583305625966",
+            "name": "Thanh Thảo"
+          },
+          {
+            "id": "61583764201891",
+            "name": "Trương Trương"
+          },
+          {
+            "id": "61584608215620",
+            "name": "Thảo Thảo"
+          },
+          {
+            "id": "100001457361807",
+            "name": "Bình Nguyễn"
+          },
+          {
+            "id": "100002952513568",
+            "name": "Hung Nguyen Van"
+          },
+          {
+            "id": "100004481532439",
+            "name": "Tâm Nguyễn"
+          },
+          {
+            "id": "100004482543910",
+            "name": "Thùy Duyên"
+          },
+          {
+            "id": "100005340428521",
+            "name": "Đào Kim Dung"
+          },
+          {
+            "id": "100005469367692",
+            "name": "Hải Trần"
+          },
+          {
+            "id": "100005516567580",
+            "name": "Nguyễn Song Hải My"
+          },
+          {
+            "id": "100005955429677",
+            "name": "Đào Cẩm Tú"
+          },
+          {
+            "id": "100006028202461",
+            "name": "Nguyễn Quang Đăng"
+          },
+          {
+            "id": "100006251405539",
+            "name": "Ái Thảo"
+          },
+          {
+            "id": "100006269208618",
+            "name": "Ngọc Ji"
+          },
+          {
+            "id": "100006289146409",
+            "name": "Lê Thị Ngọc Tuyết"
+          },
+          {
+            "id": "100006726301264",
+            "name": "Hữu Vinh"
+          },
+          {
+            "id": "100006842225833",
+            "name": "Nguyễn Công Tuấn"
+          },
+          {
+            "id": "100007223975129",
+            "name": "Hoàng Ngọc Vân"
+          },
+          {
+            "id": "100008214033618",
+            "name": "Phươngg Thuỳy"
+          },
+          {
+            "id": "100008470120812",
+            "name": "Hen Lai Sau"
+          },
+          {
+            "id": "100008819281046",
+            "name": "Tường Vi"
+          },
+          {
+            "id": "100010908542354",
+            "name": "Trương Yến Ngọc"
+          },
+          {
+            "id": "100011164030217",
+            "name": "Phan Hằng"
+          },
+          {
+            "id": "100011299489100",
+            "name": "Nhã Hàn"
+          },
+          {
+            "id": "100011388368250",
+            "name": "Ngọ Nguyễn"
+          },
+          {
+            "id": "100011467005548",
+            "name": "Mai Lê Thuý Anh"
+          },
+          {
+            "id": "100011626330258",
+            "name": "Chini Yang"
+          },
+          {
+            "id": "100012223865593",
+            "name": "Bùi Phi Khanh"
+          },
+          {
+            "id": "100012229563696",
+            "name": "Huy Nguyễn"
+          },
+          {
+            "id": "100013120636790",
+            "name": "Nguyễn Hậu"
+          },
+          {
+            "id": "100013203721316",
+            "name": "Thu Hoài"
+          },
+          {
+            "id": "100013824304893",
+            "name": "Vân Trinh"
+          },
+          {
+            "id": "100013891117509",
+            "name": "Nguyễn Tuấn Thanh Tùng"
+          },
+          {
+            "id": "100014181169457",
+            "name": "Anh Thi"
+          },
+          {
+            "id": "100014186708092",
+            "name": "Thanh Phát"
+          },
+          {
+            "id": "100014468773048",
+            "name": "Ngoc Ngoc"
+          },
+          {
+            "id": "100015023324224",
+            "name": "Thảo Vy"
+          },
+          {
+            "id": "100021958921727",
+            "name": "Nguyễn Thơm"
+          },
+          {
+            "id": "100022909296508",
+            "name": "Thu Hoài"
+          },
+          {
+            "id": "100023342140984",
+            "name": "Ngô Thị Thanh Thủy"
+          },
+          {
+            "id": "100025315715732",
+            "name": "Dang Hai Hoang"
+          },
+          {
+            "id": "100026564893365",
+            "name": "Trần Thị Châu Giang"
+          },
+          {
+            "id": "100029755934272",
+            "name": "Nguyễn Yến Nhi"
+          },
+          {
+            "id": "100034383453231",
+            "name": "Thanh Mai"
+          },
+          {
+            "id": "100035525660779",
+            "name": "Trần Chương"
+          },
+          {
+            "id": "100038020578188",
+            "name": "Pii An"
+          },
+          {
+            "id": "100039707792352",
+            "name": "Hà Thanh Mỹ Trần"
+          },
+          {
+            "id": "100055043149966",
+            "name": "Tiến Võ"
+          },
+          {
+            "id": "100056627937098",
+            "name": "Minh Uyên"
+          },
+          {
+            "id": "100056634771689",
+            "name": "Huỳnh Quyên"
+          },
+          {
+            "id": "100057082697388",
+            "name": "Quỳnh Quỳnh"
+          },
+          {
+            "id": "100060628333297",
+            "name": "Nhất Long"
+          },
+          {
+            "id": "100063156952990",
+            "name": "John Cris"
+          },
+          {
+            "id": "100068553722908",
+            "name": "Ngoc Anh"
+          },
+          {
+            "id": "100070362357401",
+            "name": "Mai Phương"
+          },
+          {
+            "id": "100073323880572",
+            "name": "Quỳnh Như"
+          },
+          {
+            "id": "100078738384859",
+            "name": "Hoàng Nam"
+          },
+          {
+            "id": "100079433324177",
+            "name": "Vu Hai Anh"
+          },
+          {
+            "id": "100082436944869",
+            "name": "Võ Thành Lập"
+          },
+          {
+            "id": "100083490734727",
+            "name": "Nguyễn Nhi"
+          },
+          {
+            "id": "100086954269137",
+            "name": "Ngoc Khanh"
+          },
+          {
+            "id": "100088595622359",
+            "name": "Bún Bún"
+          },
+          {
+            "id": "100094453605425",
+            "name": "Minh Thu"
+          },
+          {
+            "id": "100095678641731",
+            "name": "Thanh Thảo"
+          }
+        ],
+        "comments": [],
+        "reactions_count": 81,
+        "comments_count": 0,
+        "reactions_count_before_filter": 81,
+        "comments_count_before_filter": 0,
+        "status": "success"
+      },
+      {
+        "post_id": "2198533247305479",
+        "flag": "vàng",
+        "text": "Vị trí tuyển dụng: Làm việc 8 tiếng 🥰 •Nhân viên than Full : 8.500.000vnd ( Tuyển nhân viên làm việc lâu dài ) •Nhân viên Lễ tân Full ca gãy hoặc chuyên ca 12h~20h30 . Lương thoả thuận •Nhân viên phục vụ: Nhân viên fulltime Nhà hàng Hàn Quốc Ca gãy 10h-14h/17h-22h hoặc 9h-14h/17h-21h ( nghỉ trưa 3 tiếng ) hoặc Ca part xoay ca linh động 10h-14h và 18h - 22h. Hoặc part 12h-16h30 và 13h - 17h30. - Chế độ, quyền lợi: Lương cơ bản + ăn ca 2 bữa + hỗ trợ tiền đi lại + 100% TIỀN TIP. Làm 26ngày/tháng - Đối với nhân viên full sau 6 tháng hưởng phép năm, và đối với tất cả nhân viên ngày Lễ Tết x 400% lương + thưởng . Thu nhập từ 6-10tr •Môi trường trẻ trung, thân thiện, đồng nghiệp dễ thương •Cơ hội học hỏi kỹ năng giao tiếp, phục vụ chuyên nghiệp Yêu cầu: •Không yêu cầu kinh nghiệm (sẽ được đào tạo) •Nhanh nhẹn, chăm chỉ, có tinh thần trách nhiệm •Thái độ vui vẻ, lịch sự với khách hàng 📍 Địa chỉ: Nhà hàng GOJUMONG CASUAL tầng 6 Lotte Liễu Giai 📞 Liên hệ trực tiếp hoặc zalo: Quản lý Mrs Trang: 0987.469.405",
+        "owning_profile": {
+          "__typename": "User",
+          "name": "Trang Lê",
+          "id": "100006577548369"
+        },
+        "source_file": "b77da63d-af55-43c2-ab7f-364250b20e30.json",
+        "profile_id": "b77da63d-af55-43c2-ab7f-364250b20e30",
+        "reactions": [
+          {
+            "id": "100044138143352",
+            "name": "Khánh Phương"
+          },
+          {
+            "id": "61563280557067",
+            "name": "Nguyễn Hùng Cường"
+          },
+          {
+            "id": "61574450648872",
+            "name": "Thuý Hà"
+          },
+          {
+            "id": "61576353419525",
+            "name": "Hoàng Quốc Việt"
+          },
+          {
+            "id": "61582825323894",
+            "name": "Ngọc Linh - Nem Nướng Nha Trang "
+          },
+          {
+            "id": "100003640788400",
+            "name": "Hai Dang"
+          },
+          {
+            "id": "100005960256358",
+            "name": "Vũ Thị Bích Lệ"
+          },
+          {
+            "id": "100009222477267",
+            "name": "Phạm Việt Anh"
+          },
+          {
+            "id": "100015201542172",
+            "name": "Nguyễn Loan"
+          },
+          {
+            "id": "100025139152808",
+            "name": "Tuoi Bui"
+          },
+          {
+            "id": "100027238878170",
+            "name": "Cẩm Tú"
+          },
+          {
+            "id": "100029778233874",
+            "name": "Hằng Ni"
+          },
+          {
+            "id": "100042693051495",
+            "name": "Nguyễn Trang"
+          },
+          {
+            "id": "100046940032349",
+            "name": "Lương Ánh"
+          },
+          {
+            "id": "100048126162429",
+            "name": "Kim Phụng"
+          },
+          {
+            "id": "100049220042731",
+            "name": "Bình Dương Lê"
+          }
+        ],
+        "comments": [
+          {
+            "id": "100023363242962",
+            "name": "Tin Tin",
+            "text": "Trang Lê có tuyển nhân viên bếp không ạ",
+            "created_time_vn": "2025-11-22 17:30:19"
+          },
+          {
+            "id": "100028298443377",
+            "name": "Bùi Linh",
+            "text": "📣 NHÀ HÀNG UMAI OMAKASE DỤNG – PHỤC VỤ NỮ\n\n✨ Vị trí: Nhân viên phục vụ nữ\n⏰ Thời gian: Fulltime 10h -14h, 17h - 22h\n\nYêu cầu:\n • Ngoại hình ưa nhìn, nhanh nhẹn\n • Siêng năng, chịu khó, hỗ trợ đồng đội tốt\n • Không cần kinh nghiệm (sẽ được đào tạo)\n\nQuyền lợi:\n • Lương 8tr ( 28 công ) + thưởng theo năng lực\n • Môi trường làm việc chuyên nghiệp, thân thiện\n • Tip mỗi ngày\n\n📍 ĐỊA ĐIỂM LÀM VIỆC: Nhà hàng UMAI OMAKASE 11 Mạc Thái Tông, Cầu Giấy, Hà Nội\n📞 LIÊN HỆ ỨNG TUYỂN: Mr Linh Sđt: 0949213939",
+            "created_time_vn": "2025-12-06 17:02:45"
+          },
+          {
+            "id": "100013761460826",
+            "name": "Hương Ly",
+            "text": "📢NHÀ HÀNG ONGI JIAJANG – QUÁN MỲ TƯƠNG ĐEN HÀN QUỐC TUYỂN DỤNG GẤP\n📍 Địa chỉ làm việc: 230 Nguyễn Văn Tuyết, Đống Đa, Hà Nội \n📍Giờ làm: 10h-13h30 và 16h30-22h\nHiện tại nhà hàng đang cần bổ sung nhân sự cho các vị trí sau:\n1️⃣ Quản lý\n2️⃣ Phụ bếp (BAO ĂN Ở)\n3️⃣ Nhân viên phục vụ (Part-time/Full-time) (BAO ĂN CA)\n📱 ứng tuyển Zl: 0877 213 681 (Hương Ly)",
+            "created_time_vn": "2025-11-20 09:49:55"
+          },
+          {
+            "id": "100020526768178",
+            "name": "Cẩm Tú",
+            "text": "TUYỂN DỤNG TẠI NHÀ HÀNG BBQ ONG MAP Q2✨\nSố lượng tuyển dụng:\n🤵🏻 Vị trí nhân viên phục vụ full time và part time\n⭐ Không yêu cầu kinh nghiệm, sẽ được đào tạo \n⭐ Ưu tiên những bạn có thể giao tiếp tiếng hàn, nhanh nhẹn, chăm chỉ, tính cách vui vẻ, hoà đồng\n\n* Full time\n⭐ Lương: 9.000.000 - 14.000.000 \n⭐️ Thời gian làm việc: 12h -10h và 15h - 1h \n⭐ Bonus từ 2.000.000/ tháng\n\n* Part time\n⭐ Lương 33k/h - 36k/h + bonus cao\n⭐️ Thời gian làm việc: 11h - 15h, 18h- 23h và 18h - 1h \n\n🏠 ĐỊA ĐIỂM LÀM VIỆC:\n45 Song Hành, An Phú, Q2\nBBQ ÔNG MẬP Quận 2\n38 Trần Ngọc Diện, Thảo Điền, Q2\nBBQ Ông Mập Thảo Điền 뚱보집 타오디엔\n\n💬Liên hệ: 0909886320- Thư",
+            "created_time_vn": "2025-12-01 13:54:32"
+          },
+          {
+            "id": "100082569921800",
+            "name": "Minh Huyền",
+            "text": "Trung tâm Anh ngữ EFIS English (Chùa Láng) hiện đang tuyển:\n• Giảng viên Tiếng Anh giao tiếp\n• Chuyên viên Tư vấn\n• Marketing SEO\n• Event – Social\n\nBạn nào quan tâm comment hoặc inbox mình gửi JD chi tiết nhé 🌱",
+            "created_time_vn": "2025-12-22 09:05:44"
+          }
+        ],
+        "reactions_count": 16,
+        "comments_count": 5,
+        "reactions_count_before_filter": 16,
+        "comments_count_before_filter": 7,
+        "status": "success"
+      }
+    ]
+  },
+  "total_posts_processed": 8,
+  "total_reactions": 388,
+  "total_comments": 20
+}
+--- END FILE: backend\data\results\all_results_20251222_223649.json ---
+
 --- START FILE: backend\worker\check_cookies.py ---
 import requests
 
@@ -15000,6 +17417,36 @@ if __name__ == "__main__":
 
   <div class="container">
     <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+    <!-- Toast thông báo tiến trình và số bài đã quét -->
+    <div id="progressToast" style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10000; max-width: 600px; width: 90%; display: none;">
+      <!-- Toast tiến trình lấy thông tin -->
+      <div id="infoProgressToast" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); padding: 20px; margin-bottom: 12px; border: 2px solid #5a67d8; position: relative; overflow: hidden; display: none;">
+        <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);"></div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 45px; height: 45px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;">
+            ⚡
+          </div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: bold; color: white; font-size: 16px; margin-bottom: 6px;">Đang lấy thông tin</div>
+            <div id="infoProgressToastText" style="color: rgba(255,255,255,0.9); font-size: 14px; margin-bottom: 8px;"></div>
+            <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.2); border-radius: 4px; overflow: hidden;">
+              <div id="infoProgressToastBar" style="height: 100%; background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%); border-radius: 4px; transition: width 0.3s ease; width: 0%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Toast số bài đã quét được -->
+      <div id="scanStatsToast" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); padding: 20px; border: 2px solid #5a67d8; position: relative; overflow: hidden; display: none;">
+        <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);"></div>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+          <div style="width: 45px; height: 45px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;">
+            📊
+          </div>
+          <div style="font-weight: bold; color: white; font-size: 16px;">Số bài đã quét được</div>
+        </div>
+        <div id="scanStatsToastList" style="background: rgba(255,255,255,0.95); padding: 12px; border-radius: 8px; max-height: 200px; overflow-y: auto;"></div>
+      </div>
+    </div>
     <header class="header">
       <div class="header-content">
         <h1>HỆ THỐNG ADS FACEBOOK</h1>
@@ -15210,15 +17657,6 @@ if __name__ == "__main__":
                   <button id="pauseSelectedProfilesBtn" class="btn-pause" type="button">Tạm dừng profile đã chọn</button>
                   <button id="stopSelectedProfilesBtn" class="btn-orange" type="button">Dừng profile đã chọn</button>
                   <button id="stopAllSettingBtn" class="btn-danger" type="button">Dừng tất cả</button>
-                </div>
-                <!-- Hiển thị số bài đã quét được cho từng profile -->
-                <div id="scanStatsContainer" style="margin-top: 15px; padding: 10px; background: #f5f5f5; border-radius: 5px; display: none;">
-                  <div style="font-weight: bold; margin-bottom: 8px;">Số bài đã quét được:</div>
-                  <div id="scanStatsList"></div>
-                </div>
-                <!-- Hiển thị tiến trình khi lấy thông tin -->
-                <div id="infoProgressContainer" style="margin-top: 15px; padding: 10px; background: #e3f2fd; border-radius: 5px; display: none;">
-                  <div id="infoProgressText" style="font-weight: bold;"></div>
                 </div>
               </div>
               <div id="feedConfigPanel" class="feed-panel" style="display:none;">
@@ -15556,9 +17994,15 @@ function setScanning(isOn) {
       clearInterval(scanStatsInterval);
       scanStatsInterval = null;
     }
-    // Ẩn container số bài đã quét
-    const container = document.getElementById('scanStatsContainer');
-    if (container) container.style.display = 'none';
+    // Ẩn toast số bài đã quét
+    const scanToast = document.getElementById('scanStatsToast');
+    const progressToast = document.getElementById('progressToast');
+    if (scanToast) scanToast.style.display = 'none';
+    // Ẩn progressToast nếu cả 2 toast đều ẩn
+    const infoToast = document.getElementById('infoProgressToast');
+    if (progressToast && (!infoToast || infoToast.style.display === 'none')) {
+      progressToast.style.display = 'none';
+    }
   }
   // Thêm loading spinner cho nút bắt đầu quét
   if (startBtn) {
@@ -16653,9 +19097,15 @@ async function handleStopAll() {
     clearInterval(infoProgressInterval);
     infoProgressInterval = null;
   }
-  // Ẩn container tiến trình
-  const container = document.getElementById('infoProgressContainer');
-  if (container) container.style.display = 'none';
+  // Ẩn toast tiến trình
+  const infoToast = document.getElementById('infoProgressToast');
+  const progressToast = document.getElementById('progressToast');
+  if (infoToast) infoToast.style.display = 'none';
+  // Ẩn progressToast nếu cả 2 toast đều ẩn
+  const scanToast = document.getElementById('scanStatsToast');
+  if (progressToast && (!scanToast || scanToast.style.display === 'none')) {
+    progressToast.style.display = 'none';
+  }
   // stop-all có thể bấm từ left panel hoặc từ setting header
   const btns = [stopAllBtn, stopAllSettingBtn].filter(Boolean);
   btns.forEach((b) => setButtonLoading(b, true, 'Đang dừng tất cả...'));
@@ -16725,9 +19175,15 @@ async function handleStopSelectedProfiles() {
     clearInterval(infoProgressInterval);
     infoProgressInterval = null;
   }
-  // Ẩn container tiến trình
-  const container = document.getElementById('infoProgressContainer');
-  if (container) container.style.display = 'none';
+  // Ẩn toast tiến trình
+  const infoToast = document.getElementById('infoProgressToast');
+  const progressToast = document.getElementById('progressToast');
+  if (infoToast) infoToast.style.display = 'none';
+  // Ẩn progressToast nếu cả 2 toast đều ẩn
+  const scanToast = document.getElementById('scanStatsToast');
+  if (progressToast && (!scanToast || scanToast.style.display === 'none')) {
+    progressToast.style.display = 'none';
+  }
   console.log(`[UI] STOP selected profiles=${selected.join(',')}`);
   setButtonLoading(stopSelectedProfilesBtn, true, 'Đang dừng...');
 
@@ -18165,14 +20621,20 @@ async function updateScanStats() {
     if (!res || !res.stats) return;
     
     const stats = res.stats;
-    const container = document.getElementById('scanStatsContainer');
-    const list = document.getElementById('scanStatsList');
+    const toast = document.getElementById('scanStatsToast');
+    const list = document.getElementById('scanStatsToastList');
+    const progressToast = document.getElementById('progressToast');
     
-    if (!container || !list) return;
+    if (!toast || !list || !progressToast) return;
     
     const selected = getSelectedProfileIds();
     if (selected.length === 0 && Object.keys(stats).length === 0) {
-      container.style.display = 'none';
+      toast.style.display = 'none';
+      // Ẩn progressToast nếu cả 2 toast đều ẩn
+      const infoToast = document.getElementById('infoProgressToast');
+      if (!infoToast || infoToast.style.display === 'none') {
+        progressToast.style.display = 'none';
+      }
       return;
     }
     
@@ -18182,16 +20644,26 @@ async function updateScanStats() {
     let html = '';
     for (const pid of profilesToShow) {
       const count = stats[pid] || 0;
-      html += `<div style="margin: 4px 0; padding: 5px; background: white; border-radius: 3px;">
-        <strong>${pid}</strong> đã quét được <strong>${count}</strong> bài
+      html += `<div style="margin: 6px 0; padding: 12px; background: white; border-radius: 8px; border-left: 4px solid #667eea; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 20px;">📝</span>
+        <div style="flex: 1;">
+          <div style="font-weight: 600; color: #2d3748; font-size: 13px; margin-bottom: 2px;">${pid}</div>
+          <div style="color: #667eea; font-weight: bold; font-size: 16px;">Đã quét được ${count} bài</div>
+        </div>
       </div>`;
     }
     
     if (html) {
       list.innerHTML = html;
-      container.style.display = 'block';
+      toast.style.display = 'block';
+      progressToast.style.display = 'block';
     } else {
-      container.style.display = 'none';
+      toast.style.display = 'none';
+      // Ẩn progressToast nếu cả 2 toast đều ẩn
+      const infoToast = document.getElementById('infoProgressToast');
+      if (!infoToast || infoToast.style.display === 'none') {
+        progressToast.style.display = 'none';
+      }
     }
   } catch (e) {
     // Ignore errors
@@ -18204,19 +20676,39 @@ async function updateInfoProgress() {
     const res = await callBackendNoAlert('/info/progress', { method: 'GET' });
     if (!res) return;
     
-    const container = document.getElementById('infoProgressContainer');
-    const text = document.getElementById('infoProgressText');
+    const toast = document.getElementById('infoProgressToast');
+    const text = document.getElementById('infoProgressToastText');
+    const progressBar = document.getElementById('infoProgressToastBar');
+    const progressToast = document.getElementById('progressToast');
     
-    if (!container || !text) return;
+    if (!toast || !text || !progressToast) return;
     
     if (res.is_running && res.total > 0) {
       const current = res.current || 0;
       const total = res.total || 0;
       const file = res.current_file || '';
-      text.textContent = `Đã quét được ${current}/${total} bài${file ? ` (${file})` : ''}`;
-      container.style.display = 'block';
+      const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+      
+      text.textContent = `Đã xử lý ${current}/${total} bài${file ? ` • File: ${file}` : ''}`;
+      
+      // Cập nhật progress bar
+      if (progressBar) {
+        progressBar.style.width = `${percentage}%`;
+      }
+      
+      toast.style.display = 'block';
+      progressToast.style.display = 'block';
     } else {
-      container.style.display = 'none';
+      toast.style.display = 'none';
+      // Reset progress bar
+      if (progressBar) {
+        progressBar.style.width = '0%';
+      }
+      // Ẩn progressToast nếu cả 2 toast đều ẩn
+      const scanToast = document.getElementById('scanStatsToast');
+      if (!scanToast || scanToast.style.display === 'none') {
+        progressToast.style.display = 'none';
+      }
     }
   } catch (e) {
     // Ignore errors
@@ -18286,9 +20778,15 @@ async function runInfoCollector(mode = 'all') {
       clearInterval(infoProgressInterval);
       infoProgressInterval = null;
     }
-    // Ẩn container tiến trình
-    const container = document.getElementById('infoProgressContainer');
-    if (container) container.style.display = 'none';
+    // Ẩn toast tiến trình
+    const infoToast = document.getElementById('infoProgressToast');
+    const progressToast = document.getElementById('progressToast');
+    if (infoToast) infoToast.style.display = 'none';
+    // Ẩn progressToast nếu cả 2 toast đều ẩn
+    const scanToast = document.getElementById('scanStatsToast');
+    if (progressToast && (!scanToast || scanToast.style.display === 'none')) {
+      progressToast.style.display = 'none';
+    }
     // Giữ các nút pause/dừng enabled để user có thể bấm dừng
     // Chỉ reset flag khi user thực sự dừng hoặc hoàn thành
     // isInfoCollectorRunning sẽ được reset khi user bấm stop/pause

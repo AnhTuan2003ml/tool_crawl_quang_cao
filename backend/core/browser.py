@@ -8,6 +8,7 @@ import os
 import sys
 from core.settings import get_settings, SETTINGS_PATH
 from core import control as control_state
+from core.control import smart_sleep
 # ==============================================================================
 # JS TOOLS & HELPER FUNCTIONS
 # ==============================================================================
@@ -318,11 +319,11 @@ class FBController:
             if not share_btn:
                 print("⚠️ Không tìm thấy nút Share")
                 self.scroll_past_post(post_handle)
-                time.sleep(random.uniform(0.12, 0.13))
+                smart_sleep(random.uniform(0.12, 0.13), profile_id)
                 return False
 
             self.bring_element_into_view_smooth(share_btn)
-            self.page.wait_for_timeout(300)
+            smart_sleep(0.3, profile_id)  # 300ms = 0.3s
             share_btn.click()
 
             # Đợi bắt được payload URL
@@ -347,7 +348,7 @@ class FBController:
                                 raise
                             print(f"❌ Lỗi khi gọi get_id_from_url: {e}")
                     break
-                self.page.wait_for_timeout(150)
+                smart_sleep(0.15, profile_id)  # 150ms = 0.15s
 
             print("⚠️ Không lấy được Payload URL")
             self.page.keyboard.press("Escape")
@@ -441,7 +442,7 @@ class FBController:
                     # đang đứng trên ref / kết bạn / module rác
                     self.control_checkpoint("before_escape_wheel")
                     self.page.mouse.wheel(0, escape_step)
-                    time.sleep(random.uniform(0.12, 0.13))
+                    smart_sleep(random.uniform(0.12, 0.13), self.profile_id)
                     continue
 
                 # =========================
@@ -456,7 +457,7 @@ class FBController:
                         if any(keyword in error_msg for keyword in ["closed", "disconnected", "target page", "context or browser"]):
                             raise RuntimeError("BROWSER_CLOSED") from e
                         raise
-                    time.sleep(random.uniform(0.08, 0.15))
+                    smart_sleep(random.uniform(0.08, 0.15), self.profile_id)
                     continue
 
                 # =========================
@@ -507,7 +508,7 @@ class FBController:
             like_btn = element.query_selector(selector)
             if like_btn:
                 self.bring_element_into_view_smooth(like_btn)
-                time.sleep(0.5)
+                smart_sleep(0.5, self.profile_id)
                 self.control_checkpoint("before_like_click")
                 like_btn.click()
                 self.control_checkpoint("after_like_click")
@@ -703,7 +704,7 @@ class FBController:
             expanded = self.page.evaluate(JS_EXPAND_SCRIPT, post_handle)
             if expanded > 0:
                 print(f"📖 Đã mở {expanded} 'Xem thêm'")
-                time.sleep(1.2)
+                smart_sleep(1.2, self.profile_id)
 
             # 2. Check keyword (chung cho cả ads & thường)
             has_keyword = self.page.evaluate(
@@ -833,7 +834,7 @@ class FBController:
                 
                 # Cuộn mượt
                 self.page.mouse.wheel(0, scroll_distance)
-                time.sleep(0.5) # Chờ render lại
+                smart_sleep(0.5, self.profile_id)  # Chờ render lại
                 return True
             
             return True
@@ -869,12 +870,12 @@ class FBController:
                 step_dist = scroll_distance / steps
                 for _ in range(steps):
                     self.page.mouse.wheel(0, step_dist)
-                    time.sleep(0.1)
+                    smart_sleep(0.1, self.profile_id)
             else:
                 self.page.mouse.wheel(0, scroll_distance)
                 
             print(f"    -> 📉 Đã cuộn qua bài (height={int(post_height)}px)")
-            time.sleep(1) # Chờ bài mới load
+            smart_sleep(1.0, self.profile_id)  # Chờ bài mới load
 
         except Exception as e:
             print(f"⚠️ Lỗi scroll_past_post: {e}")

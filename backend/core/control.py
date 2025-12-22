@@ -314,3 +314,40 @@ def wait_if_paused(profile_id: Optional[str], sleep_seconds: float = 0.5) -> Non
         time.sleep(max(0.2, float(sleep_seconds)))
 
 
+def smart_sleep(seconds: float, profile_id: Optional[str] = None) -> None:
+    """
+    Sleep thông minh với khả năng STOP/PAUSE:
+    - Sleep theo chunk 0.5s
+    - Check STOP/PAUSE mỗi chunk
+    - Nếu STOP: raise RuntimeError("EMERGENCY_STOP") ngay lập tức
+    - Nếu PAUSE: block trong wait_if_paused và KHÔNG giảm remaining time
+    - Nếu NORMAL: sleep chunk và giảm remaining time
+    
+    Args:
+        seconds: Tổng số giây cần sleep
+        profile_id: Profile ID để check STOP/PAUSE (optional)
+    
+    Raises:
+        RuntimeError: Nếu bị STOP (message = "EMERGENCY_STOP")
+    """
+    remaining = float(seconds)
+    chunk = 0.5
+    pid = str(profile_id or "").strip() if profile_id else None
+    
+    while remaining > 0:
+        stop, paused, _reason = check_flags(pid)
+        
+        if stop:
+            raise RuntimeError("EMERGENCY_STOP")
+        
+        if paused:
+            # PAUSE: block trong wait_if_paused, KHÔNG giảm remaining time
+            wait_if_paused(pid, sleep_seconds=chunk)
+            continue
+        
+        # NORMAL: sleep chunk và giảm remaining time
+        sleep_time = min(chunk, remaining)
+        time.sleep(sleep_time)
+        remaining -= sleep_time
+
+

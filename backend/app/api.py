@@ -19,6 +19,7 @@ from core.settings import SETTINGS_PATH
 from core.nst import connect_profile, stop_profile, stop_all_browsers
 from core.browser import FBController
 from core import control as control_state
+from core.control import smart_sleep
 from core.scraper import SimpleBot
 from core.settings import get_settings
 from worker.get_all_info import get_all_info_from_post_ids_dir, get_info_for_profile_ids
@@ -196,135 +197,141 @@ def _run_bot_profile_loop(
     duration_seconds = max(1, run_m * 60)
     rest_seconds = max(1, rest_m * 60)
 
-    while True:
-        # STOP/PAUSE trước khi bắt đầu phiên
-        stop, paused, reason = control_state.check_flags(pid)
-        if stop:
-            print(f"🛑 [{pid}] STOP trước khi start loop ({reason})")
-            try:
-                control_state.set_profile_state(pid, "STOPPED")
-            except Exception:
-                pass
-            return
-        if paused:
-            print(f"⏸️ [{pid}] PAUSED trước khi start loop ({reason})")
-            control_state.wait_if_paused(pid, sleep_seconds=0.5)
-
-        fb: Optional[FBController] = None
-        try:
-            control_state.set_profile_state(pid, "RUNNING")
-        except Exception:
-            pass
-
-        try:
-            ws = connect_profile(pid)
-            fb = FBController(ws)
-            fb.profile_id = pid
-            # tuyệt đối độc lập: chỉ xử lý trong profile này
-            try:
-                fb.all_profile_ids = [pid]
-            except Exception:
-                pass
-            # filter text nếu có
-            try:
-                if t:
-                    parts = []
-                    for chunk in t.replace("\n", ",").split(","):
-                        s = " ".join(str(chunk).strip().split())
-                        if s:
-                            parts.append(s)
-                    seen = set()
-                    user_keywords = []
-                    for x in parts:
-                        k = x.lower()
-                        if k in seen:
-                            continue
-                        seen.add(k)
-                        user_keywords.append(x)
-                    fb.user_keywords = user_keywords
-            except Exception:
-                pass
-            fb.connect()
-            bot = SimpleBot(fb)
-            bot.run(target_url, duration=duration_seconds)
-        except RuntimeError as e:
-            # STOP/BROWSER_CLOSED => thoát phiên
-            if "EMERGENCY_STOP" in str(e) or "BROWSER_CLOSED" in str(e):
-                print(f"🛑 [{pid}] Dừng bot ({e})")
-            else:
-                raise
-        except Exception as e:
-            print(f"❌ Lỗi ở profile {pid}: {e}")
-            try:
-                control_state.set_profile_state(pid, "ERROR")
-            except Exception:
-                pass
-        finally:
-            # đóng playwright + NST profile best-effort
-            try:
-                if fb and getattr(fb, "page", None):
-                    try:
-                        fb.page.close()
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-            try:
-                if fb and getattr(fb, "browser", None) and getattr(fb.browser, "contexts", None):
-                    for ctx in list(fb.browser.contexts):
-                        try:
-                            ctx.close()
-                        except Exception:
-                            pass
-            except Exception:
-                pass
-            try:
-                if fb and getattr(fb, "browser", None):
-                    try:
-                        fb.browser.close()
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-            try:
-                if fb and getattr(fb, "play", None):
-                    try:
-                        fb.play.stop()
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-            try:
-                stop_profile(pid)
-            except Exception:
-                pass
-
-        # Check stop sau khi kết thúc phiên
-        stop, paused, reason = control_state.check_flags(pid)
-        if stop:
-            print(f"🛑 [{pid}] STOP sau phiên ({reason}) -> thoát loop")
-            try:
-                control_state.set_profile_state(pid, "STOPPED")
-            except Exception:
-                pass
-            return
-
-        # REST (độc lập theo profile) - pause freeze
-        slept = 0
-        while slept < rest_seconds:
+    try:
+        while True:
+            # STOP/PAUSE trước khi bắt đầu phiên
             stop, paused, reason = control_state.check_flags(pid)
             if stop:
-                print(f"🛑 [{pid}] STOP trong REST ({reason}) -> thoát")
+                print(f"🛑 [{pid}] STOP trước khi start loop ({reason})")
                 try:
                     control_state.set_profile_state(pid, "STOPPED")
                 except Exception:
                     pass
                 return
             if paused:
+                print(f"⏸️ [{pid}] PAUSED trước khi start loop ({reason})")
                 control_state.wait_if_paused(pid, sleep_seconds=0.5)
-                continue
-            time.sleep(1)
-            slept += 1
+
+            fb: Optional[FBController] = None
+            try:
+                control_state.set_profile_state(pid, "RUNNING")
+            except Exception:
+                pass
+
+            try:
+                ws = connect_profile(pid)
+                fb = FBController(ws)
+                fb.profile_id = pid
+                # tuyệt đối độc lập: chỉ xử lý trong profile này
+                try:
+                    fb.all_profile_ids = [pid]
+                except Exception:
+                    pass
+                # filter text nếu có
+                try:
+                    if t:
+                        parts = []
+                        for chunk in t.replace("\n", ",").split(","):
+                            s = " ".join(str(chunk).strip().split())
+                            if s:
+                                parts.append(s)
+                        seen = set()
+                        user_keywords = []
+                        for x in parts:
+                            k = x.lower()
+                            if k in seen:
+                                continue
+                            seen.add(k)
+                            user_keywords.append(x)
+                        fb.user_keywords = user_keywords
+                except Exception:
+                    pass
+                fb.connect()
+                bot = SimpleBot(fb)
+                bot.run(target_url, duration=duration_seconds)
+            except RuntimeError as e:
+                # STOP/BROWSER_CLOSED => thoát phiên
+                if "EMERGENCY_STOP" in str(e) or "BROWSER_CLOSED" in str(e):
+                    print(f"🛑 [{pid}] Dừng bot ({e})")
+                    return
+                raise
+            except Exception as e:
+                print(f"❌ Lỗi ở profile {pid}: {e}")
+                try:
+                    control_state.set_profile_state(pid, "ERROR")
+                except Exception:
+                    pass
+            finally:
+                # đóng playwright + NST profile best-effort
+                try:
+                    if fb and getattr(fb, "page", None):
+                        try:
+                            fb.page.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    if fb and getattr(fb, "browser", None) and getattr(fb.browser, "contexts", None):
+                        for ctx in list(fb.browser.contexts):
+                            try:
+                                ctx.close()
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                try:
+                    if fb and getattr(fb, "browser", None):
+                        try:
+                            fb.browser.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    if fb and getattr(fb, "play", None):
+                        try:
+                            fb.play.stop()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    stop_profile(pid)
+                except Exception:
+                    pass
+
+            # Check stop sau khi kết thúc phiên
+            stop, paused, reason = control_state.check_flags(pid)
+            if stop:
+                print(f"🛑 [{pid}] STOP sau phiên ({reason}) -> thoát loop")
+                try:
+                    control_state.set_profile_state(pid, "STOPPED")
+                except Exception:
+                    pass
+                return
+
+            # REST (độc lập theo profile) - pause freeze
+            try:
+                smart_sleep(rest_seconds, pid)
+            except RuntimeError as e:
+                if "EMERGENCY_STOP" in str(e):
+                    print(f"🛑 [{pid}] STOP trong REST -> thoát")
+                    try:
+                        control_state.set_profile_state(pid, "STOPPED")
+                    except Exception:
+                        pass
+                    return
+                raise
+    except RuntimeError as e:
+        if "EMERGENCY_STOP" in str(e):
+            print(f"🛑 [{pid}] EMERGENCY_STOP trong loop -> thoát")
+            try:
+                control_state.set_profile_state(pid, "STOPPED")
+            except Exception:
+                pass
+            return
+        raise
 
 
 def _run_join_groups_worker(profile_id: str, groups: list[str]) -> None:
@@ -357,38 +364,44 @@ def _run_feed_worker(
         if run_m <= 0:
             run_m = 30
 
-        while True:
-            # STOP/PAUSE checkpoint
-            stop, paused, reason = control_state.check_flags(profile_id)
-            if stop:
-                print(f"🛑 [FEED] {profile_id} EMERGENCY_STOP ({reason}) -> dừng worker")
-                break
-            if paused:
-                print(f"⏸️ [FEED] {profile_id} PAUSED ({reason}) -> sleep")
-                control_state.wait_if_paused(profile_id, sleep_seconds=0.5)
-
-            if m == "search":
-                search_and_like(profile_id, text or "", duration_minutes=run_m, all_profile_ids=all_profile_ids)
-            else:
-                feed_and_like(profile_id, text or "", duration_minutes=run_m, all_profile_ids=all_profile_ids)
-
-            if rest_m <= 0:
-                break
-
-            # nghỉ rồi chạy lại (process có thể bị terminate bởi stop-all)
-            import time as _t
-            # sleep theo chunk để vẫn dừng được ngay
-            slept = 0
-            while slept < rest_m * 60:
+        try:
+            while True:
+                # STOP/PAUSE checkpoint
                 stop, paused, reason = control_state.check_flags(profile_id)
                 if stop:
-                    print(f"🛑 [FEED] {profile_id} EMERGENCY_STOP trong sleep ({reason}) -> dừng")
-                    return
+                    print(f"🛑 [FEED] {profile_id} EMERGENCY_STOP ({reason}) -> dừng worker")
+                    break
                 if paused:
-                    _t.sleep(1)
-                    continue
-                _t.sleep(1)
-                slept += 1
+                    print(f"⏸️ [FEED] {profile_id} PAUSED ({reason}) -> sleep")
+                    control_state.wait_if_paused(profile_id, sleep_seconds=0.5)
+
+                try:
+                    if m == "search":
+                        search_and_like(profile_id, text or "", duration_minutes=run_m, all_profile_ids=all_profile_ids)
+                    else:
+                        feed_and_like(profile_id, text or "", duration_minutes=run_m, all_profile_ids=all_profile_ids)
+                except RuntimeError as e:
+                    if "EMERGENCY_STOP" in str(e):
+                        print(f"🛑 [FEED] {profile_id} EMERGENCY_STOP trong bot ({reason}) -> dừng")
+                        return
+                    raise
+
+                if rest_m <= 0:
+                    break
+
+                # nghỉ rồi chạy lại (pause freeze)
+                try:
+                    smart_sleep(rest_m * 60, profile_id)
+                except RuntimeError as e:
+                    if "EMERGENCY_STOP" in str(e):
+                        print(f"🛑 [FEED] {profile_id} EMERGENCY_STOP trong REST -> dừng")
+                        return
+                    raise
+        except RuntimeError as e:
+            if "EMERGENCY_STOP" in str(e):
+                print(f"🛑 [FEED] {profile_id} EMERGENCY_STOP trong loop -> dừng")
+                return
+            raise
     except Exception as exc:
         print(f"❌ Feed worker lỗi ({profile_id}): {exc}")
 

@@ -15,6 +15,7 @@ from core.nst import connect_profile
 from core.nst import stop_profile
 from core.browser import FBController
 from core import control as control_state
+from core.control import smart_sleep
 
 # Worker lấy page_id/post_id từ URL (dùng cookie theo profile_id trong settings.json)
 try:
@@ -164,7 +165,7 @@ class GroupJoiner(FBController):
         try:
             self.control_checkpoint("before_goto_group")
             self.goto(url)
-            time.sleep(random.uniform(3, 5)) # Chờ load trang
+            smart_sleep(random.uniform(3, 5), self.profile_id)  # Chờ load trang
 
             # 1. Kiểm tra xem đã tham gia chưa
             is_joined = self.page.query_selector('div[aria-label="Đã tham gia"], div[aria-label="Mời"]')
@@ -314,17 +315,13 @@ def run_batch_join_from_list(profile_id, group_ids):
             if idx < len(cleaned) - 1:
                 sleep_time = random.uniform(10, 20) 
                 print(f"💤 Nghỉ {sleep_time:.1f}s trước khi qua nhóm tiếp theo...")
-                # sleep theo chunk để vẫn stop/pause được ngay
-                slept = 0.0
-                while slept < sleep_time:
-                    stop, paused, reason = control_state.check_flags(profile_id)
-                    if stop:
-                        print(f"🛑 [JOIN] {profile_id} EMERGENCY_STOP trong sleep ({reason}) -> dừng")
-                        raise RuntimeError("EMERGENCY_STOP")
-                    if paused:
-                        control_state.wait_if_paused(profile_id, sleep_seconds=0.5)
-                    time.sleep(0.5)
-                    slept += 0.5
+                try:
+                    smart_sleep(sleep_time, profile_id)
+                except RuntimeError as e:
+                    if "EMERGENCY_STOP" in str(e):
+                        print(f"🛑 [JOIN] {profile_id} EMERGENCY_STOP trong sleep -> dừng")
+                        raise
+                    raise
             
     except Exception as e:
         print(f"❌ Lỗi kết nối/browser: {e}")
