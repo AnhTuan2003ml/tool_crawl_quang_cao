@@ -54,6 +54,8 @@ const pauseSelectedProfilesBtn = document.getElementById('pauseSelectedProfilesB
 const feedAccountSettingBtn = document.getElementById('feedAccountSettingBtn');
 const scanPostsSettingBtn = document.getElementById('scanPostsSettingBtn');
 const scanGroupSettingBtn = document.getElementById('scanGroupSettingBtn');
+const runAllInfoBtn = document.getElementById('runAllInfoBtn');
+const runSelectedInfoBtn = document.getElementById('runSelectedInfoBtn');
 const feedConfigPanel = document.getElementById('feedConfigPanel');
 const scanConfigPanel = document.getElementById('scanConfigPanel');
 const groupScanPanel = document.getElementById('groupScanPanel');
@@ -167,6 +169,20 @@ function setScanning(isOn) {
   if (!isOn) {
     setButtonLoading(scanStartBtn, false);
     setButtonLoading(scanPostsSettingBtn, false);
+    // Dừng poll số bài đã quét được
+    if (scanStatsInterval) {
+      clearInterval(scanStatsInterval);
+      scanStatsInterval = null;
+    }
+    // Ẩn toast số bài đã quét
+    const scanToast = document.getElementById('scanStatsToast');
+    const progressToast = document.getElementById('progressToast');
+    if (scanToast) scanToast.style.display = 'none';
+    // Ẩn progressToast nếu cả 2 toast đều ẩn
+    const infoToast = document.getElementById('infoProgressToast');
+    if (progressToast && (!infoToast || infoToast.style.display === 'none')) {
+      progressToast.style.display = 'none';
+    }
   }
   // Thêm loading spinner cho nút bắt đầu quét
   if (startBtn) {
@@ -277,25 +293,48 @@ function updateStopPauseButtonsByJobs() {
     || (Array.isArray(jobs && jobs.feed_running) && jobs.feed_running.length > 0)
   );
   const hasSelected = getSelectedProfileIds().length > 0;
+  
+  // Nếu đang chạy info collector thì luôn enable các nút pause/dừng
+  const shouldEnableButtons = sessionRunning || isInfoCollectorRunning;
 
   // Chỉ khi có tiến trình chạy mới cho bấm STOP/PAUSE
   const stopBtns = [stopBtn, stopAllSettingBtn].filter(Boolean);
   stopBtns.forEach((b) => {
     if (b.classList && b.classList.contains('btn-loading')) return;
-    b.disabled = !sessionRunning;
+    b.disabled = !shouldEnableButtons;
+    if (shouldEnableButtons) {
+      b.style.opacity = '1';
+      b.style.pointerEvents = 'auto';
+      b.style.cursor = 'pointer';
+    }
   });
 
   const pauseBtns = [pauseAllBtn].filter(Boolean);
   pauseBtns.forEach((b) => {
     if (b.classList && b.classList.contains('btn-loading')) return;
-    b.disabled = !sessionRunning;
+    b.disabled = !shouldEnableButtons;
+    if (shouldEnableButtons) {
+      b.style.opacity = '1';
+      b.style.pointerEvents = 'auto';
+      b.style.cursor = 'pointer';
+    }
   });
 
   if (pauseSelectedProfilesBtn && !pauseSelectedProfilesBtn.classList.contains('btn-loading')) {
-    pauseSelectedProfilesBtn.disabled = !sessionRunning || !hasSelected;
+    pauseSelectedProfilesBtn.disabled = !shouldEnableButtons || !hasSelected;
+    if (shouldEnableButtons && hasSelected) {
+      pauseSelectedProfilesBtn.style.opacity = '1';
+      pauseSelectedProfilesBtn.style.pointerEvents = 'auto';
+      pauseSelectedProfilesBtn.style.cursor = 'pointer';
+    }
   }
   if (stopSelectedProfilesBtn && !stopSelectedProfilesBtn.classList.contains('btn-loading')) {
-    stopSelectedProfilesBtn.disabled = !sessionRunning || !hasSelected;
+    stopSelectedProfilesBtn.disabled = !shouldEnableButtons || !hasSelected;
+    if (shouldEnableButtons && hasSelected) {
+      stopSelectedProfilesBtn.style.opacity = '1';
+      stopSelectedProfilesBtn.style.pointerEvents = 'auto';
+      stopSelectedProfilesBtn.style.cursor = 'pointer';
+    }
   }
 }
 
@@ -392,6 +431,7 @@ function updateSettingsActionButtons() {
     feedAccountSettingBtn,
     stopSelectedProfilesBtn,
     pauseSelectedProfilesBtn,
+    runSelectedInfoBtn,
   ].filter(Boolean);
 
   needSelectedBtns.forEach((b) => {
@@ -1209,9 +1249,6 @@ if (scanStartBtn) {
       return;
     }
 
-    // cho user thấy kết quả ngay ở tab danh sách quét
-    try { switchTab('scan'); } catch (_) { }
-
     setButtonLoading(scanStartBtn, true, 'Đang chạy...');
     setButtonLoading(scanPostsSettingBtn, true, 'Đang quét...');
     try {
@@ -1230,6 +1267,25 @@ if (scanStartBtn) {
 
 async function handleStopAll() {
   console.log('[UI] STOP ALL triggered');
+  // Reset flag info collector nếu đang chạy
+  isInfoCollectorRunning = false;
+  // Reset loading của các nút info collector
+  if (runAllInfoBtn) setButtonLoading(runAllInfoBtn, false);
+  if (runSelectedInfoBtn) setButtonLoading(runSelectedInfoBtn, false);
+  // Dừng poll tiến trình
+  if (infoProgressInterval) {
+    clearInterval(infoProgressInterval);
+    infoProgressInterval = null;
+  }
+  // Ẩn toast tiến trình
+  const infoToast = document.getElementById('infoProgressToast');
+  const progressToast = document.getElementById('progressToast');
+  if (infoToast) infoToast.style.display = 'none';
+  // Ẩn progressToast nếu cả 2 toast đều ẩn
+  const scanToast = document.getElementById('scanStatsToast');
+  if (progressToast && (!scanToast || scanToast.style.display === 'none')) {
+    progressToast.style.display = 'none';
+  }
   // stop-all có thể bấm từ left panel hoặc từ setting header
   const btns = [stopAllBtn, stopAllSettingBtn].filter(Boolean);
   btns.forEach((b) => setButtonLoading(b, true, 'Đang dừng tất cả...'));
@@ -1289,6 +1345,25 @@ async function handleStopSelectedProfiles() {
   if (!stopSelectedProfilesBtn) return;
   if (stopSelectedProfilesBtn.classList.contains('btn-loading')) return;
 
+  // Reset flag info collector nếu đang chạy
+  isInfoCollectorRunning = false;
+  // Reset loading của các nút info collector
+  if (runAllInfoBtn) setButtonLoading(runAllInfoBtn, false);
+  if (runSelectedInfoBtn) setButtonLoading(runSelectedInfoBtn, false);
+  // Dừng poll tiến trình
+  if (infoProgressInterval) {
+    clearInterval(infoProgressInterval);
+    infoProgressInterval = null;
+  }
+  // Ẩn toast tiến trình
+  const infoToast = document.getElementById('infoProgressToast');
+  const progressToast = document.getElementById('progressToast');
+  if (infoToast) infoToast.style.display = 'none';
+  // Ẩn progressToast nếu cả 2 toast đều ẩn
+  const scanToast = document.getElementById('scanStatsToast');
+  if (progressToast && (!scanToast || scanToast.style.display === 'none')) {
+    progressToast.style.display = 'none';
+  }
   console.log(`[UI] STOP selected profiles=${selected.join(',')}`);
   setButtonLoading(stopSelectedProfilesBtn, true, 'Đang dừng...');
 
@@ -2018,6 +2093,12 @@ async function startScanFlow(options = {}) {
     dataCheckInterval = setInterval(checkForNewData, checkInterval);
 
     setScanning(true);
+    
+    // Bắt đầu poll số bài đã quét được
+    if (scanStatsInterval) clearInterval(scanStatsInterval);
+    updateScanStats(); // Cập nhật ngay lập tức
+    scanStatsInterval = setInterval(updateScanStats, 3000); // Poll mỗi 3 giây
+    
     // Poll /jobs/status để sync UI nút dừng/tạm dừng + tự tắt khi backend dừng
     try { startScanBackendPoll({ silent: true }); } catch (_) { }
     try { updateStopPauseButtonsByJobs(); } catch (_) { }
@@ -2708,6 +2789,198 @@ if (timeFilterFrom) {
   });
 }
 
+// Flag để track khi đang chạy info collector
+let isInfoCollectorRunning = false;
+let scanStatsInterval = null;
+let infoProgressInterval = null;
+
+// Hàm để cập nhật số bài đã quét được
+async function updateScanStats() {
+  try {
+    const res = await callBackendNoAlert('/info/scan-stats', { method: 'GET' });
+    if (!res || !res.stats) return;
+    
+    const stats = res.stats;
+    const toast = document.getElementById('scanStatsToast');
+    const list = document.getElementById('scanStatsToastList');
+    const progressToast = document.getElementById('progressToast');
+    
+    if (!toast || !list || !progressToast) return;
+    
+    const selected = getSelectedProfileIds();
+    if (selected.length === 0 && Object.keys(stats).length === 0) {
+      toast.style.display = 'none';
+      // Ẩn progressToast nếu cả 2 toast đều ẩn
+      const infoToast = document.getElementById('infoProgressToast');
+      if (!infoToast || infoToast.style.display === 'none') {
+        progressToast.style.display = 'none';
+      }
+      return;
+    }
+    
+    // Chỉ hiển thị các profile đã chọn hoặc tất cả nếu không có profile nào được chọn
+    const profilesToShow = selected.length > 0 ? selected : Object.keys(stats);
+    
+    let html = '';
+    for (const pid of profilesToShow) {
+      const count = stats[pid] || 0;
+      html += `<div style="margin: 6px 0; padding: 12px; background: white; border-radius: 8px; border-left: 4px solid #667eea; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 20px;">📝</span>
+        <div style="flex: 1;">
+          <div style="font-weight: 600; color: #2d3748; font-size: 13px; margin-bottom: 2px;">${pid}</div>
+          <div style="color: #667eea; font-weight: bold; font-size: 16px;">Đã quét được ${count} bài</div>
+        </div>
+      </div>`;
+    }
+    
+    if (html) {
+      list.innerHTML = html;
+      toast.style.display = 'block';
+      progressToast.style.display = 'block';
+    } else {
+      toast.style.display = 'none';
+      // Ẩn progressToast nếu cả 2 toast đều ẩn
+      const infoToast = document.getElementById('infoProgressToast');
+      if (!infoToast || infoToast.style.display === 'none') {
+        progressToast.style.display = 'none';
+      }
+    }
+  } catch (e) {
+    // Ignore errors
+  }
+}
+
+// Hàm để cập nhật tiến trình lấy thông tin
+async function updateInfoProgress() {
+  try {
+    const res = await callBackendNoAlert('/info/progress', { method: 'GET' });
+    if (!res) return;
+    
+    const toast = document.getElementById('infoProgressToast');
+    const text = document.getElementById('infoProgressToastText');
+    const progressBar = document.getElementById('infoProgressToastBar');
+    const progressToast = document.getElementById('progressToast');
+    
+    if (!toast || !text || !progressToast) return;
+    
+    if (res.is_running && res.total > 0) {
+      const current = res.current || 0;
+      const total = res.total || 0;
+      const file = res.current_file || '';
+      const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+      
+      text.textContent = `Đã xử lý ${current}/${total} bài${file ? ` • File: ${file}` : ''}`;
+      
+      // Cập nhật progress bar
+      if (progressBar) {
+        progressBar.style.width = `${percentage}%`;
+      }
+      
+      toast.style.display = 'block';
+      progressToast.style.display = 'block';
+    } else {
+      toast.style.display = 'none';
+      // Reset progress bar
+      if (progressBar) {
+        progressBar.style.width = '0%';
+      }
+      // Ẩn progressToast nếu cả 2 toast đều ẩn
+      const scanToast = document.getElementById('scanStatsToast');
+      if (!scanToast || scanToast.style.display === 'none') {
+        progressToast.style.display = 'none';
+      }
+    }
+  } catch (e) {
+    // Ignore errors
+  }
+}
+
+async function runInfoCollector(mode = 'all') {
+  const isSelected = mode === 'selected';
+  const btn = isSelected ? runSelectedInfoBtn : runAllInfoBtn;
+  const selected = getSelectedProfileIds();
+
+  if (isSelected && selected.length === 0) {
+    showToast('Chọn (tick) ít nhất 1 profile trước.', 'error');
+    try { switchTab('settings'); } catch (_) { }
+    return;
+  }
+
+  // Đánh dấu đang chạy và enable các nút pause/dừng
+  isInfoCollectorRunning = true;
+  [pauseAllBtn, pauseSelectedProfilesBtn, stopAllSettingBtn, stopSelectedProfilesBtn].forEach((b) => {
+    if (b) {
+      b.disabled = false;
+      b.style.opacity = '1';
+      b.style.pointerEvents = 'auto';
+      b.style.cursor = 'pointer';
+    }
+  });
+
+  setButtonLoading(btn, true, 'Đang lấy thông tin...');
+  
+  // Bắt đầu poll tiến trình
+  if (infoProgressInterval) clearInterval(infoProgressInterval);
+  updateInfoProgress(); // Cập nhật ngay lập tức
+  infoProgressInterval = setInterval(updateInfoProgress, 2000); // Poll mỗi 2 giây
+  
+  try {
+    const body = { mode: isSelected ? 'selected' : 'all' };
+    if (isSelected) body.profiles = selected;
+    const res = await callBackend('/info/run', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    const summary = res && res.summary ? res.summary : null;
+    const msgParts = [];
+    msgParts.push(isSelected ? `Đã chạy cho ${body.profiles.length} profile` : 'Đã chạy lấy thông tin toàn bộ');
+    if (summary && typeof summary.total_posts_processed === 'number') {
+      msgParts.push(`posts: ${summary.total_posts_processed}`);
+    }
+    showToast(msgParts.join(' | '), 'success', 2200);
+  } catch (e) {
+    console.error('Error in runInfoCollector:', e);
+    // Kiểm tra nếu là lỗi "không có dữ liệu bài viết"
+    const errorMsg = (e?.message || e?.detail || String(e) || '').toLowerCase();
+    if (errorMsg.includes('không có dữ liệu bài viết') || 
+        errorMsg.includes('khong co du lieu bai viet') ||
+        errorMsg.includes('no data') ||
+        errorMsg.includes('empty')) {
+      showToast('Không có dữ liệu bài viết để xử lý', 'error', 4000);
+    } else {
+      const displayMsg = e?.message || e?.detail || 'Không chạy được lấy thông tin (check backend).';
+      showToast(displayMsg, 'error', 3000);
+    }
+  } finally {
+    setButtonLoading(btn, false);
+    // Dừng poll tiến trình
+    if (infoProgressInterval) {
+      clearInterval(infoProgressInterval);
+      infoProgressInterval = null;
+    }
+    // Ẩn toast tiến trình
+    const infoToast = document.getElementById('infoProgressToast');
+    const progressToast = document.getElementById('progressToast');
+    if (infoToast) infoToast.style.display = 'none';
+    // Ẩn progressToast nếu cả 2 toast đều ẩn
+    const scanToast = document.getElementById('scanStatsToast');
+    if (progressToast && (!scanToast || scanToast.style.display === 'none')) {
+      progressToast.style.display = 'none';
+    }
+    // Giữ các nút pause/dừng enabled để user có thể bấm dừng
+    // Chỉ reset flag khi user thực sự dừng hoặc hoàn thành
+    // isInfoCollectorRunning sẽ được reset khi user bấm stop/pause
+  }
+}
+
+if (runAllInfoBtn) {
+  runAllInfoBtn.addEventListener('click', () => runInfoCollector('all'));
+}
+
+if (runSelectedInfoBtn) {
+  runSelectedInfoBtn.addEventListener('click', () => runInfoCollector('selected'));
+}
+
 if (timeFilterTo) {
   timeFilterTo.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
@@ -2745,7 +3018,11 @@ function switchTab(key) {
   }
 }
 
-if (tabScanList) tabScanList.addEventListener('click', () => switchTab('scan'));
+if (tabScanList) tabScanList.addEventListener('click', (e) => {
+  // Chỉ chuyển tab khi người dùng thật sự bấm tab; không auto chuyển ở nơi khác
+  e.preventDefault();
+  switchTab('scan');
+});
 if (tabPostManager) tabPostManager.addEventListener('click', () => switchTab('post'));
 if (tabSettings) tabSettings.addEventListener('click', () => switchTab('settings'));
 

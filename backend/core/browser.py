@@ -490,6 +490,19 @@ class FBController:
             if already_liked:
                 print("⚠️ Bài này đã Like rồi -> Bỏ qua.")
                 return False
+            
+            # Like theo xác suất giống người dùng (giống search_worker.py):
+            # - Với mỗi bài "đúng", random 1 tỉ lệ trong khoảng 40%..60%
+            # - Sau đó roll để quyết định có Like hay không
+            p = random.uniform(0.40, 0.60)
+            roll = random.random()
+            should_like = roll < p
+            print(f"🎲 [LikeProb] p={p:.2f} roll={roll:.2f} -> {'LIKE' if should_like else 'SKIP'}")
+            
+            if not should_like:
+                print("⏭️ Skip Like theo xác suất random")
+                return False
+            
             selector = 'div[role="button"][aria-label="Thích"], div[role="button"][aria-label="Like"]'
             like_btn = element.query_selector(selector)
             if like_btn:

@@ -1,8 +1,23 @@
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import json
 import base64
 from urllib.parse import urlencode
 from datetime import datetime, timezone, timedelta
+
+# Import control state để check stop/pause
+try:
+    from backend.core.control import check_flags, wait_if_paused
+except ImportError:
+    try:
+        from core.control import check_flags, wait_if_paused
+    except ImportError:
+        # Fallback: nếu không import được thì dùng dummy functions
+        def check_flags(profile_id=None):
+            return False, False, ""
+        def wait_if_paused(profile_id=None, sleep_seconds=0.5):
+            pass
 
 # ====== LƯU Ý ======
 # Cookies và payload được lấy từ cookies.json và payload.txt thông qua profile_id
@@ -153,7 +168,7 @@ def send_request(post_id, payload_dict, profile_id, cookies, commentsAfterCursor
     # Tạo headers với cookies
     headers = {
         "accept": "*/*",
-        "accept-encoding": "gzip, deflate, br",
+        "accept-encoding": "gzip, deflate",
         "accept-language": "en,vi;q=0.9,en-US;q=0.8",
         "content-type": "application/x-www-form-urlencoded",
         "cookie": cookies,
@@ -174,8 +189,20 @@ def send_request(post_id, payload_dict, profile_id, cookies, commentsAfterCursor
 
     url = "https://www.facebook.com/api/graphql/"
     
+    # Session với retry để hạn chế timeout/connection reset
+    session = requests.Session()
+    retry_cfg = Retry(
+        total=2,
+        backoff_factor=0.5,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["POST"],
+    )
+    adapter = HTTPAdapter(max_retries=retry_cfg)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+
     # Gửi payload dưới dạng form-urlencoded với headers
-    response = requests.post(url, data=payload, headers=headers)
+    response = session.post(url, data=payload, headers=headers, timeout=20)
     
     return response
 
@@ -212,6 +239,22 @@ def get_all_comments_by_post_id(post_id, payload_dict, profile_id, cookies):
     page_number = 1
     
     while True:
+        # Check stop/pause trước mỗi request
+        try:
+            stop, paused, reason = check_flags(profile_id)
+            if stop:
+                print(f"🛑 Dừng lấy comments do stop: {reason}")
+                raise RuntimeError(f"EMERGENCY_STOP ({reason})")
+            if paused:
+                print(f"⏸️ Đang tạm dừng ({reason}), chờ tiếp tục...")
+                wait_if_paused(profile_id, sleep_seconds=0.5)
+                continue  # Tiếp tục check sau khi resume
+        except RuntimeError:
+            raise  # Re-raise RuntimeError để caller có thể catch
+        except Exception as e:
+            print(f"⚠️ Lỗi khi check stop/pause: {e}")
+            # Tiếp tục nếu có lỗi check
+        
         print(f"\n📄 Trang {page_number} - Đang gửi request...")
         if commentsAfterCursor:
             print(f"   CommentsAfterCursor: {commentsAfterCursor[:50]}...")
@@ -431,11 +474,13 @@ if __name__ == "__main__":
     # Ví dụ sử dụng hàm hoàn chỉnh với vòng lặp tự động
     from get_payload import get_payload_by_profile_id, get_cookies_by_profile_id
     
-    profile_id = "621e1f5d-0c42-481e-9ddd-7abaafce68ed"
+    profile_id = "b77da63d-af55-43c2-ab7f-364250b20e30"
     payload_dict = get_payload_by_profile_id(profile_id)
     cookies = get_cookies_by_profile_id(profile_id)
     
     if payload_dict and cookies:
-        post_id = "122147112686818981"  # Thay đổi Post ID ở đây
+        post_id = "2672966333102287"  # Thay đổi Post ID ở đây
         comments = get_all_comments_by_post_id(post_id, payload_dict, profile_id, cookies)
+        with open("comments.json", "w", encoding="utf-8") as f:
+            json.dump(comments, f, ensure_ascii=False, indent=4)
 

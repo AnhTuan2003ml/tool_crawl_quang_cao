@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from fastapi.concurrency import run_in_threadpool
 
 from core.settings import SETTINGS_PATH
 from core.nst import connect_profile, stop_profile, stop_all_browsers
@@ -20,8 +21,13 @@ from core.browser import FBController
 from core import control as control_state
 from core.scraper import SimpleBot
 from core.settings import get_settings
+from worker.get_all_info import get_all_info_from_post_ids_dir, get_info_for_profile_ids
 
 app = FastAPI(title="NST Tool API", version="1.0.0")
+class InfoRunRequest(BaseModel):
+    mode: str = "all"  # "all" hoặc "selected"
+    profiles: list[str] | None = None
+
 
 # Cho phép frontend (file tĩnh) gọi API qua localhost
 app.add_middleware(
@@ -1239,6 +1245,100 @@ def stop_all_jobs() -> dict:
     """
     # Legacy endpoint: vẫn map về hard stop (fresh start) cho đúng spec mới
     return _hard_stop_everything(reason="/jobs/stop-all")
+
+
+# ==============================================================================
+# INFO COLLECTOR (get_all_info_from_post_ids_dir)
+# ==============================================================================
+
+@app.post("/info/run")
+async def run_info_collector(payload: InfoRunRequest = Body(...)) -> dict:
+    """
+    Trigger lấy thông tin reactions/comments:
+      - mode="all": chạy toàn bộ post_ids dir (giống CLI hiện tại)
+      - mode="selected": chỉ chạy các profile_id truyền trong payload.profiles
+    """
+    mode = (payload.mode or "all").lower()
+    try:
+        if mode == "selected":
+            profiles = payload.profiles or []
+            if not profiles:
+                raise HTTPException(status_code=400, detail="profiles is required when mode=selected")
+            summary = await run_in_threadpool(get_info_for_profile_ids, profiles)
+        else:
+            summary = await run_in_threadpool(get_all_info_from_post_ids_dir)
+        return {"status": "ok", "mode": mode, "summary": summary}
+    except ValueError as e:
+        # Nếu không có dữ liệu bài viết thì trả về message rõ ràng
+        error_msg = str(e)
+        if "không có dữ liệu bài viết" in error_msg.lower():
+            raise HTTPException(status_code=400, detail="Không có dữ liệu bài viết để xử lý")
+        raise HTTPException(status_code=400, detail=error_msg)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/info/scan-stats")
+def get_scan_stats() -> dict:
+    """
+    Lấy số bài đã quét được cho từng profile_id từ các file JSON trong data/post_ids/
+    """
+    from pathlib import Path
+    import json
+    import os
+    
+    BASE_DIR = Path(__file__).resolve().parents[1]
+    POST_IDS_DIR = BASE_DIR / "data" / "post_ids"
+    
+    stats = {}
+    
+    if not POST_IDS_DIR.exists():
+        return {"stats": stats}
+    
+    json_files = list(POST_IDS_DIR.glob("*.json"))
+    for file_path in json_files:
+        profile_id = file_path.stem  # Lấy tên file không có extension
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    count = len(data)
+                else:
+                    count = 0
+                stats[profile_id] = count
+        except Exception:
+            stats[profile_id] = 0
+    
+    return {"stats": stats}
+
+
+@app.get("/info/progress")
+def get_info_progress() -> dict:
+    """
+    Lấy tiến trình khi đang lấy thông tin (số bài đã xử lý / tổng số bài)
+    """
+    try:
+        from worker.get_all_info import INFO_PROGRESS
+    except ImportError:
+        try:
+            from backend.worker.get_all_info import INFO_PROGRESS
+        except ImportError:
+            # Fallback nếu không import được
+            INFO_PROGRESS = {
+                "is_running": False,
+                "current": 0,
+                "total": 0,
+                "current_file": "",
+            }
+    
+    return {
+        "is_running": INFO_PROGRESS.get("is_running", False),
+        "current": INFO_PROGRESS.get("current", 0),
+        "total": INFO_PROGRESS.get("total", 0),
+        "current_file": INFO_PROGRESS.get("current_file", ""),
+    }
 
 
 # ==============================================================================

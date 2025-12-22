@@ -1,10 +1,25 @@
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import json
 import base64
 from urllib.parse import urlencode
 import os
 from datetime import datetime
 from pathlib import Path
+
+# Import control state để check stop/pause
+try:
+    from backend.core.control import check_flags, wait_if_paused
+except ImportError:
+    try:
+        from core.control import check_flags, wait_if_paused
+    except ImportError:
+        # Fallback: nếu không import được thì dùng dummy functions
+        def check_flags(profile_id=None):
+            return False, False, ""
+        def wait_if_paused(profile_id=None, sleep_seconds=0.5):
+            pass
 
 # ====== LƯU Ý ======
 # Cookies và payload được lấy từ cookies.json và payload.txt thông qua profile_id
@@ -64,34 +79,41 @@ def send_request(feedback_target_id, payload_dict, profile_id, cookies, cursor=N
     # Tạo headers với cookies
     headers = {
         "accept": "*/*",
-        "accept-encoding": "gzip, deflate, br, zstd",
+        "accept-encoding": "gzip, deflate",
         "accept-language": "en,vi;q=0.9,en-US;q=0.8",
         "content-type": "application/x-www-form-urlencoded",
         "cookie": cookies,
         "origin": "https://www.facebook.com",
         "priority": "u=1, i",
         "referer": "https://www.facebook.com/photo/?fbid=965661036626847&set=a.777896542069965",
-        "sec-ch-prefers-color-scheme": "light",
         "sec-ch-ua": '"Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
-        "sec-ch-ua-full-version-list": '"Google Chrome";v="143.0.7499.41", "Chromium";v="143.0.7499.41", "Not A(Brand";v="24.0.0.0"',
         "sec-ch-ua-mobile": "?0",
-        "sec-ch-ua-model": "",
         "sec-ch-ua-platform": '"Windows"',
-        "sec-ch-ua-platform-version": "10.0.0",
         "sec-fetch-dest": "empty",
         "sec-fetch-mode": "cors",
         "sec-fetch-site": "same-origin",
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
         "x-asbd-id": "359341",
-        # prefer fb_api_req_friendly_name set on payload_dict; fallback to common name
-        "x-fb-friendly-name": payload_dict.get("fb_api_req_friendly_name", "CometUFIReactionsCountTooltipContentQuery"),
+        "x-fb-friendly-name": "CommentListComponentsRootQuery",
         "x-fb-lsd": payload_dict.get("lsd", "")
     }
 
     url = "https://www.facebook.com/api/graphql/"
     
+    # Chuẩn bị session với retry để giảm timeout/connection reset
+    session = requests.Session()
+    retry_cfg = Retry(
+        total=2,
+        backoff_factor=0.5,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["POST"],
+    )
+    adapter = HTTPAdapter(max_retries=retry_cfg)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+
     # Gửi payload dưới dạng form-urlencoded với headers
-    response = requests.post(url, data=payload, headers=headers)
+    response = session.post(url, data=payload, headers=headers, timeout=20)
     
     return response
 
@@ -127,6 +149,22 @@ def get_all_users_by_fid(fid, payload_dict, profile_id, cookies):
     duplicate_count = 0  # Đếm số user trùng đã bỏ qua
     
     while True:
+        # Check stop/pause trước mỗi request
+        try:
+            stop, paused, reason = check_flags(profile_id)
+            if stop:
+                print(f"🛑 Dừng lấy reactions do stop: {reason}")
+                raise RuntimeError(f"EMERGENCY_STOP ({reason})")
+            if paused:
+                print(f"⏸️ Đang tạm dừng ({reason}), chờ tiếp tục...")
+                wait_if_paused(profile_id, sleep_seconds=0.5)
+                continue  # Tiếp tục check sau khi resume
+        except RuntimeError:
+            raise  # Re-raise RuntimeError để caller có thể catch
+        except Exception as e:
+            print(f"⚠️ Lỗi khi check stop/pause: {e}")
+            # Tiếp tục nếu có lỗi check
+        
         print(f"\n📄 Trang {page_number} - Đang gửi request...")
         if cursor:
             print(f"   Cursor: {cursor[:50]}...")
@@ -139,18 +177,7 @@ def get_all_users_by_fid(fid, payload_dict, profile_id, cookies):
         # Decode response text for inspection (no file saving)
         saved_text = ""
         content_encoding = (response.headers.get("content-encoding") or "").lower()
-        if "zstd" in content_encoding:
-            try:
-                import zstandard as zstd
-                saved_text = zstd.ZstdDecompressor().decompress(response.content).decode("utf-8", errors="replace")
-            except Exception as e:
-                print(f"   ⚠️ Zstd decompress failed: {e}")
-                # fallback to generic decode
-                try:
-                    saved_text = (response.content or b"").decode("utf-8", errors="replace")
-                except Exception:
-                    saved_text = ""
-        elif "br" in content_encoding:
+        if "br" in content_encoding:
             try:
                 import brotli
                 saved_text = brotli.decompress(response.content).decode("utf-8", errors="replace")
@@ -161,6 +188,7 @@ def get_all_users_by_fid(fid, payload_dict, profile_id, cookies):
                 except Exception:
                     saved_text = ""
         else:
+            # rely on requests to handle gzip/deflate; fall back to manual decode
             try:
                 saved_text = response.text or ""
             except Exception:
@@ -269,10 +297,24 @@ def get_all_users_by_fid(fid, payload_dict, profile_id, cookies):
             print(f"   Chi tiết: {e}")
             # Attempt to extract dynamic payload values (fb_dtsg, lsd, __spin_r, __spin_t)
             try:
-                from get_payload import ensure_payload_from_bad_response, get_payload_by_profile_id
-                print("ℹ️ Thực hiện headless capture để lấy các giá trị động và cập nhật settings.json...")
-                ensure_payload_from_bad_response(profile_id, cookies, response_text=saved_text, timeout=8)
-                # Rebuild payload_dict from updated settings and retry once
+                from get_payload import ensure_payload_from_bad_response, get_payload_by_profile_id, update_payload_file
+                print("ℹ️ Thực hiện headless capture để lấy các giá trị động và cập nhật settings.json/payload.txt...")
+                payload_values = ensure_payload_from_bad_response(profile_id, cookies, response_text=saved_text, timeout=8)
+                if not payload_values:
+                    print("❌ Headless capture không trả về giá trị nào, dừng.")
+                    break
+
+                # Update payload.txt with discovered dynamic values
+                try:
+                    updated = update_payload_file(payload_values)
+                    if updated:
+                        print("✅ Đã cập nhật backend/config/payload.txt từ headless capture")
+                    else:
+                        print("⚠️ Không thể cập nhật backend/config/payload.txt từ headless capture")
+                except Exception as e_up:
+                    print(f"⚠️ Lỗi khi cập nhật payload.txt: {e_up}")
+
+                # Rebuild payload_dict from updated payload.txt / settings.json and retry once
                 payload_dict = get_payload_by_profile_id(profile_id)
                 if payload_dict:
                     print("ℹ️ Thử gửi lại request sau khi cập nhật payload...")
@@ -285,7 +327,7 @@ def get_all_users_by_fid(fid, payload_dict, profile_id, cookies):
                         print(f"❌ Retry vẫn không trả về JSON hợp lệ: {e2}")
                         break
                 else:
-                    print("❌ Không thể tạo payload mới từ settings.json, dừng.")
+                    print("❌ Không thể tạo payload mới từ payload.txt/settings.json, dừng.")
                     break
             except Exception as ee:
                 print(f"⚠️ Lỗi khi cố gắng fix bằng headless: {ee}")
@@ -423,7 +465,7 @@ if __name__ == "__main__":
     # Ví dụ sử dụng hàm hoàn chỉnh với vòng lặp tự động
     from get_payload import get_payload_by_profile_id, get_cookies_by_profile_id
     
-    profile_id = "621e1f5d-0c42-481e-9ddd-7abaafce68ed"
+    profile_id = "b77da63d-af55-43c2-ab7f-364250b20e30"
     payload_dict = get_payload_by_profile_id(profile_id)
     cookies = get_cookies_by_profile_id(profile_id)
     

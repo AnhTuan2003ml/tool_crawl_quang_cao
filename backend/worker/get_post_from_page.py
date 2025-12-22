@@ -364,8 +364,8 @@ if __name__ == "__main__":
     import os
     
     # Ví dụ sử dụng
-    profile_id = "031ca13d-e8fa-400c-a603-df57a2806788"
-    page_id = "987870664956102"
+    profile_id = "b77da63d-af55-43c2-ab7f-364250b20e30"
+    page_id = "445142479459290"
     
     # Lấy posts với điều kiện thời gian (theo múi giờ Việt Nam)
     start_date = "2025-12-8"  # Ngày bắt đầu (sẽ tự động đặt 00:00:00 VN = 17:00:00 UTC ngày hôm trước)

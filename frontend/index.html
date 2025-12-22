@@ -21,6 +21,36 @@
 
   <div class="container">
     <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+    <!-- Toast thông báo tiến trình và số bài đã quét -->
+    <div id="progressToast" style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10000; max-width: 600px; width: 90%; display: none;">
+      <!-- Toast tiến trình lấy thông tin -->
+      <div id="infoProgressToast" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); padding: 20px; margin-bottom: 12px; border: 2px solid #5a67d8; position: relative; overflow: hidden; display: none;">
+        <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);"></div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 45px; height: 45px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;">
+            ⚡
+          </div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: bold; color: white; font-size: 16px; margin-bottom: 6px;">Đang lấy thông tin</div>
+            <div id="infoProgressToastText" style="color: rgba(255,255,255,0.9); font-size: 14px; margin-bottom: 8px;"></div>
+            <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.2); border-radius: 4px; overflow: hidden;">
+              <div id="infoProgressToastBar" style="height: 100%; background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%); border-radius: 4px; transition: width 0.3s ease; width: 0%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Toast số bài đã quét được -->
+      <div id="scanStatsToast" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); padding: 20px; border: 2px solid #5a67d8; position: relative; overflow: hidden; display: none;">
+        <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);"></div>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+          <div style="width: 45px; height: 45px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;">
+            📊
+          </div>
+          <div style="font-weight: bold; color: white; font-size: 16px;">Số bài đã quét được</div>
+        </div>
+        <div id="scanStatsToastList" style="background: rgba(255,255,255,0.95); padding: 12px; border-radius: 8px; max-height: 200px; overflow-y: auto;"></div>
+      </div>
+    </div>
     <header class="header">
       <div class="header-content">
         <h1>HỆ THỐNG ADS FACEBOOK</h1>
@@ -221,6 +251,8 @@
                   <p class="muted">Thêm profile_id và thao tác nhanh</p>
                 </div>
                 <div class="setting-card-actions">
+                  <button id="runAllInfoBtn" class="btn-primary" type="button">Lấy thông tin toàn bộ</button>
+                  <button id="runSelectedInfoBtn" class="btn-secondary" type="button">Lấy thông tin profile đã chọn</button>
                   <button id="scanPostsSettingBtn" class="btn-success" type="button">Quét bài viết</button>
                   <button id="scanGroupSettingBtn" class="btn-yellow" type="button">Quét theo group</button>
                   <button id="autoJoinGroupBtn" class="btn-primary" type="button">Tự động tham gia group</button>

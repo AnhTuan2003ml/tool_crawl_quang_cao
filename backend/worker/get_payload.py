@@ -100,7 +100,7 @@ def get_base_headers(cookie):
     """
     return {
         "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-        "accept-encoding": "gzip, deflate, br",
+        "accept-encoding": "gzip, deflate",
         "accept-language": "en,vi;q=0.9,en-US;q=0.8",
         "cookie": cookie,
         "referer": "https://www.facebook.com/",
