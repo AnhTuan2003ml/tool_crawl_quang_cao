@@ -125,6 +125,7 @@ if __name__ == "__main__":
 
 --- START FILE: backend\app\api.py ---
 from multiprocessing import Process
+import time
 from typing import Optional, Any, Dict
 from pathlib import Path
 import json
@@ -132,17 +133,19 @@ import os
 import tempfile
 import threading
 import re
+from urllib.parse import quote_plus
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from core.runner import AppRunner
 from core.settings import SETTINGS_PATH
 from core.nst import connect_profile, stop_profile, stop_all_browsers
 from core.browser import FBController
 from core import control as control_state
+from core.scraper import SimpleBot
+from core.settings import get_settings
 
 app = FastAPI(title="NST Tool API", version="1.0.0")
 
@@ -155,13 +158,293 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Biến toàn cục giữ tiến trình đang chạy AppRunner
-runner_process: Optional[Process] = None
+# Bot processes (mỗi profile 1 process độc lập RUN/REST)
+_bot_lock = threading.Lock()
+_bot_processes: Dict[str, Process] = {}
 _settings_lock = threading.Lock()
 _join_groups_lock = threading.Lock()
 _join_groups_processes: Dict[str, Process] = {}
 _feed_lock = threading.Lock()
 _feed_processes: Dict[str, Process] = {}
+
+
+def _hard_stop_everything(reason: str = "") -> dict:
+    """
+    STOP kiểu "fresh start":
+    - Signal STOP ngay (set_global_emergency_stop=True) để các loop thoát nếu còn sống
+    - Đóng toàn bộ NST browser
+    - Terminate runner/join/feed processes (đóng hẳn, không giữ sleep)
+    - Reset runtime_control.json về mặc định (SẴN SÀNG)
+    """
+    global _bot_processes
+
+    print("=" * 60)
+    print(f"🛑 [HARD_STOP] {reason}".strip())
+    print("=" * 60)
+
+    # 1) Signal STOP
+    try:
+        control_state.set_global_emergency_stop(True)
+    except Exception:
+        pass
+
+    # 2) Close all NST browsers
+    nst_ok = False
+    nst_err = None
+    try:
+        nst_ok = bool(stop_all_browsers())
+    except Exception as e:
+        nst_err = str(e)
+        print(f"⚠️ stop_all_browsers lỗi: {e}")
+
+    # 3) Kill bot processes
+    bot_killed: list[str] = []
+    try:
+        with _bot_lock:
+            for pid, proc in list(_bot_processes.items()):
+                try:
+                    if proc and proc.is_alive():
+                        proc.terminate()
+                        proc.join(timeout=3)
+                        bot_killed.append(pid)
+                except Exception:
+                    pass
+                _bot_processes.pop(pid, None)
+    except Exception:
+        pass
+
+    # 4) Kill join groups processes
+    join_killed: list[str] = []
+    try:
+        with _join_groups_lock:
+            _prune_join_group_processes()
+            for pid, proc in list(_join_groups_processes.items()):
+                try:
+                    if proc and proc.is_alive():
+                        proc.terminate()
+                        proc.join(timeout=3)
+                        join_killed.append(pid)
+                except Exception:
+                    pass
+                _join_groups_processes.pop(pid, None)
+    except Exception:
+        pass
+
+    # 5) Kill feed processes
+    feed_killed: list[str] = []
+    try:
+        with _feed_lock:
+            _prune_feed_processes()
+            for pid, proc in list(_feed_processes.items()):
+                try:
+                    if proc and proc.is_alive():
+                        proc.terminate()
+                        proc.join(timeout=3)
+                        feed_killed.append(pid)
+                except Exception:
+                    pass
+                _feed_processes.pop(pid, None)
+    except Exception:
+        pass
+
+    # 6) Reset runtime state về mặc định (để lần sau bấm chạy là "mới hoàn toàn")
+    try:
+        control_state.reset_all_state()
+    except Exception:
+        # fallback: ít nhất clear emergency stop để UI không bị kẹt
+        try:
+            control_state.reset_emergency_stop(clear_stopped_profiles=True)
+        except Exception:
+            pass
+
+    return {
+        "status": "ok",
+        "nst_stop_all_ok": nst_ok,
+        "nst_error": nst_err,
+        "bot_killed": bot_killed,
+        "join_killed": join_killed,
+        "feed_killed": feed_killed,
+    }
+
+
+def _prune_bot_processes() -> None:
+    dead = []
+    for pid, proc in list(_bot_processes.items()):
+        try:
+            if not proc.is_alive():
+                dead.append(pid)
+        except Exception:
+            dead.append(pid)
+    for pid in dead:
+        _bot_processes.pop(pid, None)
+
+
+def _run_bot_profile_loop(
+    profile_id: str,
+    run_minutes: int,
+    rest_minutes: int,
+    text: str,
+    mode: str,
+) -> None:
+    """
+    Worker độc lập cho 1 profile:
+    - chạy RUN_MINUTES (active time, pause freeze)
+    - ngủ REST_MINUTES (pause freeze)
+    - lặp lại cho tới khi STOP (global hoặc stop theo profile)
+    """
+    pid = str(profile_id or "").strip()
+    if not pid:
+        return
+
+    cfg = get_settings()
+    target_url = cfg.target_url
+    m = str(mode or "feed").strip().lower()
+    if m not in ("feed", "search"):
+        m = "feed"
+    t = str(text or "").strip()
+    if m == "search" and t:
+        q = quote_plus(t)
+        target_url = f"https://www.facebook.com/search/posts/?q={q}"
+
+    run_m = int(run_minutes or 0)
+    rest_m = int(rest_minutes or 0)
+    if run_m <= 0:
+        run_m = int(getattr(cfg, "run_minutes", 30) or 30)
+    if rest_m <= 0:
+        rest_m = int(getattr(cfg, "rest_minutes", 120) or 120)
+
+    duration_seconds = max(1, run_m * 60)
+    rest_seconds = max(1, rest_m * 60)
+
+    while True:
+        # STOP/PAUSE trước khi bắt đầu phiên
+        stop, paused, reason = control_state.check_flags(pid)
+        if stop:
+            print(f"🛑 [{pid}] STOP trước khi start loop ({reason})")
+            try:
+                control_state.set_profile_state(pid, "STOPPED")
+            except Exception:
+                pass
+            return
+        if paused:
+            print(f"⏸️ [{pid}] PAUSED trước khi start loop ({reason})")
+            control_state.wait_if_paused(pid, sleep_seconds=0.5)
+
+        fb: Optional[FBController] = None
+        try:
+            control_state.set_profile_state(pid, "RUNNING")
+        except Exception:
+            pass
+
+        try:
+            ws = connect_profile(pid)
+            fb = FBController(ws)
+            fb.profile_id = pid
+            # tuyệt đối độc lập: chỉ xử lý trong profile này
+            try:
+                fb.all_profile_ids = [pid]
+            except Exception:
+                pass
+            # filter text nếu có
+            try:
+                if t:
+                    parts = []
+                    for chunk in t.replace("\n", ",").split(","):
+                        s = " ".join(str(chunk).strip().split())
+                        if s:
+                            parts.append(s)
+                    seen = set()
+                    user_keywords = []
+                    for x in parts:
+                        k = x.lower()
+                        if k in seen:
+                            continue
+                        seen.add(k)
+                        user_keywords.append(x)
+                    fb.user_keywords = user_keywords
+            except Exception:
+                pass
+            fb.connect()
+            bot = SimpleBot(fb)
+            bot.run(target_url, duration=duration_seconds)
+        except RuntimeError as e:
+            # STOP/BROWSER_CLOSED => thoát phiên
+            if "EMERGENCY_STOP" in str(e) or "BROWSER_CLOSED" in str(e):
+                print(f"🛑 [{pid}] Dừng bot ({e})")
+            else:
+                raise
+        except Exception as e:
+            print(f"❌ Lỗi ở profile {pid}: {e}")
+            try:
+                control_state.set_profile_state(pid, "ERROR")
+            except Exception:
+                pass
+        finally:
+            # đóng playwright + NST profile best-effort
+            try:
+                if fb and getattr(fb, "page", None):
+                    try:
+                        fb.page.close()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            try:
+                if fb and getattr(fb, "browser", None) and getattr(fb.browser, "contexts", None):
+                    for ctx in list(fb.browser.contexts):
+                        try:
+                            ctx.close()
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+            try:
+                if fb and getattr(fb, "browser", None):
+                    try:
+                        fb.browser.close()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            try:
+                if fb and getattr(fb, "play", None):
+                    try:
+                        fb.play.stop()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            try:
+                stop_profile(pid)
+            except Exception:
+                pass
+
+        # Check stop sau khi kết thúc phiên
+        stop, paused, reason = control_state.check_flags(pid)
+        if stop:
+            print(f"🛑 [{pid}] STOP sau phiên ({reason}) -> thoát loop")
+            try:
+                control_state.set_profile_state(pid, "STOPPED")
+            except Exception:
+                pass
+            return
+
+        # REST (độc lập theo profile) - pause freeze
+        slept = 0
+        while slept < rest_seconds:
+            stop, paused, reason = control_state.check_flags(pid)
+            if stop:
+                print(f"🛑 [{pid}] STOP trong REST ({reason}) -> thoát")
+                try:
+                    control_state.set_profile_state(pid, "STOPPED")
+                except Exception:
+                    pass
+                return
+            if paused:
+                control_state.wait_if_paused(pid, sleep_seconds=0.5)
+                continue
+            time.sleep(1)
+            slept += 1
 
 
 def _run_join_groups_worker(profile_id: str, groups: list[str]) -> None:
@@ -315,15 +598,7 @@ class RunRequest(BaseModel):
     mode: Optional[str] = None
 
 
-def _start_runner(
-    run_minutes: Optional[int] = None,
-    rest_minutes: Optional[int] = None,
-    profile_ids: Optional[list[str]] = None,
-    text: Optional[str] = None,
-    mode: Optional[str] = None,
-) -> None:
-    """Hàm wrapper để chạy vòng lặp AppRunner trong tiến trình riêng."""
-    AppRunner(run_minutes=run_minutes, rest_minutes=rest_minutes, profile_ids=profile_ids, text=text, mode=mode).run()
+## NOTE: AppRunner mode đã được thay bằng bot per-profile độc lập (xem _run_bot_profile_loop)
 
 
 @app.get("/health")
@@ -334,13 +609,9 @@ def health_check() -> dict:
 @app.post("/run")
 def run_bot(payload: Optional[RunRequest] = Body(None)) -> dict:
     """
-    Khởi động AppRunner nếu chưa chạy.
-    Chạy trong process riêng để không khóa FastAPI.
+    Start bot per-profile độc lập (mỗi profile 1 process loop RUN/REST).
     """
-    global runner_process
-
-    if runner_process and runner_process.is_alive():
-        return {"status": "running", "pid": runner_process.pid}
+    # start per-profile bot processes (độc lập)
 
     run_minutes = payload.run_minutes if payload else None
     rest_minutes = payload.rest_minutes if payload else None
@@ -368,6 +639,21 @@ def run_bot(payload: Optional[RunRequest] = Body(None)) -> dict:
     except Exception as _e:
         pass
 
+    # Dọn state cũ trong runtime_control: chỉ giữ profile_states của đúng pids đang chạy
+    try:
+        def _keep_only_selected(st: dict) -> None:
+            ps = st.get("profile_states")
+            if not isinstance(ps, dict):
+                ps = {}
+            keep = {pid: ps.get(pid) or "RUNNING" for pid in pids}
+            st["profile_states"] = keep
+            # remove paused/stopped ngoài danh sách được chạy (tránh hiện profile lạ)
+            st["paused_profiles"] = [x for x in (st.get("paused_profiles") or []) if str(x) in set(pids)]
+            st["stopped_profiles"] = [x for x in (st.get("stopped_profiles") or []) if str(x) in set(pids)]
+        control_state._update(_keep_only_selected)  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
     # ✅ Chặn chạy nếu bất kỳ profile nào thiếu cookie/access_token
     _validate_profiles_requirements(pids, require_cookie=True, require_access_token=True)
 
@@ -378,49 +664,49 @@ def run_bot(payload: Optional[RunRequest] = Body(None)) -> dict:
     if m == "search" and not str(text or "").strip():
         raise HTTPException(status_code=400, detail="Search cần text")
 
-    # Không dùng daemon vì AppRunner tự sinh thêm Process con
-    runner_process = Process(
-        target=_start_runner,
-        args=(run_minutes, rest_minutes, pids, text, m),
-        daemon=False,
-    )
-    runner_process.start()
+    started: list[str] = []
+    skipped: list[dict] = []
+    run_m = int(run_minutes or 0) if payload else 0
+    rest_m = int(rest_minutes or 0) if payload else 0
+    txt = str(text or "")
+    md = str(m or "feed")
 
-    if not runner_process.is_alive():
-        raise HTTPException(status_code=500, detail="Không khởi động được bot")
+    with _bot_lock:
+        _prune_bot_processes()
+        for pid in pids:
+            existing = _bot_processes.get(pid)
+            if existing and existing.is_alive():
+                skipped.append({"profile_id": pid, "reason": "already_running"})
+                continue
+            proc = Process(
+                target=_run_bot_profile_loop,
+                args=(pid, run_m, rest_m, txt, md),
+                daemon=True,
+            )
+            proc.start()
+            _bot_processes[pid] = proc
+            started.append(pid)
 
-    return {"status": "started", "pid": runner_process.pid}
+    return {"status": "ok", "started": started, "skipped": skipped, "running": list(_bot_processes.keys())}
 
 
 @app.post("/stop")
 def stop_bot() -> dict:
     """
-    STOP (khẩn cấp):
-    - Set GLOBAL_EMERGENCY_STOP = true
-    - Best-effort: đóng toàn bộ NST browser (để các loop Playwright tự thoát)
-    - Không terminate/kill process (cooperative stop theo spec)
+    STOP (fresh start):
+    - Đóng hẳn mọi thứ (NST + kill runner/jobs)
+    - Reset runtime_control.json về mặc định
+    - Lần sau bấm chạy sẽ tính lại RUN/REST từ đầu (PAUSE mới là cái giữ timer)
     """
-    print("=" * 60)
-    print("🛑 [STOP] /stop triggered")
-    print("=" * 60)
-
-    control_state.set_global_emergency_stop(True)
-
-    nst_stopped = False
-    nst_error = None
-    try:
-        nst_stopped = bool(stop_all_browsers())
-    except Exception as e:
-        nst_error = str(e)
-        print(f"⚠️ stop_all_browsers lỗi: {e}")
-
-    return {"status": "ok", "global_emergency_stop": True, "nst_stopped": nst_stopped, "nst_error": nst_error}
+    return _hard_stop_everything(reason="/stop")
 
 
 @app.get("/status")
 def status() -> dict:
-    is_running = bool(runner_process and runner_process.is_alive())
-    return {"running": is_running, "pid": runner_process.pid if is_running else None}
+    with _bot_lock:
+        _prune_bot_processes()
+        running = [pid for pid, proc in _bot_processes.items() if proc and proc.is_alive()]
+    return {"running": len(running) > 0, "bot_profile_ids": running}
 
 
 @app.get("/settings")
@@ -1035,7 +1321,16 @@ def feed_stop(payload: Optional[FeedStopRequest] = Body(None)) -> dict:
 @app.get("/jobs/status")
 def jobs_status() -> dict:
     """Trạng thái chung (để UI hiển thị/diagnose)."""
-    is_bot_running = bool(runner_process and runner_process.is_alive())
+    with _bot_lock:
+        _prune_bot_processes()
+        bot_running_pids = []
+        for pid, proc in _bot_processes.items():
+            try:
+                if proc.is_alive():
+                    bot_running_pids.append(pid)
+            except Exception:
+                pass
+    is_bot_running = len(bot_running_pids) > 0
     with _join_groups_lock:
         _prune_join_group_processes()
         join_running = []
@@ -1056,7 +1351,8 @@ def jobs_status() -> dict:
                 pass
     return {
         "bot_running": is_bot_running,
-        "bot_pid": runner_process.pid if is_bot_running else None,
+        "bot_pid": None,
+        "bot_profile_ids": bot_running_pids,
         "join_groups_running": join_running,
         "feed_running": feed_running,
     }
@@ -1067,60 +1363,8 @@ def stop_all_jobs() -> dict:
     """
     Dừng tất cả tác vụ nền (dùng chung cho auto join group + sau này nuôi acc).
     """
-    global runner_process
-
-    # STOP ALL theo spec: set flag trước, ưu tiên cao nhất
-    print("[UI] STOP ALL triggered (/jobs/stop-all)")
-    control_state.set_global_emergency_stop(True)
-
-    stopped = {
-        "bot": False,  # best-effort: chỉ báo đã SIGNAL stop
-        "join_groups": [],
-        "feed": [],
-    }
-
-    # 1) bot runner: KHÔNG terminate/kill (cooperative stop)
-    try:
-        if runner_process and runner_process.is_alive():
-            stopped["bot"] = True
-    except Exception:
-        pass
-
-    # 2) stop join groups processes
-    join_to_stop: list[str] = []
-    with _join_groups_lock:
-        _prune_join_group_processes()
-        join_to_stop = list(_join_groups_processes.keys())
-        # KHÔNG terminate: chỉ ghi nhận để UI biết đang có
-        stopped["join_groups"] = join_to_stop
-
-    # 2b) stop feed processes
-    feed_to_stop: list[str] = []
-    with _feed_lock:
-        _prune_feed_processes()
-        feed_to_stop = list(_feed_processes.keys())
-        # KHÔNG terminate: feed worker đã check flag và sẽ tự thoát
-        stopped["feed"] = feed_to_stop
-
-    # 3) Đóng NST browser (best-effort)
-    nst_stop_all_ok = False
-    nst_err = None
-    try:
-        nst_stop_all_ok = bool(stop_all_browsers())
-    except Exception as e:
-        nst_err = str(e)
-        nst_stop_all_ok = False
-
-    return {
-        "status": "ok",
-        "stopped": stopped,
-        "nst_stop_attempted": [],
-        "nst_stop_ok": [],
-        "nst_stop_all_ok": nst_stop_all_ok,
-        "nst_error": nst_err,
-        # giữ field này để frontend cũ không bị crash
-        "nst_force_close_results": [],
-    }
+    # Legacy endpoint: vẫn map về hard stop (fresh start) cho đúng spec mới
+    return _hard_stop_everything(reason="/jobs/stop-all")
 
 
 # ==============================================================================
@@ -1152,19 +1396,7 @@ def control_stop_all() -> dict:
     - best-effort: đóng toàn bộ NST browser
     - KHÔNG hỏi confirm, KHÔNG delay
     """
-    print("[UI] STOP ALL triggered")
-    control_state.set_global_emergency_stop(True)
-
-    # best-effort: đóng NST ngay để các loop Playwright tự fail và thoát
-    nst_all_ok = False
-    nst_err = None
-    try:
-        nst_all_ok = bool(stop_all_browsers())
-    except Exception as e:
-        nst_err = str(e)
-        print(f"⚠️ stop_all_browsers lỗi: {e}")
-
-    return {"status": "ok", "global_emergency_stop": True, "nst_stop_all_ok": nst_all_ok, "nst_error": nst_err}
+    return _hard_stop_everything(reason="/control/stop-all")
 
 
 @app.post("/control/pause-all")
@@ -1204,11 +1436,28 @@ def control_stop_profiles(payload: ProfilesControlPayload) -> dict:
     - Set stopped_profiles cho từng pid
     - Best-effort: đóng NST browser cho đúng các pid đó
     """
+    global _bot_processes
     pids = [_norm_profile_id(x) for x in (payload.profile_ids or [])]
     pids = [p for p in pids if p]
     print(f"[UI] STOP profiles={pids}")
 
     st = control_state.stop_profiles(pids)
+
+    # Terminate bot process đúng profile (độc lập), không ảnh hưởng profile khác
+    try:
+        with _bot_lock:
+            _prune_bot_processes()
+            for pid in pids:
+                proc = _bot_processes.get(pid)
+                try:
+                    if proc and proc.is_alive():
+                        proc.terminate()
+                        proc.join(timeout=3)
+                except Exception:
+                    pass
+                _bot_processes.pop(pid, None)
+    except Exception:
+        pass
 
     nst_ok: list[str] = []
     nst_fail: list[dict] = []
@@ -2353,9 +2602,30 @@ def _update(mutator) -> Dict[str, Any]:
         return st
 
 
+def reset_all_state() -> Dict[str, Any]:
+    """
+    Reset toàn bộ runtime state về mặc định (SẴN SÀNG).
+    Dùng cho STOP kiểu "fresh start".
+    """
+    def _m(st: Dict[str, Any]) -> None:
+        st.clear()
+        st.update(_default_state())
+    return _update(_m)
+
+
 def set_global_emergency_stop(value: bool) -> Dict[str, Any]:
     def _m(st: Dict[str, Any]) -> None:
         st["global_emergency_stop"] = bool(value)
+        if value:
+            # Khi STOP ALL: clear pause + đưa tất cả profile_states về STOPPED để tránh "RUNNING" rác
+            st["global_pause"] = False
+            st["paused_profiles"] = []
+            ps = st.get("profile_states")
+            if not isinstance(ps, dict):
+                ps = {}
+            for k in list(ps.keys()):
+                ps[k] = "STOPPED"
+            st["profile_states"] = ps
 
     return _update(_m)
 
@@ -5602,15 +5872,16 @@ def clean_profile_list(raw):
 
 --- START FILE: backend\data\runtime_control.json ---
 {
-  "global_emergency_stop": true,
+  "global_emergency_stop": false,
   "global_pause": false,
   "paused_profiles": [],
-  "stopped_profiles": [],
+  "stopped_profiles": [
+    "621e1f5d-0c42-481e-9ddd-7abaafce68ed"
+  ],
   "profile_states": {
-    "621e1f5d-0c42-481e-9ddd-7abaafce68ed": "RUNNING",
-    "a": "RUNNING"
+    "621e1f5d-0c42-481e-9ddd-7abaafce68ed": "STOPPED"
   },
-  "updated_at": "2025-12-20T13:52:22.164162+00:00"
+  "updated_at": "2025-12-20T15:01:39.554689+00:00"
 }
 
 --- END FILE: backend\data\runtime_control.json ---
@@ -5661,7 +5932,7 @@ def clean_profile_list(raw):
 --- END FILE: backend\data\post_ids\031ca13d-e8fa-400c-a603-df57a2806788.json ---
 
 --- START FILE: backend\data\post_ids\621e1f5d-0c42-481e-9ddd-7abaafce68ed.json ---
-[FILE QUÁ LỚN - ĐÃ BỎ QUA NỘI DUNG]: 2072210 bytes
+[FILE QUÁ LỚN - ĐÃ BỎ QUA NỘI DUNG]: 2074174 bytes
 --- END FILE: backend\data\post_ids\621e1f5d-0c42-481e-9ddd-7abaafce68ed.json ---
 
 --- START FILE: backend\data\results\all_results_summary.json ---
@@ -15663,6 +15934,13 @@ function setPauseAllButtonLabel(paused) {
 }
 
 stopBtn.disabled = true;
+// Mặc định: chưa biết backend có chạy gì => disable STOP/PAUSE ALL trước, lát sẽ resync theo /jobs/status
+try {
+  if (pauseAllBtn) pauseAllBtn.disabled = true;
+  if (stopAllSettingBtn) stopAllSettingBtn.disabled = true;
+  if (stopSelectedProfilesBtn) stopSelectedProfilesBtn.disabled = true;
+  if (pauseSelectedProfilesBtn) pauseSelectedProfilesBtn.disabled = true;
+} catch (_) { }
 
 function updateRowCount() {
   const count = tbody.children.length;
@@ -15758,74 +16036,89 @@ function syncRunningLabelsWithPauseState() {
 }
 
 function applyControlStateToProfileRows(st) {
-  // Đồng bộ nút pause/resume + badge trạng thái cho mọi profile row
+  // Đồng bộ badge trạng thái cho mọi profile row
   const pausedAll = Boolean(st && st.global_pause);
   const pausedProfiles = new Set(Array.isArray(st && st.paused_profiles) ? st.paused_profiles.map((x) => String(x)) : []);
-  const stoppedProfiles = new Set(Array.isArray(st && st.stopped_profiles) ? st.stopped_profiles.map((x) => String(x)) : []);
   const profileStates = (st && typeof st.profile_states === 'object' && st.profile_states) ? st.profile_states : {};
   const jobs = lastJobsStatus || {};
   const botRunning = Boolean(jobs && jobs.bot_running);
+  const botProfileIds = new Set(Array.isArray(jobs && jobs.bot_profile_ids) ? jobs.bot_profile_ids.map((x) => String(x)) : []);
   const joinRunning = new Set(Array.isArray(jobs && jobs.join_groups_running) ? jobs.join_groups_running.map((x) => String(x)) : []);
   const feedRunning = new Set(Array.isArray(jobs && jobs.feed_running) ? jobs.feed_running.map((x) => String(x)) : []);
+  const sessionRunning = Boolean(
+    botRunning
+    || joinRunning.size > 0
+    || feedRunning.size > 0
+  );
 
   const rows = document.querySelectorAll('.profile-row-wrap');
   rows.forEach((wrap) => {
     const pid = String(wrap.dataset.profileId || '').trim();
     if (!pid) return;
-    const pauseBtn = wrap.querySelector('.profile-pause-btn');
     const badge = wrap.querySelector('.profile-state-badge');
 
     // --- Effective state ---
-    // Default: IDLE (mới vào trang / chưa chạy)
-    let eff = 'IDLE';
-
-    const anyJobRunningForPid = botRunning || feedRunning.has(pid) || joinRunning.has(pid);
-
-    // Nếu đang có STOP flag nhưng job vẫn còn chạy => đang dừng (STOPPING), không phải STOPPED
-    if ((Boolean(st && st.global_emergency_stop) || stoppedProfiles.has(pid)) && anyJobRunningForPid) {
-      eff = 'STOPPING';
-    } else if (Boolean(st && st.global_emergency_stop) || stoppedProfiles.has(pid)) {
-      eff = 'STOPPED';
-    } else if (pausedAll || pausedProfiles.has(pid)) {
-      // Pause flag có thể bật dù chưa chạy → vẫn hiển thị PAUSED để user hiểu đang bị pause
-      eff = 'PAUSED';
-    } else if (feedRunning.has(pid) || joinRunning.has(pid)) {
-      eff = 'RUNNING';
-    } else if (botRunning) {
-      // runner đang chạy: chỉ tin profile_states=RUNNING trong lúc bot_running=true (tránh state cũ)
-      const ps = String(profileStates[pid] || '').toUpperCase();
-      if (ps === 'RUNNING') eff = 'RUNNING';
-      else if (ps === 'ERROR') eff = 'ERROR';
-      else eff = 'IDLE';
-    } else {
-      // Không có job nào chạy → IDLE, bỏ qua profile_states cũ
-      eff = 'IDLE';
+    // Default: READY (mới vào / chưa có job)
+    let eff = 'READY';
+    // Nếu không có session nào chạy -> luôn READY
+    if (sessionRunning) {
+      // Nếu đang pause (global hoặc profile) -> PAUSED
+      if (pausedAll || pausedProfiles.has(pid)) {
+        eff = 'PAUSED';
+      } else {
+        // RUNNING nếu profile đang có feed/join hoặc runner đang chạy và profile_state RUNNING
+        if (feedRunning.has(pid) || joinRunning.has(pid)) {
+          eff = 'RUNNING';
+        } else if (botRunning) {
+          const ps = String(profileStates[pid] || '').toUpperCase();
+          // Ưu tiên list từ backend: bot_profile_ids
+          const inBot = botProfileIds.size > 0 ? botProfileIds.has(pid) : false;
+          eff = (ps === 'RUNNING' || inBot) ? 'RUNNING' : 'READY';
+        } else {
+          eff = 'READY';
+        }
+      }
     }
 
     if (badge) {
-      badge.classList.remove('state-running', 'state-paused', 'state-stopping', 'state-stopped', 'state-error', 'state-idle', 'state-unknown');
+      badge.classList.remove('state-running', 'state-paused', 'state-ready', 'state-idle', 'state-unknown', 'state-stopping', 'state-stopped', 'state-error');
       if (eff === 'PAUSED') badge.classList.add('state-paused');
-      else if (eff === 'STOPPING') badge.classList.add('state-stopping');
-      else if (eff === 'STOPPED') badge.classList.add('state-stopped');
-      else if (eff === 'ERROR') badge.classList.add('state-error');
       else if (eff === 'RUNNING') badge.classList.add('state-running');
-      else if (eff === 'IDLE') badge.classList.add('state-idle');
-      else badge.classList.add('state-unknown');
-      badge.textContent = eff;
-    }
-
-    if (pauseBtn && !pauseBtn.classList.contains('btn-loading')) {
-      if (pausedAll || pausedProfiles.has(pid)) {
-        pauseBtn.textContent = 'Tiếp tục';
-        pauseBtn.classList.remove('btn-yellow');
-        pauseBtn.classList.add('btn-success');
-      } else {
-        pauseBtn.textContent = 'Tạm dừng';
-        pauseBtn.classList.remove('btn-success');
-        pauseBtn.classList.add('btn-yellow');
-      }
+      else badge.classList.add('state-ready');
+      badge.textContent = (eff === 'READY') ? 'SẴN SÀNG' : (eff === 'RUNNING') ? 'ĐANG CHẠY' : 'ĐANG TẠM DỪNG';
     }
   });
+}
+
+function updateStopPauseButtonsByJobs() {
+  const jobs = lastJobsStatus || {};
+  const botHasProfiles = Array.isArray(jobs && jobs.bot_profile_ids) && jobs.bot_profile_ids.length > 0;
+  const sessionRunning = Boolean(
+    (jobs && jobs.bot_running && botHasProfiles)
+    || (Array.isArray(jobs && jobs.join_groups_running) && jobs.join_groups_running.length > 0)
+    || (Array.isArray(jobs && jobs.feed_running) && jobs.feed_running.length > 0)
+  );
+  const hasSelected = getSelectedProfileIds().length > 0;
+
+  // Chỉ khi có tiến trình chạy mới cho bấm STOP/PAUSE
+  const stopBtns = [stopBtn, stopAllSettingBtn].filter(Boolean);
+  stopBtns.forEach((b) => {
+    if (b.classList && b.classList.contains('btn-loading')) return;
+    b.disabled = !sessionRunning;
+  });
+
+  const pauseBtns = [pauseAllBtn].filter(Boolean);
+  pauseBtns.forEach((b) => {
+    if (b.classList && b.classList.contains('btn-loading')) return;
+    b.disabled = !sessionRunning;
+  });
+
+  if (pauseSelectedProfilesBtn && !pauseSelectedProfilesBtn.classList.contains('btn-loading')) {
+    pauseSelectedProfilesBtn.disabled = !sessionRunning || !hasSelected;
+  }
+  if (stopSelectedProfilesBtn && !stopSelectedProfilesBtn.classList.contains('btn-loading')) {
+    stopSelectedProfilesBtn.disabled = !sessionRunning || !hasSelected;
+  }
 }
 
 // ==== Settings (frontend-only) ====
@@ -15930,11 +16223,8 @@ function updateSettingsActionButtons() {
   });
 
   // Các nút ALL (không phụ thuộc tick)
-  const allBtns = [stopAllSettingBtn, pauseAllBtn].filter(Boolean);
-  allBtns.forEach((b) => {
-    if (b.classList && b.classList.contains('btn-loading')) return;
-    b.disabled = false;
-  });
+  // Lưu ý: stop/pause ALL sẽ được enable/disable theo /jobs/status (updateStopPauseButtonsByJobs)
+  // nên không set ở đây để tránh ghi đè logic.
 
   // Các nút "Chạy" trong các panel cũng yêu cầu tick profile
   const runBtns = [feedStartBtn, scanStartBtn, groupScanStartBtn].filter(Boolean);
@@ -15959,6 +16249,9 @@ function updateSettingsActionButtons() {
     if (scanConfigPanel) scanConfigPanel.style.display = 'none';
     if (groupScanPanel) groupScanPanel.style.display = 'none';
   }
+
+  // Đồng bộ enable/disable cho STOP/PAUSE theo trạng thái backend (sessionRunning)
+  try { updateStopPauseButtonsByJobs(); } catch (_) { }
 }
 
 function showToast(message, type = 'success', ms = 1600) {
@@ -16062,12 +16355,6 @@ function buildProfileRow(initialPid, initialInfo) {
   groupBtn.className = 'btn-primary';
   groupBtn.textContent = 'Thêm Groups';
 
-  // Pause/Resume profile button (theo spec)
-  const pauseProfileBtn = document.createElement('button');
-  pauseProfileBtn.type = 'button';
-  pauseProfileBtn.className = 'btn-yellow profile-pause-btn';
-  pauseProfileBtn.textContent = 'Tạm dừng';
-
   // Badge hiển thị trạng thái profile (RUNNING/PAUSED/STOPPED)
   const stateBadge = document.createElement('span');
   stateBadge.className = 'profile-state-badge state-idle';
@@ -16111,62 +16398,6 @@ function buildProfileRow(initialPid, initialInfo) {
     if (Array.isArray(gs)) return gs.map((x) => String(x || '').trim()).filter(Boolean);
     return [];
   }
-
-  async function updatePauseBtnLabel() {
-    try {
-      const st = await callBackendNoAlert('/control/state', { method: 'GET' });
-      const pausedAll = Boolean(st && st.global_pause);
-      const paused = st && Array.isArray(st.paused_profiles) ? st.paused_profiles.includes(currentPid) : false;
-      if (pausedAll) {
-        pauseProfileBtn.textContent = 'Tiếp tục';
-        pauseProfileBtn.classList.remove('btn-yellow');
-        pauseProfileBtn.classList.add('btn-success');
-      } else if (paused) {
-        pauseProfileBtn.textContent = 'Tiếp tục';
-        pauseProfileBtn.classList.remove('btn-yellow');
-        pauseProfileBtn.classList.add('btn-success');
-      } else {
-        pauseProfileBtn.textContent = 'Tạm dừng';
-        pauseProfileBtn.classList.remove('btn-success');
-        pauseProfileBtn.classList.add('btn-yellow');
-      }
-    } catch (_) {
-      // fallback label
-      pauseProfileBtn.textContent = 'Tạm dừng';
-    }
-  }
-
-  pauseProfileBtn.addEventListener('click', async () => {
-    if (pauseProfileBtn.classList.contains('btn-loading')) return;
-    try {
-      const st = await callBackendNoAlert('/control/state', { method: 'GET' });
-      const pausedAll = Boolean(st && st.global_pause);
-      const paused = st && Array.isArray(st.paused_profiles) ? st.paused_profiles.includes(currentPid) : false;
-      if (pausedAll) {
-        // Global pause => resume phải là resume-all để đồng bộ
-        console.log('[UI] RESUME ALL from profile row');
-        setButtonLoading(pauseProfileBtn, true, 'Đang tiếp tục...');
-        await callBackend('/control/resume-all', { method: 'POST' });
-        showToast('Đã tiếp tục tất cả', 'success');
-      } else if (!paused) {
-        console.log(`[UI] PAUSE profile_id=${currentPid}`);
-        setButtonLoading(pauseProfileBtn, true, 'Đang tạm dừng...');
-        await callBackend('/control/pause-profile', { method: 'POST', body: JSON.stringify({ profile_id: currentPid }) });
-        showToast(`Đã tạm dừng ${currentPid}`, 'success');
-      } else {
-        console.log(`[UI] RESUME profile_id=${currentPid}`);
-        setButtonLoading(pauseProfileBtn, true, 'Đang tiếp tục...');
-        await callBackend('/control/resume-profile', { method: 'POST', body: JSON.stringify({ profile_id: currentPid }) });
-        showToast(`Đã tiếp tục ${currentPid}`, 'success');
-      }
-    } catch (e) {
-      showToast('Không pause/resume profile được (kiểm tra FastAPI).', 'error');
-    } finally {
-      setButtonLoading(pauseProfileBtn, false);
-      await updatePauseBtnLabel();
-      try { await refreshControlState(); } catch (_) { }
-    }
-  });
 
   function setLocalGroups(pid, groups) {
     if (!profileState.profiles[pid]) profileState.profiles[pid] = { cookie: '', access_token: '', groups: [] };
@@ -16388,7 +16619,6 @@ function buildProfileRow(initialPid, initialInfo) {
   actions.appendChild(saveBtn);
   actions.appendChild(removeBtn);
   actions.appendChild(groupBtn);
-  actions.appendChild(pauseProfileBtn);
   actions.appendChild(cookieBtn);
   actions.appendChild(tokenBtn);
 
@@ -16873,8 +17103,23 @@ async function handleStopSelectedProfiles() {
     const failCount = res && Array.isArray(res.nst_fail) ? res.nst_fail.length : 0;
     showToast(`Đã dừng ${selected.length} profile (NST ok=${okCount}, fail=${failCount})`, 'success', 2400);
 
-    // Nếu đang quét bằng các profile đó, UI không bị kẹt spinner
-    setScanning(false);
+    // Refresh state để badge về SẴN SÀNG ngay
+    try {
+      const jobs = await callBackendNoAlert('/jobs/status', { method: 'GET' });
+      if (jobs) lastJobsStatus = jobs;
+    } catch (_) { }
+    try { await refreshControlState(); } catch (_) { }
+    try { updateStopPauseButtonsByJobs(); } catch (_) { }
+    // Nếu không còn bot_profile_ids thì UI quét phải về "Sẵn sàng"
+    try {
+      const botHasProfiles = Array.isArray(lastJobsStatus && lastJobsStatus.bot_profile_ids) && lastJobsStatus.bot_profile_ids.length > 0;
+      if (!botHasProfiles) {
+        if (dataCheckInterval) { clearInterval(dataCheckInterval); dataCheckInterval = null; }
+        setScanning(false);
+        setButtonLoading(scanStartBtn, false);
+        setButtonLoading(scanPostsSettingBtn, false);
+      }
+    } catch (_) { }
   } catch (e) {
     showToast('Không dừng được profile đã chọn (kiểm tra FastAPI).', 'error');
   } finally {
@@ -16895,18 +17140,22 @@ async function handlePauseSelectedProfiles() {
   if (!pauseSelectedProfilesBtn) return;
   if (pauseSelectedProfilesBtn.classList.contains('btn-loading')) return;
 
-  console.log(`[UI] PAUSE selected profiles=${selected.join(',')}`);
-  setButtonLoading(pauseSelectedProfilesBtn, true, 'Đang tạm dừng...');
+  // Toggle: nếu có ít nhất 1 profile đang paused -> RESUME, ngược lại -> PAUSE
+  const st0 = await callBackendNoAlert('/control/state', { method: 'GET' });
+  const pausedSet = new Set(Array.isArray(st0 && st0.paused_profiles) ? st0.paused_profiles.map((x) => String(x)) : []);
+  const anyPaused = selected.some((pid) => pausedSet.has(String(pid)));
+  const action = anyPaused ? 'RESUME' : 'PAUSE';
+  console.log(`[UI] ${action} selected profiles=${selected.join(',')}`);
+  setButtonLoading(pauseSelectedProfilesBtn, true, anyPaused ? 'Đang tiếp tục...' : 'Đang tạm dừng...');
   try {
-    await callBackend('/control/pause-profiles', {
-      method: 'POST',
-      body: JSON.stringify({ profile_ids: selected }),
-    });
-    showToast(`Đã tạm dừng ${selected.length} profile`, 'success', 2200);
+    const endpoint = anyPaused ? '/control/resume-profiles' : '/control/pause-profiles';
+    await callBackend(endpoint, { method: 'POST', body: JSON.stringify({ profile_ids: selected }) });
+    showToast(anyPaused ? `Đã tiếp tục ${selected.length} profile` : `Đã tạm dừng ${selected.length} profile`, 'success', 2200);
   } catch (e) {
     showToast('Không pause được profile đã tick (kiểm tra FastAPI).', 'error');
   } finally {
     setButtonLoading(pauseSelectedProfilesBtn, false);
+    try { await refreshControlState(); } catch (_) { }
   }
 }
 
@@ -16923,6 +17172,16 @@ async function refreshControlState() {
     try { syncRunningLabelsWithPauseState(); } catch (_) { }
     setPauseAllButtonLabel(isPausedAll);
     try { applyControlStateToProfileRows(st); } catch (_) { }
+    try { updateStopPauseButtonsByJobs(); } catch (_) { }
+    // Update label của nút pause-selected theo trạng thái paused_profiles
+    try {
+      if (pauseSelectedProfilesBtn && !pauseSelectedProfilesBtn.classList.contains('btn-loading')) {
+        const selected = getSelectedProfileIds();
+        const pausedSet = new Set(Array.isArray(st.paused_profiles) ? st.paused_profiles.map((x) => String(x)) : []);
+        const anyPaused = selected.some((pid) => pausedSet.has(String(pid)));
+        pauseSelectedProfilesBtn.textContent = anyPaused ? 'Tiếp tục profile đã chọn' : 'Tạm dừng profile đã chọn';
+      }
+    } catch (_) { }
   } catch (_) { }
 }
 
@@ -16942,7 +17201,9 @@ function startScanBackendPoll({ silent = true } = {}) {
   scanBackendPollTimer = setInterval(async () => {
     const st = await callBackendNoAlert('/jobs/status', { method: 'GET' });
     if (st) lastJobsStatus = st;
-    const running = !!(st && st.bot_running);
+    updateStopPauseButtonsByJobs();
+    const botHasProfiles = Array.isArray(st && st.bot_profile_ids) && st.bot_profile_ids.length > 0;
+    const running = !!(st && st.bot_running && botHasProfiles);
     if (!running) {
       _clearIntervalSafe('scan');
       if (dataCheckInterval) {
@@ -16965,6 +17226,7 @@ function startJoinBackendPoll({ silent = true } = {}) {
   joinGroupPollTimer = setInterval(async () => {
     const st = await callBackendNoAlert('/jobs/status', { method: 'GET' });
     if (st) lastJobsStatus = st;
+    updateStopPauseButtonsByJobs();
     const running = (st && Array.isArray(st.join_groups_running)) ? st.join_groups_running : [];
     if (running.length === 0) {
       _clearIntervalSafe('join');
@@ -16982,6 +17244,7 @@ function startFeedBackendPoll({ silent = true } = {}) {
   feedPollTimer = setInterval(async () => {
     const st = await callBackendNoAlert('/jobs/status', { method: 'GET' });
     if (st) lastJobsStatus = st;
+    updateStopPauseButtonsByJobs();
     const running = (st && Array.isArray(st.feed_running)) ? st.feed_running : [];
     if (running.length === 0) {
       _clearIntervalSafe('feed');
@@ -17002,6 +17265,7 @@ async function resyncUiFromBackendAfterReload() {
   const jobs = await callBackendNoAlert('/jobs/status', { method: 'GET' });
   if (!jobs) return;
   lastJobsStatus = jobs;
+  updateStopPauseButtonsByJobs();
 
   // --- Scan (AppRunner) ---
   if (jobs.bot_running) {
@@ -17555,6 +17819,10 @@ async function startScanFlow(options = {}) {
     dataCheckInterval = setInterval(checkForNewData, checkInterval);
 
     setScanning(true);
+    // Poll /jobs/status để sync UI nút dừng/tạm dừng + tự tắt khi backend dừng
+    try { startScanBackendPoll({ silent: true }); } catch (_) { }
+    try { updateStopPauseButtonsByJobs(); } catch (_) { }
+    try { await refreshControlState(); } catch (_) { }
   } catch (err) {
     console.error('Lỗi trong startScanFlow:', err);
     setScanning(false);
@@ -17789,7 +18057,25 @@ async function triggerBackendRun(options = {}) {
       body: JSON.stringify(payload),
     });
     const pidText = data.pid ? ` (PID ${data.pid})` : '';
-    setBackendStatus(`Đã kích hoạt backend${pidText}`, true);
+
+    // Xác nhận backend thật sự đang chạy (tránh UI báo "Đang quét" nhưng runner đã thoát)
+    const deadline = Date.now() + 2500;
+    let jobs = null;
+    while (Date.now() < deadline) {
+      jobs = await callBackendNoAlert('/jobs/status', { method: 'GET' });
+      if (jobs && jobs.bot_running) break;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    if (jobs) lastJobsStatus = jobs;
+    try { updateStopPauseButtonsByJobs(); } catch (_) { }
+
+    if (!(jobs && jobs.bot_running)) {
+      setBackendStatus(`Backend chưa chạy bot${pidText}`, false);
+      showToast('Backend chưa chạy được bot (runner không alive).', 'error', 2200);
+      return false;
+    }
+
+    setBackendStatus(`Bot đang chạy${pidText}`, true);
     return true;
   } catch (err) {
     console.error(err);
@@ -19470,11 +19756,7 @@ tbody tr.filtered-out {
 
 .profile-state-badge.state-running { background: #10b981; } /* green */
 .profile-state-badge.state-paused  { background: rgb(157, 168, 0); } /* yellow */
-.profile-state-badge.state-stopping { background: #f97316; } /* orange */
-.profile-state-badge.state-stopped { background: #ef4444; } /* red */
-.profile-state-badge.state-error   { background: #f97316; } /* orange */
-.profile-state-badge.state-idle    { background: #64748b; } /* slate */
-.profile-state-badge.state-unknown { background: #6b7280; } /* gray */
+.profile-state-badge.state-ready   { background: #64748b; } /* slate */
 
 .profile-row .profile-actions button {
   width    : auto;

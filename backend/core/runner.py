@@ -176,9 +176,32 @@ class AppRunner:
             # 1. Khởi chạy dàn profile
             processes = []
             for pid in self.profiles:
+                # Nếu profile đã bị STOP theo profile_id thì skip luôn để tránh “chạy xong rồi ngủ”
+                # (trường hợp user chạy bằng CLI main.py).
+                try:
+                    p_stop, p_paused, p_reason = control_state.check_flags(pid)
+                except Exception:
+                    p_stop, p_paused, p_reason = False, False, ""
+
+                if p_stop:
+                    print(f"🛑 [{pid}] Bị STOP, bỏ qua profile ({p_reason})")
+                    try:
+                        control_state.set_profile_state(pid, "STOPPED")
+                    except Exception:
+                        pass
+                    continue
+
                 p = Process(target=self.worker, args=(pid,))
                 p.start()
                 processes.append(p)
+
+            # Nếu không có profile nào chạy được thì thoát luôn (tránh sleep vô nghĩa)
+            if len(processes) == 0:
+                print("\n" + "=" * 60)
+                print("🛑 [RUNNER] Không có profile nào được chạy (tất cả đang STOPPED?).")
+                print("👉 Gợi ý: mở backend/data/runtime_control.json để xoá stopped_profiles hoặc gọi RESUME.")
+                print("=" * 60 + "\n")
+                return
 
             # 2. Chờ tất cả các profile chạy xong (Hết 30 phút tụi nó sẽ tự dừng)
             for p in processes:

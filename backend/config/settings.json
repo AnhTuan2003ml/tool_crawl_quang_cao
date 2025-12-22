@@ -9,11 +9,6 @@
       "groups": [
         "https://www.facebook.com/groups/tuyendungkisuIT"
       ]
-    },
-    "a": {
-      "cookie": "",
-      "access_token": "",
-      "groups": []
     }
   },
   "RUN_MINUTES": 30,
