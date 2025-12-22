@@ -2,6 +2,9 @@ import requests
 import json
 import base64
 from urllib.parse import urlencode
+import os
+from datetime import datetime
+from pathlib import Path
 
 # ====== LƯU Ý ======
 # Cookies và payload được lấy từ cookies.json và payload.txt thông qua profile_id
@@ -44,6 +47,13 @@ def send_request(feedback_target_id, payload_dict, profile_id, cookies, cursor=N
     
     # Sử dụng payload được truyền vào và thêm variables, doc_id, fb_api_req_friendly_name
     payload_dict = payload_dict.copy()
+    # If caller provided a forced payload dict under key "__force_payload", use/merge it
+    force_payload = payload_dict.pop("__force_payload", None)
+    if isinstance(force_payload, dict):
+        # merge force_payload into payload_dict (force overrides)
+        for k, v in force_payload.items():
+            payload_dict[k] = v
+
     payload_dict["variables"] = json.dumps(variables, ensure_ascii=False)
     payload_dict["doc_id"] = "31470716059194219"
     payload_dict["fb_api_req_friendly_name"] = "CometUFIReactionsDialogTabContentRefetchQuery"
@@ -54,22 +64,27 @@ def send_request(feedback_target_id, payload_dict, profile_id, cookies, cursor=N
     # Tạo headers với cookies
     headers = {
         "accept": "*/*",
-        "accept-encoding": "gzip, deflate, br",
+        "accept-encoding": "gzip, deflate, br, zstd",
         "accept-language": "en,vi;q=0.9,en-US;q=0.8",
         "content-type": "application/x-www-form-urlencoded",
         "cookie": cookies,
         "origin": "https://www.facebook.com",
         "priority": "u=1, i",
         "referer": "https://www.facebook.com/photo/?fbid=965661036626847&set=a.777896542069965",
+        "sec-ch-prefers-color-scheme": "light",
         "sec-ch-ua": '"Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+        "sec-ch-ua-full-version-list": '"Google Chrome";v="143.0.7499.41", "Chromium";v="143.0.7499.41", "Not A(Brand";v="24.0.0.0"',
         "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-model": "",
         "sec-ch-ua-platform": '"Windows"',
+        "sec-ch-ua-platform-version": "10.0.0",
         "sec-fetch-dest": "empty",
         "sec-fetch-mode": "cors",
         "sec-fetch-site": "same-origin",
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
         "x-asbd-id": "359341",
-        "x-fb-friendly-name": "CometUFIReactionsDialogTabContentRefetchQuery",
+        # prefer fb_api_req_friendly_name set on payload_dict; fallback to common name
+        "x-fb-friendly-name": payload_dict.get("fb_api_req_friendly_name", "CometUFIReactionsCountTooltipContentQuery"),
         "x-fb-lsd": payload_dict.get("lsd", "")
     }
 
@@ -120,7 +135,40 @@ def get_all_users_by_fid(fid, payload_dict, profile_id, cookies):
         response = send_request(feedback_target_id, payload_dict, profile_id, cookies, cursor)
         
         print(f"   STATUS: {response.status_code}")
-        
+
+        # Decode response text for inspection (no file saving)
+        saved_text = ""
+        content_encoding = (response.headers.get("content-encoding") or "").lower()
+        if "zstd" in content_encoding:
+            try:
+                import zstandard as zstd
+                saved_text = zstd.ZstdDecompressor().decompress(response.content).decode("utf-8", errors="replace")
+            except Exception as e:
+                print(f"   ⚠️ Zstd decompress failed: {e}")
+                # fallback to generic decode
+                try:
+                    saved_text = (response.content or b"").decode("utf-8", errors="replace")
+                except Exception:
+                    saved_text = ""
+        elif "br" in content_encoding:
+            try:
+                import brotli
+                saved_text = brotli.decompress(response.content).decode("utf-8", errors="replace")
+            except Exception as e:
+                print(f"   ⚠️ Brotli decompress failed: {e}")
+                try:
+                    saved_text = (response.content or b"").decode("utf-8", errors="replace")
+                except Exception:
+                    saved_text = ""
+        else:
+            try:
+                saved_text = response.text or ""
+            except Exception:
+                try:
+                    saved_text = (response.content or b"").decode("utf-8", errors="replace")
+                except Exception:
+                    saved_text = ""
+
         if response.status_code != 200:
             print(f"❌ Lỗi: Status code {response.status_code}")
             break
@@ -219,7 +267,29 @@ def get_all_users_by_fid(fid, payload_dict, profile_id, cookies):
         except json.JSONDecodeError as e:
             print(f"❌ Lỗi: Response không phải JSON hợp lệ")
             print(f"   Chi tiết: {e}")
-            break
+            # Attempt to extract dynamic payload values (fb_dtsg, lsd, __spin_r, __spin_t)
+            try:
+                from get_payload import ensure_payload_from_bad_response, get_payload_by_profile_id
+                print("ℹ️ Thực hiện headless capture để lấy các giá trị động và cập nhật settings.json...")
+                ensure_payload_from_bad_response(profile_id, cookies, response_text=saved_text, timeout=8)
+                # Rebuild payload_dict from updated settings and retry once
+                payload_dict = get_payload_by_profile_id(profile_id)
+                if payload_dict:
+                    print("ℹ️ Thử gửi lại request sau khi cập nhật payload...")
+                    response = send_request(feedback_target_id, payload_dict, profile_id, cookies, cursor)
+                    try:
+                        response_json = response.json()
+                        print("✅ Retry thành công, response JSON hợp lệ.")
+                        # continue processing with new response_json
+                    except Exception as e2:
+                        print(f"❌ Retry vẫn không trả về JSON hợp lệ: {e2}")
+                        break
+                else:
+                    print("❌ Không thể tạo payload mới từ settings.json, dừng.")
+                    break
+            except Exception as ee:
+                print(f"⚠️ Lỗi khi cố gắng fix bằng headless: {ee}")
+                break
     
     # Hiển thị kết quả
     print(f"\n" + "="*50)
@@ -353,11 +423,11 @@ if __name__ == "__main__":
     # Ví dụ sử dụng hàm hoàn chỉnh với vòng lặp tự động
     from get_payload import get_payload_by_profile_id, get_cookies_by_profile_id
     
-    profile_id = "031ca13d-e8fa-400c-a603-df57a2806788"
+    profile_id = "621e1f5d-0c42-481e-9ddd-7abaafce68ed"
     payload_dict = get_payload_by_profile_id(profile_id)
     cookies = get_cookies_by_profile_id(profile_id)
     
     if payload_dict and cookies:
-        fid = "2664708703928050"  # Thay đổi FID ở đây
+        fid = "2672966333102287"  # Thay đổi FID ở đây
         users = get_all_users_by_fid(fid, payload_dict, profile_id, cookies)
     

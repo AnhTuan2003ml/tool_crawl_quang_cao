@@ -431,11 +431,11 @@ if __name__ == "__main__":
     # Ví dụ sử dụng hàm hoàn chỉnh với vòng lặp tự động
     from get_payload import get_payload_by_profile_id, get_cookies_by_profile_id
     
-    profile_id = "031ca13d-e8fa-400c-a603-df57a2806788"
+    profile_id = "621e1f5d-0c42-481e-9ddd-7abaafce68ed"
     payload_dict = get_payload_by_profile_id(profile_id)
     cookies = get_cookies_by_profile_id(profile_id)
     
     if payload_dict and cookies:
-        post_id = "2664708703928050"  # Thay đổi Post ID ở đây
+        post_id = "122147112686818981"  # Thay đổi Post ID ở đây
         comments = get_all_comments_by_post_id(post_id, payload_dict, profile_id, cookies)
 

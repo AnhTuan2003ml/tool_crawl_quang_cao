@@ -3,7 +3,28 @@ import os
 from pathlib import Path
 from single_get_reactions import get_all_users_by_fid
 from single_get_comment import get_all_comments_by_post_id
-from get_payload import get_payload_by_profile_id, get_cookies_by_profile_id
+
+
+def _import_get_payload_funcs():
+    """
+    Try multiple import paths for get_payload functions so the worker scripts
+    can be run from different working directories.
+    Returns tuple: (get_payload_by_profile_id, get_cookies_by_profile_id, get_access_token_by_profile_id)
+    """
+    try:
+        from get_payload import get_payload_by_profile_id, get_cookies_by_profile_id, get_access_token_by_profile_id  # type: ignore
+        return get_payload_by_profile_id, get_cookies_by_profile_id, get_access_token_by_profile_id
+    except Exception:
+        try:
+            from backend.worker.get_payload import get_payload_by_profile_id, get_cookies_by_profile_id, get_access_token_by_profile_id  # type: ignore
+            return get_payload_by_profile_id, get_cookies_by_profile_id, get_access_token_by_profile_id
+        except Exception:
+            from worker.get_payload import get_payload_by_profile_id, get_cookies_by_profile_id, get_access_token_by_profile_id  # type: ignore
+            return get_payload_by_profile_id, get_cookies_by_profile_id, get_access_token_by_profile_id
+
+
+# Get payload functions (imported via helper)
+get_payload_by_profile_id, get_cookies_by_profile_id, get_access_token_by_profile_id = _import_get_payload_funcs()
 
 # ====== ĐƯỜNG DẪN THEO PROJECT ROOT ======
 BASE_DIR = Path(__file__).resolve().parents[2]  # Thư mục gốc project

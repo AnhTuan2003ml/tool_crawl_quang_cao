@@ -1,6 +1,8 @@
 import requests
 import re
 import json
+import time
+from urllib.parse import parse_qs, unquote_plus
 from pathlib import Path
 
 # ====== ĐƯỜNG DẪN THEO PROJECT ROOT ======
@@ -209,7 +211,7 @@ def get_spin_t(html):
         return None
 
 
-def get_fb_dtsg(cookie):
+def get_fb_dtsg(cookie, profile_id: str | None = None, return_page_source: bool = False):
     """
     Lấy fb_dtsg từ Facebook.com
     
@@ -220,55 +222,238 @@ def get_fb_dtsg(cookie):
         str: Giá trị fb_dtsg hoặc None nếu không tìm thấy
     """
     url = "https://www.facebook.com"
-    
-    print(f"\n🚀 Đang GET request từ: {url}")
-    
+
+    print(f"\n🚀 Bắt đầu headless capture từ: {url} (CHỈ DÙNG Selenium/WebDriver)")
+
+    # First: if profile_id provided, try reading fb_dtsg from settings.json
     try:
-        # Tạo headers với cookie
-        headers = get_base_headers(cookie)
-        
-        # GET request với cookies và headers
-        response = requests.get(url, headers=headers)
-        
-        print(f"📊 Status Code: {response.status_code}")
-        
-        if response.status_code != 200:
-            print(f"❌ Lỗi: Status code {response.status_code}")
-            print(f"Response text: {response.text[:500]}")
-            return None
-        
-        html_content = response.text
-        print(f"📄 Đã lấy HTML content ({len(html_content)} ký tự)")
-        
-        # Danh sách các pattern để tìm fb_dtsg
-        patterns = [
-            r'"name":"fb_dtsg","value":"([^"]+)"',      # Pattern gốc
-            r'"token":"([^"]+)","type":"fb_dtsg"',       # Token với type fb_dtsg
-            r'"fb_dtsg"\s*:\s*"([^"]+)"',               # "fb_dtsg": "value"
-            r'name="fb_dtsg"\s+value="([^"]+)"',        # name="fb_dtsg" value="value"
-            r'DTSGInitData.*?"token":"([^"]+)"'          # DTSGInitData với token
-        ]
-        
-        # Thử từng pattern
-        for i, pattern in enumerate(patterns, 1):
-            match = re.search(pattern, html_content)
-            if match:
-                fb_dtsg = match.group(1)
-                print(f"✅ Tìm thấy fb_dtsg với pattern {i}: {fb_dtsg[:50]}...")
-                return fb_dtsg
-        
-        # Không tìm thấy với bất kỳ pattern nào
-        print(f"⚠️ Không tìm thấy fb_dtsg với {len(patterns)} patterns")
-        return None
-            
+        if profile_id:
+            cfg = _read_settings_profile_config(profile_id)
+            if isinstance(cfg, dict):
+                fb_from_cfg = cfg.get("fb_dtsg") or cfg.get("fb_dtsg_token") or cfg.get("fb_dtsg_value")
+                if fb_from_cfg:
+                    fb_from_cfg = str(fb_from_cfg).strip()
+                    if fb_from_cfg:
+                        print(f"ℹ️ Lấy fb_dtsg từ {SETTINGS_JSON_FILE} cho profile_id={profile_id}")
+                        if return_page_source:
+                            return fb_from_cfg, ""
+                        return fb_from_cfg
+    except Exception:
+        pass
+
+    # Require Selenium + webdriver-manager; fail loudly if unavailable
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.chrome.service import Service
+        from selenium.common.exceptions import WebDriverException
+        from webdriver_manager.chrome import ChromeDriverManager
     except Exception as e:
-        print(f"❌ Lỗi khi lấy fb_dtsg: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Selenium or webdriver_manager not available: {e}")
         return None
 
+    options = Options()
+    options.add_argument("--headless")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1200,800")
+    options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
 
-def get_all_payload_values(cookie):
+    try:
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=options)
+    except WebDriverException as e:
+        print(f"❌ Không thể khởi tạo Chrome WebDriver: {e}")
+        return None
+    except Exception as e:
+        print(f"❌ Lỗi khi cài/chạy ChromeDriver: {e}")
+        return None
+
+    try:
+        try:
+            driver.execute_cdp_cmd("Network.enable", {})
+            driver.execute_cdp_cmd("Network.setExtraHTTPHeaders", {"headers": {"cookie": cookie}})
+        except Exception:
+            pass
+
+        driver.get(url)
+        time.sleep(3)
+
+        fb_dtsg = None
+        try:
+            logs = driver.get_log("performance")
+        except Exception:
+            logs = []
+
+        for entry in logs:
+            try:
+                msg = json.loads(entry.get("message", "{}")).get("message", {})
+                method = msg.get("method", "")
+                params = msg.get("params", {}) or {}
+                if method in ("Network.requestWillBeSent", "Network.responseReceived"):
+                    req = params.get("request") or params.get("response") or {}
+                    url_req = req.get("url") or ""
+                    if "api/graphql" in url_req:
+                        postData = req.get("postData") or params.get("request", {}).get("postData", "") or ""
+                        if postData:
+                            m = re.search(r'fb_dtsg["\\\']?\\s*[:=]\\s*["\\\']([^"\\\']+)', postData)
+                            if not m:
+                                m = re.search(r'fb_dtsg=([^&"\\\']+)', postData)
+                            if m:
+                                fb_dtsg = m.group(1)
+                                print(f"✅ Bắt được fb_dtsg từ graphql postData: {fb_dtsg[:50]}...")
+                                break
+            except Exception:
+                continue
+
+        if not fb_dtsg:
+            # last resort: search in rendered page source (still within headless mode)
+            html_content = driver.page_source or ""
+            patterns = [
+                r'"name":"fb_dtsg","value":"([^"]+)"',
+                r'"token":"([^"]+)","type":"fb_dtsg"',
+                r'"fb_dtsg"\\s*:\\s*"([^"]+)"',
+                r'name="fb_dtsg"\\s+value="([^"]+)"',
+                r'DTSGInitData.*?"token":"([^"]+)"'
+            ]
+            for i, pattern in enumerate(patterns, 1):
+                match = re.search(pattern, html_content)
+                if match:
+                    fb_dtsg = match.group(1)
+                    print(f"✅ Tìm thấy fb_dtsg trong page_source với pattern {i}: {fb_dtsg[:50]}...")
+                    break
+
+        if return_page_source:
+            try:
+                page_source = driver.page_source or ""
+            except Exception:
+                page_source = ""
+            return fb_dtsg, page_source
+        return fb_dtsg
+    finally:
+        try:
+            driver.quit()
+        except Exception:
+            pass
+
+
+def capture_graphql_post_payloads(cookie, timeout: int = 6, first_only: bool = True):
+    """
+    Dùng headless Chrome (CDP performance logs) để bắt các request POST tới /api/graphql/
+    Trả về danh sách dict chứa: url, request_id, post_data (raw string), parsed (dict)
+    Chỉ trả các request có response status == 200.
+    """
+    url = "https://www.facebook.com"
+
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.chrome.service import Service
+        from selenium.common.exceptions import WebDriverException
+        from webdriver_manager.chrome import ChromeDriverManager
+    except Exception as e:
+        print(f"❌ Selenium/webdriver_manager unavailable: {e}")
+        return []
+
+    options = Options()
+    options.add_argument("--headless")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1200,800")
+    options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
+
+    try:
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=options)
+    except Exception as e:
+        print(f"❌ Cannot start ChromeDriver: {e}")
+        return []
+
+    try:
+        try:
+            driver.execute_cdp_cmd("Network.enable", {})
+            driver.execute_cdp_cmd("Network.setExtraHTTPHeaders", {"headers": {"cookie": cookie}})
+        except Exception:
+            pass
+
+        driver.get(url)
+        # allow network activity
+        time.sleep(max(2, timeout))
+
+        try:
+            logs = driver.get_log("performance")
+        except Exception:
+            logs = []
+
+        requests_map = {}
+        responses_map = {}
+
+        for entry in logs:
+            try:
+                msg = json.loads(entry.get("message", "{}")).get("message", {})
+                method = msg.get("method", "")
+                params = msg.get("params", {}) or {}
+                request_id = params.get("requestId")
+
+                if method == "Network.requestWillBeSent":
+                    req = params.get("request", {}) or {}
+                    url_req = req.get("url", "")
+                    meth = req.get("method", "").upper()
+                    if "/api/graphql" in url_req and meth == "POST":
+                        requests_map[request_id] = {
+                            "url": url_req,
+                            "postData": req.get("postData", ""),
+                            "headers": req.get("headers", {})
+                        }
+
+                elif method == "Network.responseReceived":
+                    resp = params.get("response", {}) or {}
+                    status = resp.get("status")
+                    responses_map[request_id] = status
+            except Exception:
+                continue
+
+        results = []
+        for req_id, req_info in requests_map.items():
+            status = responses_map.get(req_id)
+            if status != 200:
+                continue
+            raw_post = req_info.get("postData", "") or ""
+            # postData may be urlencoded form; parse it
+            parsed_qs = parse_qs(raw_post, keep_blank_values=True)
+            # flatten values to single string
+            parsed = {k: (v[0] if isinstance(v, list) and len(v) > 0 else "") for k, v in parsed_qs.items()}
+            # also decode pluses for safety
+            parsed = {k: unquote_plus(v) if isinstance(v, str) else v for k, v in parsed.items()}
+
+            results.append({
+                "request_id": req_id,
+                "url": req_info.get("url"),
+                "raw_post_data": raw_post,
+                "parsed": parsed,
+                "status": status,
+                "headers": req_info.get("headers", {})
+            })
+
+            if first_only and results:
+                break
+
+        if not results:
+            print("⚠️ Không bắt được POST /api/graphql/ với status 200 trong khoảng thời gian này.")
+        else:
+            print(f"✅ Bắt được {len(results)} POST /api/graphql/ (status=200).")
+
+        return results
+    finally:
+        try:
+            driver.quit()
+        except Exception:
+            pass
+
+
+def get_all_payload_values(cookie, profile_id: str | None = None):
     """
     Lấy tất cả các giá trị payload từ Facebook.com
     
@@ -278,98 +463,203 @@ def get_all_payload_values(cookie):
     Returns:
         dict: Dictionary chứa c_user, av, __user, fb_dtsg, jazoest, lsd, spin_r, spin_t hoặc None nếu lỗi
     """
-    url = "https://www.facebook.com"
-    
-    print(f"\n🚀 Đang GET request từ: {url}")
-    
+    # CHỈ DÙNG HEADLESS SELENIUM: không còn fallback bằng requests.get
     try:
-        # Lấy c_user từ cookie
+        # Lấy c_user từ cookie (từ cookie string)
         c_user = get_c_user(cookie)
         if c_user:
             print(f"✅ Tìm thấy c_user: {c_user}")
         else:
             print(f"⚠️ Không tìm thấy c_user trong cookie")
-        
-        # Tạo headers với cookie
-        headers = get_base_headers(cookie)
-        
-        # GET request với cookies và headers
-        response = requests.get(url, headers=headers)
-        
-        print(f"📊 Status Code: {response.status_code}")
-        
-        if response.status_code != 200:
-            print(f"❌ Lỗi: Status code {response.status_code}")
-            print(f"Response text: {response.text[:500]}")
-            return None
-        
-        html_content = response.text
-        print(f"📄 Đã lấy HTML content ({len(html_content)} ký tự)")
-        
-        # Lấy fb_dtsg
-        patterns = [
-            r'"name":"fb_dtsg","value":"([^"]+)"',      # Pattern gốc
-            r'"token":"([^"]+)","type":"fb_dtsg"',       # Token với type fb_dtsg
-            r'"fb_dtsg"\s*:\s*"([^"]+)"',               # "fb_dtsg": "value"
-            r'name="fb_dtsg"\s+value="([^"]+)"',        # name="fb_dtsg" value="value"
-            r'DTSGInitData.*?"token":"([^"]+)"'          # DTSGInitData với token
-        ]
-        
+
+        # Try to get fb_dtsg from settings.json first (if profile_id provided)
+        fb_from_cfg = None
+        if profile_id:
+            try:
+                cfg = _read_settings_profile_config(profile_id)
+                if isinstance(cfg, dict):
+                    fb_from_cfg = cfg.get("fb_dtsg") or cfg.get("fb_dtsg_token") or cfg.get("fb_dtsg_value")
+                    if fb_from_cfg:
+                        fb_from_cfg = str(fb_from_cfg).strip()
+            except Exception:
+                fb_from_cfg = None
+
         fb_dtsg = None
-        for i, pattern in enumerate(patterns, 1):
-            match = re.search(pattern, html_content)
-            if match:
-                fb_dtsg = match.group(1)
-                print(f"✅ Tìm thấy fb_dtsg với pattern {i}: {fb_dtsg[:50]}...")
-                break
-        
-        if not fb_dtsg:
-            print(f"⚠️ Không tìm thấy fb_dtsg với {len(patterns)} patterns")
-            return None
-        
-        # Tính jazoest từ fb_dtsg
-        jazoest = get_jazoest(fb_dtsg)
-        print(f"✅ Tính được jazoest: {jazoest}")
-        
-        # Lấy lsd
-        lsd = get_lsd(html_content)
-        if lsd:
-            print(f"✅ Tìm thấy lsd: {lsd[:30]}...")
+        html_content = ""
+        payload = {}
+
+        # If fb_dtsg not present in settings, capture graphql POST payload to extract it and other values.
+        if not fb_from_cfg:
+            parsed_post = capture_graphql_post_payload(cookie, timeout=5)
+            if not parsed_post:
+                print("❌ Không tìm thấy POST /api/graphql hoặc không parse được payload")
+                return None
+            payload = parsed_post  # dict of string->string
+            fb_dtsg = payload.get("fb_dtsg") or payload.get("fb_dtsg_token") or None
+            if fb_dtsg:
+                print(f"✅ fb_dtsg từ payload: {fb_dtsg[:30]}...")
+                # Persist fb_dtsg into settings.json for this profile_id if provided
+                if profile_id:
+                    try:
+                        if SETTINGS_JSON_FILE.exists():
+                            with open(SETTINGS_JSON_FILE, "r", encoding="utf-8") as sf:
+                                sdata = json.load(sf)
+                        else:
+                            sdata = {}
+                        profiles = sdata.get("PROFILE_IDS") or {}
+                        if not isinstance(profiles, dict):
+                            profiles = {}
+                        profile_cfg = profiles.get(profile_id) or {}
+                        if not isinstance(profile_cfg, dict):
+                            profile_cfg = {}
+                        profile_cfg["fb_dtsg"] = fb_dtsg
+                        profiles[profile_id] = profile_cfg
+                        sdata["PROFILE_IDS"] = profiles
+                        with open(SETTINGS_JSON_FILE, "w", encoding="utf-8") as sf:
+                            json.dump(sdata, sf, ensure_ascii=False, indent=2)
+                        print(f"✅ Đã ghi fb_dtsg vào {SETTINGS_JSON_FILE} cho profile_id={profile_id}")
+                    except Exception as e:
+                        print(f"⚠️ Không thể ghi fb_dtsg vào settings.json: {e}")
         else:
-            print(f"⚠️ Không tìm thấy lsd")
-        
-        # Lấy spin_r
-        spin_r = get_spin_r(html_content)
-        if spin_r:
-            print(f"✅ Tìm thấy __spin_r: {spin_r}")
-        else:
-            print(f"⚠️ Không tìm thấy __spin_r")
-        
-        # Lấy spin_t
-        spin_t = get_spin_t(html_content)
-        if spin_t:
-            print(f"✅ Tìm thấy __spin_t: {spin_t}")
-        else:
-            print(f"⚠️ Không tìm thấy __spin_t")
-        
+            fb_dtsg = fb_from_cfg
+            payload = {}
+            print(f"ℹ️ Sử dụng fb_dtsg từ {SETTINGS_JSON_FILE} cho profile_id={profile_id} — không khởi động headless capture")
+
+        # prefer payload __user/av when present, otherwise use c_user
+        av = payload.get("av") or payload.get("__user") or payload.get("__aaid") or c_user
+        __user = payload.get("__user") or av or c_user
+        c_user_final = c_user or __user or av
+
+        # jazoest may be present in payload, otherwise compute from fb_dtsg
+        jazoest = payload.get("jazoest") or (get_jazoest(fb_dtsg) if fb_dtsg else None)
+
+        # lsd / spin values may be present in payload or in page source
+        lsd = payload.get("lsd") or payload.get("x-fb-lsd") or None
+        spin_r = payload.get("__spin_r") or None
+        spin_t = payload.get("__spin_t") or None
+
+        print(f"✅ Bắt được graphql payload keys: {list(payload.keys())}")
+        if fb_dtsg:
+            print(f"✅ fb_dtsg: {fb_dtsg[:30]}...")
+
         result = {
-            "c_user": c_user,
-            "av": c_user,  # av giống với c_user
-            "__user": c_user,  # __user giống với c_user
+            "c_user": c_user_final,
+            "av": av,
+            "__user": __user,
             "fb_dtsg": fb_dtsg,
             "jazoest": jazoest,
             "lsd": lsd,
             "spin_r": spin_r,
             "spin_t": spin_t
         }
-        
         return result
-            
     except Exception as e:
-        print(f"❌ Lỗi khi lấy payload values: {e}")
+        print(f"❌ Lỗi khi lấy payload values (headless): {e}")
         import traceback
         traceback.print_exc()
         return None
+
+
+def capture_graphql_post_payload(cookie, timeout: int = 8):
+    """
+    Dùng headless Selenium + performance logs để bắt POST requests tới /api/graphql/
+    Trả về dictionary từ postData (form-urlencoded) của request đầu tìm được.
+
+    Args:
+        cookie (str): Cookie string để inject
+        timeout (int): Số giây chờ sau khi load trang để thu logs
+
+    Returns:
+        dict | None: parsed payload (string->string) hoặc None nếu không tìm thấy
+    """
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.chrome.service import Service
+        from selenium.common.exceptions import WebDriverException
+        from webdriver_manager.chrome import ChromeDriverManager
+        from urllib.parse import parse_qs, unquote_plus
+    except Exception as e:
+        print(f"❌ Selenium/webdriver_manager hoặc urllib không có: {e}")
+        return None
+
+    options = Options()
+    options.add_argument("--headless")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--window-size=1200,800")
+    options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
+
+    try:
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=options)
+    except WebDriverException as e:
+        print(f"❌ Không thể khởi tạo Chrome WebDriver: {e}")
+        return None
+    except Exception as e:
+        print(f"❌ Lỗi khi cài/chạy ChromeDriver: {e}")
+        return None
+
+    try:
+        try:
+            driver.execute_cdp_cmd("Network.enable", {})
+            driver.execute_cdp_cmd("Network.setExtraHTTPHeaders", {"headers": {"cookie": cookie}})
+        except Exception:
+            pass
+
+        driver.get("https://www.facebook.com")
+        time.sleep(timeout)
+
+        try:
+            logs = driver.get_log("performance")
+        except Exception:
+            logs = []
+
+        for entry in logs:
+            try:
+                msg = json.loads(entry.get("message", "{}")).get("message", {})
+                method = msg.get("method", "")
+                params = msg.get("params", {}) or {}
+                # requestWillBeSent contains request with postData
+                if method == "Network.requestWillBeSent":
+                    req = params.get("request", {}) or {}
+                    url_req = req.get("url", "") or ""
+                    postData = req.get("postData", "") or ""
+                    if "/api/graphql" in url_req and postData:
+                        # postData is form-urlencoded string; parse it
+                        try:
+                            parsed = parse_qs(postData, keep_blank_values=True)
+                            # flatten values: take first value and url-decode
+                            flat = {k: unquote_plus(v[0]) if isinstance(v, list) and v else (v if isinstance(v, str) else "") for k, v in parsed.items()}
+                            print(f"✅ Bắt được graphql POST tại {url_req}, keys: {list(flat.keys())}")
+                            return flat
+                        except Exception as e:
+                            print(f"⚠️ Lỗi khi parse postData: {e}")
+                            # try manual parse fallback
+                            try:
+                                parts = postData.split("&")
+                                flat = {}
+                                for p in parts:
+                                    if "=" in p:
+                                        k, v = p.split("=", 1)
+                                        flat[k] = unquote_plus(v)
+                                if flat:
+                                    print(f"✅ Bắt được graphql POST (manual parse), keys: {list(flat.keys())}")
+                                    return flat
+                            except Exception:
+                                pass
+                # also consider Network.responseReceived -> might include requestId, skip for now
+            except Exception:
+                continue
+
+        print("⚠️ Không tìm thấy POST tới /api/graphql/ trong performance logs")
+        return None
+    finally:
+        try:
+            driver.quit()
+        except Exception:
+            pass
 
 
 def create_payload_dict(payload_values):
@@ -448,8 +738,8 @@ def get_payload_by_profile_id(profile_id):
     if not cookie:
         return None
     
-    # Lấy payload values từ Facebook
-    payload_values = get_all_payload_values(cookie)
+    # Lấy payload values từ Facebook (truyền profile_id để ưu tiên fb_dtsg từ settings.json)
+    payload_values = get_all_payload_values(cookie, profile_id=profile_id)
     if not payload_values:
         return None
     
@@ -529,6 +819,113 @@ def update_payload_file(payload_values):
         return False
 
 
+def ensure_payload_from_bad_response(profile_id: str | None, cookie: str | None, response_text: str | None = None, timeout: int = 8):
+    """
+    Khi gặp response không phải JSON (ví dụ trả về 'for (;;);{...error...}'), cố gắng:
+      - Lấy fb_dtsg, lsd từ `response_text` nếu có
+      - Nếu không, khởi động headless capture (`capture_graphql_post_payload`) để bắt postData
+      - Ghi các giá trị tìm được vào `settings.json` trong PROFILE_IDS[profile_id]
+    Trả về dict với các giá trị tìm được hoặc None nếu thất bại.
+    """
+    try:
+        fb_dtsg = None
+        lsd = None
+
+        text = response_text or ""
+        # Remove facebook XSSI prefix if present
+        if isinstance(text, str) and text.startswith("for (;;);"):
+            text = text[len("for (;;);"):]
+
+        # Try parse JSON body if possible and extract known fields
+        try:
+            parsed_json = json.loads(text) if text else {}
+            if isinstance(parsed_json, dict):
+                # some responses may include tokens under nested structures
+                # quick search for common keys
+                for k in ("fb_dtsg", "fb_dtsg_token", "fb_dtsg_value"):
+                    v = parsed_json.get(k)
+                    if v:
+                        fb_dtsg = str(v)
+                        break
+                # lsd may appear as x-fb-lsd or lsd
+                for k in ("lsd", "x-fb-lsd"):
+                    v = parsed_json.get(k)
+                    if v:
+                        lsd = str(v)
+                        break
+        except Exception:
+            parsed_json = {}
+
+        # Fallback: regex search in raw text
+        if not fb_dtsg and isinstance(text, str):
+            fb_patterns = [
+                r'"name":"fb_dtsg","value":"([^"]+)"',
+                r'"token":"([^"]+)","type":"fb_dtsg"',
+                r'"fb_dtsg"\s*:\s*"([^"]+)"',
+                r'name="fb_dtsg"\s+value="([^"]+)"',
+                r'DTSGInitData.*?"token":"([^"]+)"'
+            ]
+            for p in fb_patterns:
+                m = re.search(p, text)
+                if m:
+                    fb_dtsg = m.group(1)
+                    break
+
+        if not lsd and isinstance(text, str):
+            lsd_patterns = [
+                r'"LSD",\[\],{"token":"(.*?)"}',
+                r'"x-fb-lsd"\s*:\s*"([^"]+)"',
+                r'"lsd"\s*:\s*"([^"]+)"'
+            ]
+            for p in lsd_patterns:
+                m = re.search(p, text)
+                if m:
+                    lsd = m.group(1)
+                    break
+
+        # If still not found, attempt headless capture to parse graphql postData
+        if not fb_dtsg or not lsd:
+            try:
+                parsed = capture_graphql_post_payload(cookie, timeout=timeout)
+                if isinstance(parsed, dict):
+                    if not fb_dtsg:
+                        fb_dtsg = parsed.get("fb_dtsg") or parsed.get("fb_dtsg_token") or parsed.get("fb_dtsg_value")
+                    if not lsd:
+                        lsd = parsed.get("lsd") or parsed.get("x-fb-lsd")
+            except Exception as e:
+                print(f"⚠️ Headless capture failed: {e}")
+
+        # Persist into settings.json if profile_id provided and we found anything
+        if profile_id and (fb_dtsg or lsd):
+            try:
+                if SETTINGS_JSON_FILE.exists():
+                    with open(SETTINGS_JSON_FILE, "r", encoding="utf-8") as sf:
+                        sdata = json.load(sf)
+                else:
+                    sdata = {}
+                profiles = sdata.get("PROFILE_IDS") or {}
+                if not isinstance(profiles, dict):
+                    profiles = {}
+                profile_cfg = profiles.get(profile_id) or {}
+                if not isinstance(profile_cfg, dict):
+                    profile_cfg = {}
+                if fb_dtsg:
+                    profile_cfg["fb_dtsg"] = fb_dtsg
+                if lsd:
+                    profile_cfg["lsd"] = lsd
+                profiles[profile_id] = profile_cfg
+                sdata["PROFILE_IDS"] = profiles
+                with open(SETTINGS_JSON_FILE, "w", encoding="utf-8") as sf:
+                    json.dump(sdata, sf, ensure_ascii=False, indent=2)
+                print(f"✅ Đã ghi payload values vào {SETTINGS_JSON_FILE} cho profile_id={profile_id}")
+            except Exception as e:
+                print(f"⚠️ Không thể ghi vào settings.json: {e}")
+
+        result = {"fb_dtsg": fb_dtsg, "lsd": lsd}
+        return result
+    except Exception as e:
+        print(f"❌ ensure_payload_from_bad_response failed: {e}")
+        return None
 if __name__ == "__main__":
     # Ví dụ sử dụng với profile_id
     profile_id = "031ca13d-e8fa-400c-a603-df57a2806788"

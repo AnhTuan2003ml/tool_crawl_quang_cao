@@ -1,5 +1,20 @@
 import requests
-from get_payload import get_cookies_by_profile_id
+
+
+def _import_get_cookies():
+    try:
+        from get_payload import get_cookies_by_profile_id  # type: ignore
+        return get_cookies_by_profile_id
+    except Exception:
+        try:
+            from backend.worker.get_payload import get_cookies_by_profile_id  # type: ignore
+            return get_cookies_by_profile_id
+        except Exception:
+            from worker.get_payload import get_cookies_by_profile_id  # type: ignore
+            return get_cookies_by_profile_id
+
+
+get_cookies_by_profile_id = _import_get_cookies()
 
 
 def check_cookie_by_title(profile_id: str) -> dict:
