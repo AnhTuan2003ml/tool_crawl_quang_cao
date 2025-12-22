@@ -59,6 +59,8 @@ const scanConfigPanel = document.getElementById('scanConfigPanel');
 const groupScanPanel = document.getElementById('groupScanPanel');
 const groupScanUrlInput = document.getElementById('groupScanUrlInput');
 const groupScanPostCountInput = document.getElementById('groupScanPostCountInput');
+const groupScanStartDateInput = document.getElementById('groupScanStartDateInput');
+const groupScanEndDateInput = document.getElementById('groupScanEndDateInput');
 const groupScanStartBtn = document.getElementById('groupScanStartBtn');
 const groupScanCancelBtn = document.getElementById('groupScanCancelBtn');
 const scanTextInput = document.getElementById('scanTextInput');
@@ -1144,6 +1146,8 @@ if (groupScanStartBtn) {
       .map((s) => String(s || '').trim())
       .filter(Boolean);
     const postCount = parseInt(String(groupScanPostCountInput?.value || '0').trim(), 10);
+    const startDate = String(groupScanStartDateInput?.value || '').trim();
+    const endDate = String(groupScanEndDateInput?.value || '').trim();
     if (urls.length === 0) {
       showToast('Nhập ít nhất 1 URL group (mỗi dòng 1 URL).', 'error');
       return;
@@ -1152,7 +1156,26 @@ if (groupScanStartBtn) {
       showToast('Số bài viết theo dõi không hợp lệ.', 'error');
       return;
     }
-    showToast(`✅ Đã nhận ${urls.length} group URL + số bài theo dõi: ${postCount}`, 'success', 2200);
+    if (!startDate || !endDate) {
+      showToast('Nhập đủ thời gian bắt đầu và kết thúc.', 'error');
+      return;
+    }
+    const startTs = Date.parse(startDate);
+    const endTs = Date.parse(endDate);
+    if (!Number.isFinite(startTs) || !Number.isFinite(endTs)) {
+      showToast('Thời gian không hợp lệ.', 'error');
+      return;
+    }
+    if (startTs > endTs) {
+      showToast('Thời gian bắt đầu phải ≤ thời gian kết thúc.', 'error');
+      return;
+    }
+
+    showToast(
+      `✅ Đã nhận ${urls.length} group URL, số bài: ${postCount}, từ ${startDate} đến ${endDate}`,
+      'success',
+      2400
+    );
   });
 }
 

@@ -306,6 +306,14 @@
                     <span class="feed-label">Số bài viết theo dõi</span>
                     <input id="groupScanPostCountInput" type="number" min="0" value="0" placeholder="VD: 100" />
                   </div>
+                  <div class="feed-duration">
+                    <span class="feed-label">Từ (ngày/giờ)</span>
+                    <input id="groupScanStartDateInput" type="datetime-local" />
+                  </div>
+                  <div class="feed-duration">
+                    <span class="feed-label">Đến (ngày/giờ)</span>
+                    <input id="groupScanEndDateInput" type="datetime-local" />
+                  </div>
                 </div>
                 <div class="feed-panel-row">
                   <textarea id="groupScanUrlInput"
@@ -317,7 +325,7 @@ https://www.facebook.com/groups/abc123"></textarea>
                   <button id="groupScanStartBtn" class="btn-success" type="button">Chạy</button>
                   <button id="groupScanCancelBtn" class="btn-secondary" type="button">Đóng</button>
                 </div>
-                <p class="hint">Chỉ UI để nhập URL group. (Chưa nối API / chưa chạy gì)</p>
+                <p class="hint">Chỉ UI để nhập URL + khoảng thời gian (chưa nối API).</p>
               </div>
 
               <div id="profileList" class="profile-list empty-state-box">

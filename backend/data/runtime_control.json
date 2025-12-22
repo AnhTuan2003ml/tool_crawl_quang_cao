@@ -4,7 +4,8 @@
   "paused_profiles": [],
   "stopped_profiles": [],
   "profile_states": {
-    "621e1f5d-0c42-481e-9ddd-7abaafce68ed": "RUNNING"
+    "621e1f5d-0c42-481e-9ddd-7abaafce68ed": "RUNNING",
+    "a": "ERROR"
   },
-  "updated_at": "2025-12-21T04:58:18.782369+00:00"
+  "updated_at": "2025-12-22T03:52:43.486915+00:00"
 }
