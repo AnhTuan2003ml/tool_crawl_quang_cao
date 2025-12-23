@@ -1690,3 +1690,77 @@ def fetch_and_save_cookie(profile_id: str) -> dict:
             stop_profile(pid)
         except Exception:
             pass
+
+
+@app.get("/data/latest-results")
+def get_latest_results_file() -> dict:
+    """
+    Tìm và trả về nội dung file JSON gần nhất (theo timestamp trong tên file) từ thư mục data/results/
+    """
+    from pathlib import Path
+    import re
+
+    BASE_DIR = Path(__file__).resolve().parents[1]
+    RESULTS_DIR = BASE_DIR / "data" / "results"
+
+    if not RESULTS_DIR.exists():
+        raise HTTPException(status_code=404, detail=f"Thư mục results không tồn tại: {RESULTS_DIR}")
+
+    # Pattern để parse timestamp từ tên file: all_results_YYYYMMDD_HHMMSS.json
+    pattern = re.compile(r'all_results_(\d{8})_(\d{6})\.json$')
+
+    # Tìm tất cả file JSON và parse timestamp
+    json_files = []
+    all_files = list(RESULTS_DIR.glob("*.json"))
+
+    for file_path in all_files:
+        match = pattern.match(file_path.name)
+        if match:
+            date_str, time_str = match.groups()
+            # Parse thành datetime để so sánh chính xác
+            try:
+                from datetime import datetime
+                # Parse YYYYMMDD HHMMSS
+                dt = datetime.strptime(f"{date_str} {time_str}", "%Y%m%d %H%M%S")
+                timestamp = dt.timestamp()  # Unix timestamp
+                json_files.append((file_path, timestamp, file_path.name))
+            except ValueError:
+                continue
+
+    if not json_files:
+        file_names = [f.name for f in all_files]
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy file JSON nào match pattern. Files found: {file_names}")
+
+    # Sắp xếp theo timestamp giảm dần (mới nhất trước)
+    json_files.sort(key=lambda x: x[1], reverse=True)
+
+    # Lấy file gần nhất
+    latest_file, timestamp, filename = json_files[0]
+
+    try:
+        with latest_file.open("r", encoding="utf-8") as f:
+            content = f.read().strip()
+
+        # Thử parse JSON bình thường trước
+        try:
+            data = json.loads(content)
+        except json.JSONDecodeError:
+            # Nếu thất bại, thử tìm object JSON chính (bỏ dữ liệu thừa ở cuối)
+            # Tìm vị trí cuối cùng của closing brace
+            last_brace = content.rfind('}')
+            if last_brace > 0:
+                # Thử parse từ đầu đến closing brace
+                try:
+                    data = json.loads(content[:last_brace + 1])
+                except json.JSONDecodeError as exc:
+                    raise HTTPException(status_code=400, detail=f"File {filename} không phải JSON hợp lệ: {exc}") from exc
+            else:
+                raise HTTPException(status_code=400, detail=f"File {filename} không phải JSON hợp lệ")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Không đọc được file {filename}: {exc}") from exc
+
+    return {
+        "filename": filename,
+        "timestamp": int(timestamp),
+        "data": data
+    }
