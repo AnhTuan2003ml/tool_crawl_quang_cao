@@ -1982,9 +1982,8 @@ function addGeneratedRow() {
 // Hàm kiểm tra và thêm dữ liệu mới
 async function checkForNewData() {
   try {
-    const res = await fetch('../backend/data/results/all_results_summary.json');
-    if (!res.ok) throw new Error('Fetch failed');
-    const data = await res.json();
+    const res = await callBackend('/data/latest-results', { method: 'GET' });
+    const data = res.data;
 
     // Lấy tất cả posts từ results_by_file
     const allPosts = [];
@@ -2109,13 +2108,10 @@ async function loadInitialData() {
   loadedPostIds.clear(); // Xóa danh sách post_id đã load
 
   try {
-    // Đọc từ all_results_summary.json
-    const res = await fetch('../backend/data/results/all_results_summary.json');
-    if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
-    }
-    const data = await res.json();
-    console.log('Đã load file JSON thành công, tổng số files:', data.total_files);
+    // Gọi API để lấy file JSON có timestamp lớn nhất
+    const res = await callBackend('/data/latest-results', { method: 'GET' });
+    const data = res.data;
+    console.log(`Đã load file JSON gần nhất: ${res.filename}, tổng số files:`, data.total_files);
 
     // Lấy tất cả posts từ results_by_file
     const allPosts = [];
@@ -2229,8 +2225,8 @@ async function loadInitialData() {
     console.log(`Đã hiển thị ${displayedCount} dòng dữ liệu`);
     initialLoaded = true;
   } catch (err) {
-    console.error('Không tải được all_results_summary.json', err);
-    // Fallback: thử load data.json cũ
+    console.error('Không tải được file JSON từ API:', err);
+    // Fallback: thử load data.json cũ (nếu API không khả dụng)
     try {
       const res = await fetch('data.json');
       if (res.ok) {
@@ -2240,9 +2236,11 @@ async function loadInitialData() {
           counter = Math.max(counter, Number(row.id) + 1);
         });
         initialLoaded = true;
+        console.log('Đã load fallback data.json');
       }
     } catch (fallbackErr) {
-      console.error('Không tải được data.json', fallbackErr);
+      console.error('Không tải được data.json fallback:', fallbackErr);
+      showToast('Không tìm thấy dữ liệu bài viết để hiển thị', 'error', 4000);
     }
   }
 
