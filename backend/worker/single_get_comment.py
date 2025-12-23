@@ -200,7 +200,7 @@ def send_request(post_id, payload_dict, profile_id, cookies, commentsAfterCursor
     adapter = HTTPAdapter(max_retries=retry_cfg)
     session.mount("https://", adapter)
     session.mount("http://", adapter)
-
+    
     # Gửi payload dưới dạng form-urlencoded với headers
     response = session.post(url, data=payload, headers=headers, timeout=20)
     

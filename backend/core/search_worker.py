@@ -16,6 +16,7 @@ from core.nst import stop_profile
 from core.browser import FBController, JS_EXPAND_SCRIPT, JS_CHECK_AND_HIGHLIGHT_SCOPED
 from core.scraper import SimpleBot
 from core.control import smart_sleep
+from core.account_status import check_account_status_brutal, save_account_status
 
 # ==============================================================================
 # "HÀNH VI NGƯỜI THẬT": thi thoảng mở Thông báo rồi Back (8–15 phút/lần)
@@ -211,7 +212,35 @@ class HumanLikeBot(SimpleBot):
     """
     def run(self, url, duration=None):
         print(f"🚀 Đang truy cập: {url}")
+        # Điều hướng trực tiếp tới URL mục tiêu (feed/search)
         self.fb.goto(url)
+
+        # ==== CHECK ACCOUNT STATUS MỘT LẦN SAU KHI VÀO TRANG MỤC TIÊU ====
+        # - Chỉ kiểm tra 1 lần lúc bắt đầu
+        # - Nếu nghi bị khóa/bị ban => dừng bot cho profile này (ACCOUNT_BANNED)
+        # - Không tự điều hướng thêm lần nữa
+        profile_id = getattr(self.fb, "profile_id", None)
+        if profile_id:
+            try:
+                print(f"🔍 [ACCOUNT_STATUS] Kiểm tra trạng thái account cho profile {profile_id} (sau khi vào URL)...")
+                status = check_account_status_brutal(self.fb)
+                status["profile_id"] = profile_id
+                status["checked_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+                save_account_status(profile_id, status)
+
+                if status.get("banned"):
+                    error_msg = f"⛔ [ACCOUNT_BANNED] Profile {profile_id} bị khóa/bị ban: {status.get('message')}"
+                    print(error_msg)
+                    # DỪNG BOT cho profile này (quét/nuôi) nhưng không ảnh hưởng profile khác
+                    raise RuntimeError(f"ACCOUNT_BANNED: {status.get('message')}")
+                else:
+                    print(f"✅ [ACCOUNT_STATUS] Profile {profile_id} OK: {status.get('message')}")
+            except RuntimeError:
+                # ACCOUNT_BANNED hoặc STOP/PAUSE sẽ được xử lý ở layer trên
+                raise
+            except Exception as e:
+                # Không cho phép lỗi check account làm vỡ luồng cũ
+                print(f"⚠️ [ACCOUNT_STATUS] Không kiểm tra được trạng thái account: {e}")
 
         # ACTIVE TIME tracking (chỉ tăng khi không pause)
         active_time = 0.0
@@ -357,7 +386,7 @@ class SearchBotController(FBController):
             print(f"🎲 [LikeProb] p={p:.2f} roll={roll:.2f} -> {'LIKE' if should_like else 'SKIP'}")
             if should_like:
                 # like_current_post tự bỏ qua nếu bài đã Like
-            self.like_current_post(post_handle)
+                self.like_current_post(post_handle)
 
             # 4. Đánh dấu đã xử lý (Để bot lướt tiếp bài sau)
             self.mark_post_as_processed(post_handle)
@@ -456,11 +485,17 @@ def _run_bot_logic(profile_id, url, raw_text, duration_minutes, all_profile_ids=
             if "EMERGENCY_STOP" in str(e):
                 print("🛑 Dừng bot do EMERGENCY_STOP")
                 return
+            if "ACCOUNT_BANNED" in str(e):
+                print(f"🛑 Dừng bot do ACCOUNT_BANNED: {e}")
+                return
             raise
         
     except RuntimeError as e:
         if "EMERGENCY_STOP" in str(e):
             print("🛑 Dừng runner do EMERGENCY_STOP")
+            return
+        if "ACCOUNT_BANNED" in str(e):
+            print(f"🛑 Dừng runner do ACCOUNT_BANNED: {e}")
             return
         print(f"❌ Lỗi Runner: {e}")
     except Exception as e:

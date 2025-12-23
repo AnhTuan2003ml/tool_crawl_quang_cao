@@ -13,6 +13,20 @@
       "groups": [
         "https://www.facebook.com/groups/tuyendungkisuIT"
       ]
+    },
+    "a": {
+      "cookie": "",
+      "access_token": "",
+      "groups": []
+    },
+    "ac": {
+      "cookie": "",
+      "access_token": "a",
+      "fb_dtsg": "a",
+      "lsd": "a",
+      "spin_r": "a",
+      "spin_t": "a",
+      "groups": []
     }
   },
   "RUN_MINUTES": 30,

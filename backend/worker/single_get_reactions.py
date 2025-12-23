@@ -111,7 +111,7 @@ def send_request(feedback_target_id, payload_dict, profile_id, cookies, cursor=N
     adapter = HTTPAdapter(max_retries=retry_cfg)
     session.mount("https://", adapter)
     session.mount("http://", adapter)
-
+    
     # Gửi payload dưới dạng form-urlencoded với headers
     response = session.post(url, data=payload, headers=headers, timeout=20)
     
@@ -472,4 +472,3 @@ if __name__ == "__main__":
     if payload_dict and cookies:
         fid = "2672966333102287"  # Thay đổi FID ở đây
         users = get_all_users_by_fid(fid, payload_dict, profile_id, cookies)
-    

@@ -88,7 +88,7 @@ let loadedPostIds = new Set(); // Lưu các post_id đã load để tránh trùn
 let postsLoaded = false; // Đã load dữ liệu quản lý post hay chưa
 let profileState = {
   apiKey: '',
-  profiles: {}, // { [profileId]: { cookie: '', access_token: '', groups: string[] } }
+  profiles: {}, // { [profileId]: { cookie: '', access_token: '', fb_dtsg: '', lsd: '', spin_r: '', spin_t: '', groups: string[] } }
   selected: {}, // { [profileId]: true/false } (frontend-only)
 };
 let addRowEl = null; // Row tạm để nhập profile mới
@@ -358,11 +358,27 @@ async function tryLoadProfileStateFromBackend() {
     if (Array.isArray(profileIds)) {
       profileIds.forEach((pid) => {
         const key = String(pid || '').trim();
-        if (key) nextProfiles[key] = { cookie: '', access_token: '' };
+        if (key) nextProfiles[key] = { 
+          cookie: '', 
+          access_token: '', 
+          fb_dtsg: '', 
+          lsd: '', 
+          spin_r: '', 
+          spin_t: '',
+          groups: []
+        };
       });
     } else if (typeof profileIds === 'string') {
       profileIds.split(',').map((s) => s.trim()).filter(Boolean).forEach((pid) => {
-        nextProfiles[pid] = { cookie: '', access_token: '' };
+        nextProfiles[pid] = { 
+          cookie: '', 
+          access_token: '', 
+          fb_dtsg: '', 
+          lsd: '', 
+          spin_r: '', 
+          spin_t: '',
+          groups: []
+        };
       });
     } else if (profileIds && typeof profileIds === 'object') {
       Object.entries(profileIds).forEach(([pid, cfg]) => {
@@ -371,6 +387,10 @@ async function tryLoadProfileStateFromBackend() {
         nextProfiles[key] = {
           cookie: (cfg && cfg.cookie) ? String(cfg.cookie) : '',
           access_token: (cfg && (cfg.access_token || cfg.accessToken)) ? String(cfg.access_token || cfg.accessToken) : '',
+          fb_dtsg: (cfg && cfg.fb_dtsg) ? String(cfg.fb_dtsg) : '',
+          lsd: (cfg && cfg.lsd) ? String(cfg.lsd) : '',
+          spin_r: (cfg && cfg.spin_r) ? String(cfg.spin_r) : '',
+          spin_t: (cfg && cfg.spin_t) ? String(cfg.spin_t) : '',
           groups: (cfg && Array.isArray(cfg.groups)) ? cfg.groups.map((x) => String(x || '').trim()).filter(Boolean) : [],
         };
       });
@@ -455,16 +475,6 @@ function updateSettingsActionButtons() {
     b.disabled = !hasSelected;
   });
 
-  // Nếu đang PAUSE ALL thì disable các nút "Chạy" để tránh bấm lại vô nghĩa
-  if (isPausedAll) {
-    [scanPostsSettingBtn, scanGroupSettingBtn, autoJoinGroupBtn, feedAccountSettingBtn, feedStartBtn, scanStartBtn, groupScanStartBtn]
-      .filter(Boolean)
-      .forEach((b) => {
-        if (b.classList && b.classList.contains('btn-loading')) return;
-        b.disabled = true;
-      });
-  }
-
   // Nếu không có selection thì auto đóng panel để tránh người dùng nhập rồi mới biết không chạy được
   if (!hasSelected) {
     if (feedConfigPanel) feedConfigPanel.style.display = 'none';
@@ -533,7 +543,7 @@ function setProfileListEmptyStateIfNeeded() {
   profileList.innerHTML = '<p class="muted">Chưa có profile nào</p>';
 }
 
-function buildProfileRow(initialPid, initialInfo) {
+function buildProfileRow(initialPid, initialInfo, isNew = false) {
   let currentPid = initialPid;
   const wrap = document.createElement('div');
   wrap.className = 'profile-row-wrap';
@@ -579,8 +589,8 @@ function buildProfileRow(initialPid, initialInfo) {
 
   // Badge hiển thị trạng thái profile (RUNNING/PAUSED/STOPPED)
   const stateBadge = document.createElement('span');
-  stateBadge.className = 'profile-state-badge state-idle';
-  stateBadge.textContent = 'IDLE';
+  stateBadge.className = isNew ? 'profile-state-badge state-ready' : 'profile-state-badge state-idle';
+  stateBadge.textContent = isNew ? 'SẴN SÀNG' : 'IDLE';
 
   // ===== Group editor panel (div) =====
   const groupPanel = document.createElement('div');
@@ -614,6 +624,69 @@ function buildProfileRow(initialPid, initialInfo) {
   groupPanel.appendChild(groupTextarea);
   groupPanel.appendChild(groupPanelActions);
 
+  // ===== Token editor panel (div) =====
+  const tokenPanel = document.createElement('div');
+  tokenPanel.className = 'group-panel';
+  tokenPanel.style.display = 'none';
+
+  const tokenPanelHeader = document.createElement('div');
+  tokenPanelHeader.className = 'group-panel-header';
+  tokenPanelHeader.textContent = 'Nhập thông tin token cho profile';
+
+  const tokenForm = document.createElement('div');
+  tokenForm.style.cssText = 'display: flex; flex-direction: column; gap: 12px; padding: 0; margin-bottom: 0;';
+
+  // Tạo 5 input fields
+  const createTokenInput = (label, fieldName, placeholder) => {
+    const container = document.createElement('div');
+    container.style.cssText = 'display: flex; flex-direction: column; gap: 4px; padding: 0 0 8px 0;';
+    
+    const labelEl = document.createElement('label');
+    labelEl.textContent = label;
+    labelEl.style.cssText = 'font-weight: 600; color: #2d3748; font-size: 14px;';
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.name = fieldName;
+    input.placeholder = placeholder;
+    input.style.cssText = 'padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 14px; width: 100%; box-sizing: border-box;';
+    
+    container.appendChild(labelEl);
+    container.appendChild(input);
+    return { container, input };
+  };
+
+  const accessTokenInput = createTokenInput('Access Token', 'access_token', 'Nhập access_token...');
+  const fbDtsgInput = createTokenInput('FB DTSG', 'fb_dtsg', 'Nhập fb_dtsg...');
+  const lsdInput = createTokenInput('LSD', 'lsd', 'Nhập lsd...');
+  const spinRInput = createTokenInput('Spin R', 'spin_r', 'Nhập spin_r...');
+  const spinTInput = createTokenInput('Spin T', 'spin_t', 'Nhập spin_t...');
+
+  tokenForm.appendChild(accessTokenInput.container);
+  tokenForm.appendChild(fbDtsgInput.container);
+  tokenForm.appendChild(lsdInput.container);
+  tokenForm.appendChild(spinRInput.container);
+  tokenForm.appendChild(spinTInput.container);
+
+  const tokenPanelActions = document.createElement('div');
+  tokenPanelActions.className = 'group-panel-actions';
+
+  const tokenSaveBtn = document.createElement('button');
+  tokenSaveBtn.type = 'button';
+  tokenSaveBtn.className = 'btn-success';
+  tokenSaveBtn.textContent = 'Lưu token';
+
+  const tokenCloseBtn = document.createElement('button');
+  tokenCloseBtn.type = 'button';
+  tokenCloseBtn.className = 'btn-secondary';
+  tokenCloseBtn.textContent = 'Đóng';
+
+  tokenPanelActions.appendChild(tokenSaveBtn);
+  tokenPanelActions.appendChild(tokenCloseBtn);
+  tokenPanel.appendChild(tokenPanelHeader);
+  tokenPanel.appendChild(tokenForm);
+  tokenPanel.appendChild(tokenPanelActions);
+
   function getLocalGroups(pid) {
     const info = profileState.profiles[pid] || {};
     const gs = info.groups;
@@ -622,7 +695,17 @@ function buildProfileRow(initialPid, initialInfo) {
   }
 
   function setLocalGroups(pid, groups) {
-    if (!profileState.profiles[pid]) profileState.profiles[pid] = { cookie: '', access_token: '', groups: [] };
+    if (!profileState.profiles[pid]) {
+      profileState.profiles[pid] = { 
+        cookie: '', 
+        access_token: '', 
+        fb_dtsg: '', 
+        lsd: '', 
+        spin_r: '', 
+        spin_t: '',
+        groups: [] 
+      };
+    }
     profileState.profiles[pid].groups = Array.isArray(groups) ? groups : [];
   }
 
@@ -655,7 +738,7 @@ function buildProfileRow(initialPid, initialInfo) {
   const tokenBtn = document.createElement('button');
   tokenBtn.type = 'button';
   tokenBtn.className = 'btn-success';
-  tokenBtn.textContent = initialInfo?.access_token ? 'Cập nhật token' : 'Lấy access_token';
+  tokenBtn.textContent = 'Cập nhật token' ;
 
   groupBtn.addEventListener('click', async () => {
     const isOpen = groupPanel.style.display !== 'none';
@@ -731,7 +814,15 @@ function buildProfileRow(initialPid, initialInfo) {
     // normalize hiển thị để tránh dính space
     if (pidInput.value !== nextPid) pidInput.value = nextPid;
 
-    const cur = profileState.profiles[currentPid] || { cookie: '', access_token: '', groups: [] };
+    const cur = profileState.profiles[currentPid] || { 
+      cookie: '', 
+      access_token: '', 
+      fb_dtsg: '', 
+      lsd: '', 
+      spin_r: '', 
+      spin_t: '',
+      groups: [] 
+    };
     saveBtn.disabled = true;
     try {
       if (nextPid !== currentPid) {
@@ -745,6 +836,10 @@ function buildProfileRow(initialPid, initialInfo) {
           body: JSON.stringify({
             cookie: cur.cookie || '',
             access_token: cur.access_token || '',
+            fb_dtsg: cur.fb_dtsg || '',
+            lsd: cur.lsd || '',
+            spin_r: cur.spin_r || '',
+            spin_t: cur.spin_t || '',
           }),
         });
         // copy groups sang profile mới (tránh mất)
@@ -771,6 +866,10 @@ function buildProfileRow(initialPid, initialInfo) {
           body: JSON.stringify({
             cookie: cur.cookie || '',
             access_token: cur.access_token || '',
+            fb_dtsg: cur.fb_dtsg || '',
+            lsd: cur.lsd || '',
+            spin_r: cur.spin_r || '',
+            spin_t: cur.spin_t || '',
           }),
         });
       }
@@ -817,24 +916,96 @@ function buildProfileRow(initialPid, initialInfo) {
       .finally(() => (cookieBtn.disabled = false));
   });
 
-  tokenBtn.addEventListener('click', () => {
-    const info = profileState.profiles[currentPid] || {};
-    const newVal = prompt(`Dán access token cho profile ${currentPid}:`, info.access_token || '');
-    if (newVal === null) return;
-    const nextToken = newVal.trim();
+  tokenBtn.addEventListener('click', async () => {
+    const isOpen = tokenPanel.style.display !== 'none';
+    if (isOpen) {
+      tokenPanel.style.display = 'none';
+      return;
+    }
+
+    // Mở panel + load token data từ backend
     tokenBtn.disabled = true;
-    callBackend(`/settings/profiles/${encodeURIComponent(currentPid)}`, {
-      method: 'PUT',
-      body: JSON.stringify({ access_token: nextToken }),
-    })
-      .then(() => {
-        profileState.profiles[currentPid] = { ...profileState.profiles[currentPid], access_token: nextToken };
-        saveProfileState();
-        tokenBtn.textContent = nextToken ? 'Cập nhật token' : 'Lấy access_token';
-        showToast('Đã lưu token', 'success');
-      })
-      .catch(() => showToast('Không lưu token (kiểm tra FastAPI).', 'error'))
-      .finally(() => (tokenBtn.disabled = false));
+    try {
+      const settings = await callBackendNoAlert('/settings', { method: 'GET' });
+      const profiles = (settings && (settings.PROFILE_IDS || settings.profile_ids)) || {};
+      const cfg = (profiles && typeof profiles === 'object') ? profiles[currentPid] : null;
+      
+      // Load giá trị hiện tại vào inputs
+      accessTokenInput.input.value = (cfg && cfg.access_token) ? String(cfg.access_token) : '';
+      fbDtsgInput.input.value = (cfg && cfg.fb_dtsg) ? String(cfg.fb_dtsg) : '';
+      lsdInput.input.value = (cfg && cfg.lsd) ? String(cfg.lsd) : '';
+      spinRInput.input.value = (cfg && cfg.spin_r) ? String(cfg.spin_r) : '';
+      spinTInput.input.value = (cfg && cfg.spin_t) ? String(cfg.spin_t) : '';
+      
+      tokenPanel.style.display = 'block';
+      accessTokenInput.input.focus();
+    } catch (e) {
+      // Fallback: load từ local state
+      const info = profileState.profiles[currentPid] || {};
+      accessTokenInput.input.value = info.access_token || '';
+      fbDtsgInput.input.value = info.fb_dtsg || '';
+      lsdInput.input.value = info.lsd || '';
+      spinRInput.input.value = info.spin_r || '';
+      spinTInput.input.value = info.spin_t || '';
+      tokenPanel.style.display = 'block';
+      accessTokenInput.input.focus();
+      showToast('Không load được token từ backend, đang dùng dữ liệu local.', 'error');
+    } finally {
+      tokenBtn.disabled = false;
+    }
+  });
+
+  tokenCloseBtn.addEventListener('click', () => {
+    tokenPanel.style.display = 'none';
+  });
+
+  tokenSaveBtn.addEventListener('click', async () => {
+    const accessToken = accessTokenInput.input.value.trim();
+    const fbDtsg = fbDtsgInput.input.value.trim();
+    const lsd = lsdInput.input.value.trim();
+    const spinR = spinRInput.input.value.trim();
+    const spinT = spinTInput.input.value.trim();
+
+    tokenSaveBtn.disabled = true;
+    try {
+      await callBackend(`/settings/profiles/${encodeURIComponent(currentPid)}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          access_token: accessToken,
+          fb_dtsg: fbDtsg,
+          lsd: lsd,
+          spin_r: spinR,
+          spin_t: spinT,
+        }),
+      });
+      
+      // Update local state
+      if (!profileState.profiles[currentPid]) {
+        profileState.profiles[currentPid] = { 
+          cookie: '', 
+          access_token: '', 
+          fb_dtsg: '', 
+          lsd: '', 
+          spin_r: '', 
+          spin_t: '',
+          groups: [] 
+        };
+      }
+      profileState.profiles[currentPid].access_token = accessToken;
+      profileState.profiles[currentPid].fb_dtsg = fbDtsg;
+      profileState.profiles[currentPid].lsd = lsd;
+      profileState.profiles[currentPid].spin_r = spinR;
+      profileState.profiles[currentPid].spin_t = spinT;
+      saveProfileState();
+      
+      tokenBtn.textContent = accessToken ? 'Cập nhật token' : 'Lấy access_token';
+      showToast('Đã lưu token', 'success');
+      tokenPanel.style.display = 'none';
+    } catch (e) {
+      showToast('Không lưu token (kiểm tra FastAPI).', 'error');
+    } finally {
+      tokenSaveBtn.disabled = false;
+    }
   });
 
   actions.appendChild(stateBadge);
@@ -850,6 +1021,7 @@ function buildProfileRow(initialPid, initialInfo) {
   row.appendChild(actions);
   wrap.appendChild(row);
   wrap.appendChild(groupPanel);
+  wrap.appendChild(tokenPanel);
   // init label
   try { updatePauseBtnLabel(); } catch (_) { }
   return wrap;
@@ -905,7 +1077,15 @@ function showAddProfileRow() {
     })
       .then(() => {
         if (!profileState.profiles[value]) {
-          profileState.profiles[value] = { cookie: '', access_token: '', groups: [] };
+          profileState.profiles[value] = { 
+            cookie: '', 
+            access_token: '', 
+            fb_dtsg: '', 
+            lsd: '', 
+            spin_r: '', 
+            spin_t: '',
+            groups: [] 
+          };
         }
         saveProfileState();
         // Thêm row mới mà không render lại toàn bộ (tránh nháy)
@@ -913,7 +1093,7 @@ function showAddProfileRow() {
           profileList.classList.remove('empty-state-box');
           profileList.innerHTML = '';
         }
-        const newRow = buildProfileRow(value, profileState.profiles[value]);
+        const newRow = buildProfileRow(value, profileState.profiles[value], true); // true = isNew
         // insert trước addRowEl để form vẫn ở cuối
         profileList.insertBefore(newRow, addRowEl);
         // remove form add
@@ -2071,6 +2251,33 @@ async function loadInitialData() {
     emptyState.classList.add('show');
   }
 }
+
+// ==========================
+// CẢNH BÁO ACCOUNT CÓ VẤN ĐỀ
+// ==========================
+async function pollAccountStatus() {
+  try {
+    const res = await callBackendNoAlert('/account/status', { method: 'GET' });
+    if (!res || !res.accounts) return;
+
+    const accounts = res.accounts || {};
+    Object.keys(accounts).forEach((pid) => {
+      const info = accounts[pid];
+      if (!info) return;
+      if (!info.banned) return;
+
+      const msg = info.message || 'Tài khoản có vấn đề, hãy kiểm tra lại bằng tay.';
+      showToast(`Profile ${pid}: ${msg}`, 'warning', 10000);
+    });
+  } catch (e) {
+    // bỏ qua lỗi, không ảnh hưởng luồng cũ
+  }
+}
+
+// Poll mỗi 45s, hoàn toàn độc lập, chỉ hiển thị thông báo
+try {
+  setInterval(pollAccountStatus, 45000);
+} catch (_) { }
 
 // Start quét bài viết (dùng chung cho nút "Bắt đầu quét" và nút trong tab Setting profile)
 async function startScanFlow(options = {}) {

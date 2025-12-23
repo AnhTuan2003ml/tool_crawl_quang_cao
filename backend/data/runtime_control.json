@@ -1,12 +1,10 @@
 {
   "global_emergency_stop": false,
-  "global_pause": true,
-  "paused_profiles": [
-    "b77da63d-af55-43c2-ab7f-364250b20e30"
-  ],
+  "global_pause": false,
+  "paused_profiles": [],
   "stopped_profiles": [],
   "profile_states": {
-    "b77da63d-af55-43c2-ab7f-364250b20e30": "PAUSED"
+    "b77da63d-af55-43c2-ab7f-364250b20e30": "RUNNING"
   },
-  "updated_at": "2025-12-22T15:50:24.599788+00:00"
+  "updated_at": "2025-12-23T06:54:49.561782+00:00"
 }

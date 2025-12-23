@@ -9,6 +9,7 @@ import threading
 import re
 from urllib.parse import quote_plus
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -250,8 +251,12 @@ def _run_bot_profile_loop(
                 bot = SimpleBot(fb)
                 bot.run(target_url, duration=duration_seconds)
             except RuntimeError as e:
-                # STOP/BROWSER_CLOSED => thoát phiên
-                if "EMERGENCY_STOP" in str(e) or "BROWSER_CLOSED" in str(e):
+                # STOP/BROWSER_CLOSED/ACCOUNT_BANNED => thoát phiên
+                if (
+                    "EMERGENCY_STOP" in str(e)
+                    or "BROWSER_CLOSED" in str(e)
+                    or "ACCOUNT_BANNED" in str(e)
+                ):
                     print(f"🛑 [{pid}] Dừng bot ({e})")
                     return
                 raise
@@ -520,9 +525,14 @@ def run_bot(payload: Optional[RunRequest] = Body(None)) -> dict:
     if not pids:
         raise HTTPException(status_code=400, detail="profile_ids không hợp lệ")
 
-    # Nếu user bấm CHẠY mà trước đó đã STOP, auto reset STOP để job chạy được.
-    # Chỉ resume/clear STOPPED cho đúng các profile được yêu cầu chạy.
+    # Nếu user bấm CHẠY mà trước đó đã STOP/PAUSE, auto reset để job chạy được.
+    # - Tắt GLOBAL_PAUSE
+    # - Nếu đang GLOBAL_EMERGENCY_STOP thì reset
+    # - resume_profiles cho đúng các profile được yêu cầu chạy.
     try:
+        # Luôn clear global_pause khi bấm bất kỳ nút start nào (scan/feed/search)
+        control_state.set_global_pause(False)
+
         stop, _paused, reason = control_state.check_flags(None)
         if stop:
             print(f"🟡 [/run] GLOBAL_EMERGENCY_STOP đang bật ({reason}) -> auto reset để chạy")
@@ -740,6 +750,10 @@ class ProfileCreatePayload(BaseModel):
 class ProfileUpdatePayload(BaseModel):
     cookie: Optional[str] = None
     access_token: Optional[str] = None
+    fb_dtsg: Optional[str] = None
+    lsd: Optional[str] = None
+    spin_r: Optional[str] = None
+    spin_t: Optional[str] = None
 
 
 class ProfileGroupsPayload(BaseModel):
@@ -776,6 +790,18 @@ class FeedStopRequest(BaseModel):
     profile_ids: Optional[list[str]] = None
 
 
+class AccountStatusPayload(BaseModel):
+    profile_id: str
+    status: str
+    banned: bool
+    reason: Optional[str] = None
+    message: str
+    url: Optional[str] = None
+    keyword: Optional[str] = None
+    title: Optional[str] = None
+    checked_at: Optional[str] = None
+
+
 @app.put("/settings/api-key")
 def update_api_key(payload: ApiKeyPayload) -> dict:
     with _settings_lock:
@@ -783,6 +809,68 @@ def update_api_key(payload: ApiKeyPayload) -> dict:
         raw["API_KEY"] = str(payload.api_key or "").strip()
         _write_settings_raw(raw)
         return {"status": "ok"}
+
+
+@app.post("/account/status")
+def report_account_status(payload: AccountStatusPayload) -> dict:
+    """
+    Nhận báo cáo trạng thái account từ worker.
+    ✅ Chức năng dự phòng: KHÔNG dừng bot, chỉ lưu/log để frontend cảnh báo.
+    """
+    pid = _norm_profile_id(payload.profile_id)
+    if not pid:
+        raise HTTPException(status_code=400, detail="profile_id rỗng")
+
+    status_file = Path("backend/data/account_status.json")
+    status_file.parent.mkdir(parents=True, exist_ok=True)
+
+    data: Dict[str, Any] = {}
+    if status_file.exists():
+        try:
+            with status_file.open("r", encoding="utf-8") as f:
+                data = json.load(f) or {}
+        except Exception:
+            data = {}
+
+    data[pid] = {
+        "profile_id": pid,
+        "status": payload.status,
+        "banned": bool(payload.banned),
+        "reason": payload.reason,
+        "message": payload.message,
+        "url": payload.url,
+        "keyword": payload.keyword,
+        "title": payload.title,
+        "checked_at": payload.checked_at or datetime.utcnow().isoformat(),
+    }
+
+    try:
+        with status_file.open("w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"⚠️ Không ghi được account_status.json: {e}")
+
+    print(f"🔔 [ACCOUNT_STATUS] {pid}: {payload.message}")
+    return {"status": "ok", "profile_id": pid}
+
+
+@app.get("/account/status")
+def get_account_status() -> dict:
+    """
+    Lấy snapshot trạng thái account (do worker đã ghi ra file).
+    Frontend chỉ dùng để hiển thị cảnh báo, không điều khiển luồng.
+    """
+    status_file = Path("backend/data/account_status.json")
+    if not status_file.exists():
+        return {"accounts": {}}
+
+    try:
+        with status_file.open("r", encoding="utf-8") as f:
+            data = json.load(f) or {}
+        return {"accounts": data}
+    except Exception as e:
+        print(f"⚠️ Không đọc được account_status.json: {e}")
+        return {"accounts": {}}
 
 
 @app.post("/settings/profiles")
@@ -800,13 +888,17 @@ def add_profile(payload: ProfileCreatePayload) -> dict:
         if not isinstance(profiles, dict):
             raise HTTPException(status_code=400, detail="PROFILE_IDS phải là object")
 
-        # Tạo profile mới: luôn có cookie/access_token/groups (groups trống)
+        # Tạo profile mới: luôn có cookie/access_token/fb_dtsg/lsd/spin_r/spin_t/groups (groups trống)
         cur = profiles.get(pid)
         if cur is None or not isinstance(cur, dict):
             cur = {}
             profiles[pid] = cur
         cur.setdefault("cookie", "")
         cur.setdefault("access_token", "")
+        cur.setdefault("fb_dtsg", "")
+        cur.setdefault("lsd", "")
+        cur.setdefault("spin_r", "")
+        cur.setdefault("spin_t", "")
         cur.setdefault("groups", [])
         raw["PROFILE_IDS"] = profiles
         _write_settings_raw(raw)
@@ -839,6 +931,14 @@ def update_profile(profile_id: str, payload: ProfileUpdatePayload) -> dict:
             cur["cookie"] = str(payload.cookie)
         if payload.access_token is not None:
             cur["access_token"] = str(payload.access_token)
+        if payload.fb_dtsg is not None:
+            cur["fb_dtsg"] = str(payload.fb_dtsg)
+        if payload.lsd is not None:
+            cur["lsd"] = str(payload.lsd)
+        if payload.spin_r is not None:
+            cur["spin_r"] = str(payload.spin_r)
+        if payload.spin_t is not None:
+            cur["spin_t"] = str(payload.spin_t)
 
         raw["PROFILE_IDS"] = profiles
         _write_settings_raw(raw)
@@ -962,8 +1062,11 @@ def auto_join_groups(payload: JoinGroupsRequest) -> dict:
     Chạy auto join group cho các profile đã chọn (mỗi profile 1 process → chạy song song).
     Groups lấy từ settings.json: PROFILE_IDS[pid].groups
     """
-    # Nếu user bấm join mà trước đó đã STOP, auto reset STOP để job chạy được.
+    # Nếu user bấm JOIN mà trước đó đã STOP/PAUSE, auto reset để job chạy được.
     try:
+        # Clear global_pause khi bấm JOIN
+        control_state.set_global_pause(False)
+
         stop, _paused, reason = control_state.check_flags(None)
         if stop:
             print(f"🟡 [/groups/join] GLOBAL_EMERGENCY_STOP đang bật ({reason}) -> auto reset để join")
@@ -1127,8 +1230,11 @@ def feed_start(payload: FeedStartRequest) -> dict:
     if not pids:
         raise HTTPException(status_code=400, detail="profile_ids không hợp lệ")
 
-    # Nếu user bấm NUÔI ACC mà trước đó đã STOP, auto reset STOP để job chạy được.
+    # Nếu user bấm NUÔI ACC mà trước đó đã STOP/PAUSE, auto reset STOP/PAUSE để job chạy được.
     try:
+        # Clear global_pause khi bấm NUÔI ACC
+        control_state.set_global_pause(False)
+
         stop, _paused, reason = control_state.check_flags(None)
         if stop:
             print(f"🟡 [/feed/start] GLOBAL_EMERGENCY_STOP đang bật ({reason}) -> auto reset để chạy")
@@ -1272,6 +1378,15 @@ async def run_info_collector(payload: InfoRunRequest = Body(...)) -> dict:
       - mode="selected": chỉ chạy các profile_id truyền trong payload.profiles
     """
     mode = (payload.mode or "all").lower()
+    # Khi bấm Lấy thông tin, auto clear global_pause + emergency_stop
+    try:
+        control_state.set_global_pause(False)
+        stop, _paused, reason = control_state.check_flags(None)
+        if stop:
+            print(f"🟡 [/info/run] GLOBAL_EMERGENCY_STOP đang bật ({reason}) -> auto reset để chạy")
+            control_state.reset_emergency_stop(clear_stopped_profiles=False)
+    except Exception:
+        pass
     try:
         if mode == "selected":
             profiles = payload.profiles or []

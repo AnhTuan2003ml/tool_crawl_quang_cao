@@ -1111,10 +1111,11 @@ tbody tr.filtered-out {
 }
 
 .group-panel {
-  padding      : 10px 12px;
+  padding      : 10px 12px 12px 12px;
   background   : #f9fafb;
   border       : 1px dashed var(--border);
   border-radius: 10px;
+  overflow     : visible;
 }
 
 .group-panel-header {
@@ -1146,7 +1147,10 @@ tbody tr.filtered-out {
   display        : flex;
   gap            : 8px;
   justify-content: flex-end;
-  margin-top     : 8px;
+  margin-top     : 12px;
+  padding        : 0;
+  width          : 100%;
+  box-sizing     : border-box;
 }
 
 

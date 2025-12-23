@@ -634,4 +634,3 @@ def get_info_for_profile_ids(profile_ids):
 
 if __name__ == "__main__":
     get_all_info_from_post_ids_dir()
-

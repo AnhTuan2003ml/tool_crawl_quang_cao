@@ -21,6 +21,7 @@ tool_crawl_quang_cao/
             payload.txt
             settings.json
         core/
+            account_status.py
             browser.py
             control.py
             join_groups.py
@@ -31,6 +32,7 @@ tool_crawl_quang_cao/
             settings.py
             utils.py
         data/
+            account_status.json
             runtime_control.json
             post_ids/
                 b77da63d-af55-43c2-ab7f-364250b20e30.json
@@ -159,6 +161,7 @@ import threading
 import re
 from urllib.parse import quote_plus
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -400,8 +403,12 @@ def _run_bot_profile_loop(
                 bot = SimpleBot(fb)
                 bot.run(target_url, duration=duration_seconds)
             except RuntimeError as e:
-                # STOP/BROWSER_CLOSED => thoát phiên
-                if "EMERGENCY_STOP" in str(e) or "BROWSER_CLOSED" in str(e):
+                # STOP/BROWSER_CLOSED/ACCOUNT_BANNED => thoát phiên
+                if (
+                    "EMERGENCY_STOP" in str(e)
+                    or "BROWSER_CLOSED" in str(e)
+                    or "ACCOUNT_BANNED" in str(e)
+                ):
                     print(f"🛑 [{pid}] Dừng bot ({e})")
                     return
                 raise
@@ -670,9 +677,14 @@ def run_bot(payload: Optional[RunRequest] = Body(None)) -> dict:
     if not pids:
         raise HTTPException(status_code=400, detail="profile_ids không hợp lệ")
 
-    # Nếu user bấm CHẠY mà trước đó đã STOP, auto reset STOP để job chạy được.
-    # Chỉ resume/clear STOPPED cho đúng các profile được yêu cầu chạy.
+    # Nếu user bấm CHẠY mà trước đó đã STOP/PAUSE, auto reset để job chạy được.
+    # - Tắt GLOBAL_PAUSE
+    # - Nếu đang GLOBAL_EMERGENCY_STOP thì reset
+    # - resume_profiles cho đúng các profile được yêu cầu chạy.
     try:
+        # Luôn clear global_pause khi bấm bất kỳ nút start nào (scan/feed/search)
+        control_state.set_global_pause(False)
+
         stop, _paused, reason = control_state.check_flags(None)
         if stop:
             print(f"🟡 [/run] GLOBAL_EMERGENCY_STOP đang bật ({reason}) -> auto reset để chạy")
@@ -890,6 +902,10 @@ class ProfileCreatePayload(BaseModel):
 class ProfileUpdatePayload(BaseModel):
     cookie: Optional[str] = None
     access_token: Optional[str] = None
+    fb_dtsg: Optional[str] = None
+    lsd: Optional[str] = None
+    spin_r: Optional[str] = None
+    spin_t: Optional[str] = None
 
 
 class ProfileGroupsPayload(BaseModel):
@@ -926,6 +942,18 @@ class FeedStopRequest(BaseModel):
     profile_ids: Optional[list[str]] = None
 
 
+class AccountStatusPayload(BaseModel):
+    profile_id: str
+    status: str
+    banned: bool
+    reason: Optional[str] = None
+    message: str
+    url: Optional[str] = None
+    keyword: Optional[str] = None
+    title: Optional[str] = None
+    checked_at: Optional[str] = None
+
+
 @app.put("/settings/api-key")
 def update_api_key(payload: ApiKeyPayload) -> dict:
     with _settings_lock:
@@ -933,6 +961,68 @@ def update_api_key(payload: ApiKeyPayload) -> dict:
         raw["API_KEY"] = str(payload.api_key or "").strip()
         _write_settings_raw(raw)
         return {"status": "ok"}
+
+
+@app.post("/account/status")
+def report_account_status(payload: AccountStatusPayload) -> dict:
+    """
+    Nhận báo cáo trạng thái account từ worker.
+    ✅ Chức năng dự phòng: KHÔNG dừng bot, chỉ lưu/log để frontend cảnh báo.
+    """
+    pid = _norm_profile_id(payload.profile_id)
+    if not pid:
+        raise HTTPException(status_code=400, detail="profile_id rỗng")
+
+    status_file = Path("backend/data/account_status.json")
+    status_file.parent.mkdir(parents=True, exist_ok=True)
+
+    data: Dict[str, Any] = {}
+    if status_file.exists():
+        try:
+            with status_file.open("r", encoding="utf-8") as f:
+                data = json.load(f) or {}
+        except Exception:
+            data = {}
+
+    data[pid] = {
+        "profile_id": pid,
+        "status": payload.status,
+        "banned": bool(payload.banned),
+        "reason": payload.reason,
+        "message": payload.message,
+        "url": payload.url,
+        "keyword": payload.keyword,
+        "title": payload.title,
+        "checked_at": payload.checked_at or datetime.utcnow().isoformat(),
+    }
+
+    try:
+        with status_file.open("w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"⚠️ Không ghi được account_status.json: {e}")
+
+    print(f"🔔 [ACCOUNT_STATUS] {pid}: {payload.message}")
+    return {"status": "ok", "profile_id": pid}
+
+
+@app.get("/account/status")
+def get_account_status() -> dict:
+    """
+    Lấy snapshot trạng thái account (do worker đã ghi ra file).
+    Frontend chỉ dùng để hiển thị cảnh báo, không điều khiển luồng.
+    """
+    status_file = Path("backend/data/account_status.json")
+    if not status_file.exists():
+        return {"accounts": {}}
+
+    try:
+        with status_file.open("r", encoding="utf-8") as f:
+            data = json.load(f) or {}
+        return {"accounts": data}
+    except Exception as e:
+        print(f"⚠️ Không đọc được account_status.json: {e}")
+        return {"accounts": {}}
 
 
 @app.post("/settings/profiles")
@@ -950,13 +1040,17 @@ def add_profile(payload: ProfileCreatePayload) -> dict:
         if not isinstance(profiles, dict):
             raise HTTPException(status_code=400, detail="PROFILE_IDS phải là object")
 
-        # Tạo profile mới: luôn có cookie/access_token/groups (groups trống)
+        # Tạo profile mới: luôn có cookie/access_token/fb_dtsg/lsd/spin_r/spin_t/groups (groups trống)
         cur = profiles.get(pid)
         if cur is None or not isinstance(cur, dict):
             cur = {}
             profiles[pid] = cur
         cur.setdefault("cookie", "")
         cur.setdefault("access_token", "")
+        cur.setdefault("fb_dtsg", "")
+        cur.setdefault("lsd", "")
+        cur.setdefault("spin_r", "")
+        cur.setdefault("spin_t", "")
         cur.setdefault("groups", [])
         raw["PROFILE_IDS"] = profiles
         _write_settings_raw(raw)
@@ -989,6 +1083,14 @@ def update_profile(profile_id: str, payload: ProfileUpdatePayload) -> dict:
             cur["cookie"] = str(payload.cookie)
         if payload.access_token is not None:
             cur["access_token"] = str(payload.access_token)
+        if payload.fb_dtsg is not None:
+            cur["fb_dtsg"] = str(payload.fb_dtsg)
+        if payload.lsd is not None:
+            cur["lsd"] = str(payload.lsd)
+        if payload.spin_r is not None:
+            cur["spin_r"] = str(payload.spin_r)
+        if payload.spin_t is not None:
+            cur["spin_t"] = str(payload.spin_t)
 
         raw["PROFILE_IDS"] = profiles
         _write_settings_raw(raw)
@@ -1112,8 +1214,11 @@ def auto_join_groups(payload: JoinGroupsRequest) -> dict:
     Chạy auto join group cho các profile đã chọn (mỗi profile 1 process → chạy song song).
     Groups lấy từ settings.json: PROFILE_IDS[pid].groups
     """
-    # Nếu user bấm join mà trước đó đã STOP, auto reset STOP để job chạy được.
+    # Nếu user bấm JOIN mà trước đó đã STOP/PAUSE, auto reset để job chạy được.
     try:
+        # Clear global_pause khi bấm JOIN
+        control_state.set_global_pause(False)
+
         stop, _paused, reason = control_state.check_flags(None)
         if stop:
             print(f"🟡 [/groups/join] GLOBAL_EMERGENCY_STOP đang bật ({reason}) -> auto reset để join")
@@ -1277,8 +1382,11 @@ def feed_start(payload: FeedStartRequest) -> dict:
     if not pids:
         raise HTTPException(status_code=400, detail="profile_ids không hợp lệ")
 
-    # Nếu user bấm NUÔI ACC mà trước đó đã STOP, auto reset STOP để job chạy được.
+    # Nếu user bấm NUÔI ACC mà trước đó đã STOP/PAUSE, auto reset STOP/PAUSE để job chạy được.
     try:
+        # Clear global_pause khi bấm NUÔI ACC
+        control_state.set_global_pause(False)
+
         stop, _paused, reason = control_state.check_flags(None)
         if stop:
             print(f"🟡 [/feed/start] GLOBAL_EMERGENCY_STOP đang bật ({reason}) -> auto reset để chạy")
@@ -1422,6 +1530,15 @@ async def run_info_collector(payload: InfoRunRequest = Body(...)) -> dict:
       - mode="selected": chỉ chạy các profile_id truyền trong payload.profiles
     """
     mode = (payload.mode or "all").lower()
+    # Khi bấm Lấy thông tin, auto clear global_pause + emergency_stop
+    try:
+        control_state.set_global_pause(False)
+        stop, _paused, reason = control_state.check_flags(None)
+        if stop:
+            print(f"🟡 [/info/run] GLOBAL_EMERGENCY_STOP đang bật ({reason}) -> auto reset để chạy")
+            control_state.reset_emergency_stop(clear_stopped_profiles=False)
+    except Exception:
+        pass
     try:
         if mode == "selected":
             profiles = payload.profiles or []
@@ -1766,12 +1883,229 @@ App package cho FastAPI endpoints.
       "groups": [
         "https://www.facebook.com/groups/tuyendungkisuIT"
       ]
+    },
+    "a": {
+      "cookie": "",
+      "access_token": "",
+      "groups": []
+    },
+    "ac": {
+      "cookie": "",
+      "access_token": "a",
+      "fb_dtsg": "a",
+      "lsd": "a",
+      "spin_r": "a",
+      "spin_t": "a",
+      "groups": []
     }
   },
   "RUN_MINUTES": 30,
   "REST_MINUTES": 120
 }
+
 --- END FILE: backend\config\settings.json ---
+
+--- START FILE: backend\core\account_status.py ---
+from typing import Dict, Any
+from pathlib import Path
+import json
+
+from core.browser import FBController
+
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+STATUS_FILE = BASE_DIR / "data" / "account_status.json"
+
+
+def check_account_status_brutal(fb: FBController) -> Dict[str, Any]:
+    """
+    CHECK BRUTAL MODE
+    - Mục tiêu: không bỏ sót account lỗi
+    - Chấp nhận false-positive nhẹ
+    - Không tự dừng bot, chỉ trả về trạng thái để caller tự quyết định.
+    """
+
+    if not fb or not getattr(fb, "page", None):
+        return {
+            "status": "UNKNOWN",
+            "banned": True,
+            "reason": "no_browser",
+            "message": "❌ Không có browser/page",
+        }
+
+    page = fb.page
+
+    try:
+        url = page.url.lower()
+    except Exception:
+        return {
+            "status": "UNKNOWN",
+            "banned": True,
+            "reason": "cannot_get_url",
+            "message": "❌ Không lấy được URL",
+        }
+
+    # =========================
+    # 1. URL CHECK (CHẮC NHẤT)
+    # =========================
+    HARD_URL_KEYWORDS = [
+        "checkpoint",
+        "disabled",
+        "account_recovery",
+        "confirmidentity",
+        "recover",
+        "login.php",
+        "login/",
+        "two_step_verification",
+        "security_checkup",
+    ]
+
+    for k in HARD_URL_KEYWORDS:
+        if k in url:
+            return {
+                "status": "BANNED",
+                "banned": True,
+                "reason": "url_detected",
+                "keyword": k,
+                "url": url,
+                "message": f"⛔ URL dính keyword khóa: {k}",
+            }
+
+    # =========================
+    # 2. TITLE CHECK
+    # =========================
+    try:
+        title = page.title().lower()
+    except Exception:
+        title = ""
+
+    TITLE_KEYWORDS = [
+        "log in or sign up",
+        "đăng nhập",
+        "your account has been disabled",
+        "account disabled",
+        "confirm your identity",
+        "security check",
+    ]
+
+    for k in TITLE_KEYWORDS:
+        if k in title:
+            return {
+                "status": "BANNED",
+                "banned": True,
+                "reason": "title_detected",
+                "keyword": k,
+                "title": title,
+                "message": f"⛔ Title dính keyword khóa: {k}",
+            }
+
+    # =========================
+    # 3. BODY TEXT SCAN (CÀN QUÉT)
+    # =========================
+    try:
+        body_text = page.evaluate(
+            """
+            () => document.body ? document.body.innerText.toLowerCase() : ""
+        """
+        )
+    except Exception:
+        body_text = ""
+
+    TEXT_KEYWORDS = [
+        "your account has been disabled",
+        "account disabled",
+        "we’ve temporarily locked your account",
+        "temporarily locked",
+        "confirm your identity",
+        "confirm it’s you",
+        "tài khoản của bạn đã bị vô hiệu hóa",
+        "tài khoản bị khóa",
+        "tài khoản của bạn đã bị khóa",
+        "xác minh danh tính",
+        "bảo mật tài khoản",
+        "security check",
+        "phiên đăng nhập đã hết hạn",
+    ]
+
+    for k in TEXT_KEYWORDS:
+        if k in body_text:
+            return {
+                "status": "BANNED",
+                "banned": True,
+                "reason": "text_detected",
+                "keyword": k,
+                "message": f"⛔ Text phát hiện trạng thái khóa: {k}",
+            }
+
+    # =========================
+    # 4. FEED / MAIN CONTENT CHECK
+    # =========================
+    try:
+        feed = page.query_selector(
+            'div[role="feed"], div[aria-label*="Feed"], div[role="main"]'
+        )
+    except Exception:
+        feed = None
+
+    if "facebook.com" in url and not feed:
+        return {
+            "status": "BANNED",
+            "banned": True,
+            "reason": "no_feed",
+            "url": url,
+            "message": "⛔ Không tìm thấy feed / main content",
+        }
+
+    # =========================
+    # 5. BASIC ACTION CHECK (SESSION DIE)
+    # =========================
+    try:
+        page.evaluate("() => document.cookie")
+    except Exception:
+        return {
+            "status": "BANNED",
+            "banned": True,
+            "reason": "session_invalid",
+            "message": "⛔ Session/cookie không hợp lệ",
+        }
+
+    # =========================
+    # OK
+    # =========================
+    return {
+        "status": "OK",
+        "banned": False,
+        "url": url,
+        "message": "✅ Account sống, chưa phát hiện dấu hiệu khóa",
+    }
+
+
+def save_account_status(profile_id: str, result: Dict[str, Any]) -> None:
+    """
+    Lưu trạng thái account vào file JSON để backend/frontend có thể đọc.
+    Không raise lỗi để tránh ảnh hưởng luồng chính.
+    """
+    try:
+        STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        data: Dict[str, Any] = {}
+        if STATUS_FILE.exists():
+            try:
+                with STATUS_FILE.open("r", encoding="utf-8") as f:
+                    data = json.load(f) or {}
+            except Exception:
+                data = {}
+
+        data[str(profile_id)] = result
+
+        with STATUS_FILE.open("w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        # Không để bất kỳ lỗi ghi file nào làm vỡ luồng chính.
+        pass
+
+
+
+--- END FILE: backend\core\account_status.py ---
 
 --- START FILE: backend\core\browser.py ---
 import time
@@ -3886,6 +4220,7 @@ import random
 import os
 from core import control as control_state
 from core.control import smart_sleep
+from core.account_status import check_account_status_brutal, save_account_status
 
 class SimpleBot:
     def __init__(self, fb):
@@ -3913,7 +4248,32 @@ class SimpleBot:
 
     def run(self, url, duration=None):
         print(f"🚀 Đang truy cập: {url}")
-        self.fb.goto(url) 
+        # Điều hướng trực tiếp tới URL mục tiêu (trang quét bài viết)
+        self.fb.goto(url)
+
+        # ==== CHECK ACCOUNT STATUS MỘT LẦN SAU KHI VÀO TRANG MỤC TIÊU ====
+        profile_id = getattr(self.fb, 'profile_id', None)
+        if profile_id:
+            try:
+                print(f"🔍 [ACCOUNT_STATUS] Kiểm tra trạng thái account cho profile {profile_id} (scraper)...")
+                status = check_account_status_brutal(self.fb)
+                status["profile_id"] = profile_id
+                status["checked_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+                save_account_status(profile_id, status)
+
+                if status.get("banned"):
+                    error_msg = f"⛔ [ACCOUNT_BANNED] Profile {profile_id} bị khóa/bị ban: {status.get('message')}"
+                    print(error_msg)
+                    # DỪNG BOT cho profile này, để caller xử lý/log và không quét tiếp
+                    raise RuntimeError(f"ACCOUNT_BANNED: {status.get('message')}")
+                else:
+                    print(f"✅ [ACCOUNT_STATUS] Profile {profile_id} OK: {status.get('message')}")
+            except RuntimeError:
+                # ACCOUNT_BANNED / EMERGENCY_STOP sẽ được xử lý ở tầng caller
+                raise
+            except Exception as e:
+                # Không cho phép lỗi check account làm vỡ luồng cũ
+                print(f"⚠️ [ACCOUNT_STATUS] Không kiểm tra được trạng thái account (scraper): {e}")
         
         # Track "active time" (chỉ tăng khi không pause) thay vì wall clock time
         # Dùng list để pass by reference cho helper function
@@ -4017,6 +4377,7 @@ from core.nst import stop_profile
 from core.browser import FBController, JS_EXPAND_SCRIPT, JS_CHECK_AND_HIGHLIGHT_SCOPED
 from core.scraper import SimpleBot
 from core.control import smart_sleep
+from core.account_status import check_account_status_brutal, save_account_status
 
 # ==============================================================================
 # "HÀNH VI NGƯỜI THẬT": thi thoảng mở Thông báo rồi Back (8–15 phút/lần)
@@ -4212,7 +4573,35 @@ class HumanLikeBot(SimpleBot):
     """
     def run(self, url, duration=None):
         print(f"🚀 Đang truy cập: {url}")
+        # Điều hướng trực tiếp tới URL mục tiêu (feed/search)
         self.fb.goto(url)
+
+        # ==== CHECK ACCOUNT STATUS MỘT LẦN SAU KHI VÀO TRANG MỤC TIÊU ====
+        # - Chỉ kiểm tra 1 lần lúc bắt đầu
+        # - Nếu nghi bị khóa/bị ban => dừng bot cho profile này (ACCOUNT_BANNED)
+        # - Không tự điều hướng thêm lần nữa
+        profile_id = getattr(self.fb, "profile_id", None)
+        if profile_id:
+            try:
+                print(f"🔍 [ACCOUNT_STATUS] Kiểm tra trạng thái account cho profile {profile_id} (sau khi vào URL)...")
+                status = check_account_status_brutal(self.fb)
+                status["profile_id"] = profile_id
+                status["checked_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+                save_account_status(profile_id, status)
+
+                if status.get("banned"):
+                    error_msg = f"⛔ [ACCOUNT_BANNED] Profile {profile_id} bị khóa/bị ban: {status.get('message')}"
+                    print(error_msg)
+                    # DỪNG BOT cho profile này (quét/nuôi) nhưng không ảnh hưởng profile khác
+                    raise RuntimeError(f"ACCOUNT_BANNED: {status.get('message')}")
+                else:
+                    print(f"✅ [ACCOUNT_STATUS] Profile {profile_id} OK: {status.get('message')}")
+            except RuntimeError:
+                # ACCOUNT_BANNED hoặc STOP/PAUSE sẽ được xử lý ở layer trên
+                raise
+            except Exception as e:
+                # Không cho phép lỗi check account làm vỡ luồng cũ
+                print(f"⚠️ [ACCOUNT_STATUS] Không kiểm tra được trạng thái account: {e}")
 
         # ACTIVE TIME tracking (chỉ tăng khi không pause)
         active_time = 0.0
@@ -4358,7 +4747,7 @@ class SearchBotController(FBController):
             print(f"🎲 [LikeProb] p={p:.2f} roll={roll:.2f} -> {'LIKE' if should_like else 'SKIP'}")
             if should_like:
                 # like_current_post tự bỏ qua nếu bài đã Like
-            self.like_current_post(post_handle)
+                self.like_current_post(post_handle)
 
             # 4. Đánh dấu đã xử lý (Để bot lướt tiếp bài sau)
             self.mark_post_as_processed(post_handle)
@@ -4457,11 +4846,17 @@ def _run_bot_logic(profile_id, url, raw_text, duration_minutes, all_profile_ids=
             if "EMERGENCY_STOP" in str(e):
                 print("🛑 Dừng bot do EMERGENCY_STOP")
                 return
+            if "ACCOUNT_BANNED" in str(e):
+                print(f"🛑 Dừng bot do ACCOUNT_BANNED: {e}")
+                return
             raise
         
     except RuntimeError as e:
         if "EMERGENCY_STOP" in str(e):
             print("🛑 Dừng runner do EMERGENCY_STOP")
+            return
+        if "ACCOUNT_BANNED" in str(e):
+            print(f"🛑 Dừng runner do ACCOUNT_BANNED: {e}")
             return
         print(f"❌ Lỗi Runner: {e}")
     except Exception as e:
@@ -4663,18 +5058,29 @@ def clean_profile_list(raw):
     return [str(p).strip() for p in items if str(p).strip()]
 --- END FILE: backend\core\utils.py ---
 
+--- START FILE: backend\data\account_status.json ---
+{
+  "b77da63d-af55-43c2-ab7f-364250b20e30": {
+    "status": "OK",
+    "banned": false,
+    "url": "https://www.facebook.com/",
+    "message": "✅ Account sống, chưa phát hiện dấu hiệu khóa",
+    "profile_id": "b77da63d-af55-43c2-ab7f-364250b20e30",
+    "checked_at": "2025-12-23 13:55:00"
+  }
+}
+--- END FILE: backend\data\account_status.json ---
+
 --- START FILE: backend\data\runtime_control.json ---
 {
   "global_emergency_stop": false,
-  "global_pause": true,
-  "paused_profiles": [
-    "b77da63d-af55-43c2-ab7f-364250b20e30"
-  ],
+  "global_pause": false,
+  "paused_profiles": [],
   "stopped_profiles": [],
   "profile_states": {
-    "b77da63d-af55-43c2-ab7f-364250b20e30": "PAUSED"
+    "b77da63d-af55-43c2-ab7f-364250b20e30": "RUNNING"
   },
-  "updated_at": "2025-12-22T15:50:24.599788+00:00"
+  "updated_at": "2025-12-23T06:54:49.561782+00:00"
 }
 
 --- END FILE: backend\data\runtime_control.json ---
@@ -14456,7 +14862,6 @@ def get_info_for_profile_ids(profile_ids):
 if __name__ == "__main__":
     get_all_info_from_post_ids_dir()
 
-
 --- END FILE: backend\worker\get_all_info.py ---
 
 --- START FILE: backend\worker\get_id.py ---
@@ -16617,7 +17022,7 @@ def send_request(post_id, payload_dict, profile_id, cookies, commentsAfterCursor
     adapter = HTTPAdapter(max_retries=retry_cfg)
     session.mount("https://", adapter)
     session.mount("http://", adapter)
-
+    
     # Gửi payload dưới dạng form-urlencoded với headers
     response = session.post(url, data=payload, headers=headers, timeout=20)
     
@@ -17018,7 +17423,7 @@ def send_request(feedback_target_id, payload_dict, profile_id, cookies, cursor=N
     adapter = HTTPAdapter(max_retries=retry_cfg)
     session.mount("https://", adapter)
     session.mount("http://", adapter)
-
+    
     # Gửi payload dưới dạng form-urlencoded với headers
     response = session.post(url, data=payload, headers=headers, timeout=20)
     
@@ -17379,7 +17784,7 @@ if __name__ == "__main__":
     if payload_dict and cookies:
         fid = "2672966333102287"  # Thay đổi FID ở đây
         users = get_all_users_by_fid(fid, payload_dict, profile_id, cookies)
-    
+
 --- END FILE: backend\worker\single_get_reactions.py ---
 
 --- START FILE: frontend\data.json ---
@@ -17908,7 +18313,7 @@ let loadedPostIds = new Set(); // Lưu các post_id đã load để tránh trùn
 let postsLoaded = false; // Đã load dữ liệu quản lý post hay chưa
 let profileState = {
   apiKey: '',
-  profiles: {}, // { [profileId]: { cookie: '', access_token: '', groups: string[] } }
+  profiles: {}, // { [profileId]: { cookie: '', access_token: '', fb_dtsg: '', lsd: '', spin_r: '', spin_t: '', groups: string[] } }
   selected: {}, // { [profileId]: true/false } (frontend-only)
 };
 let addRowEl = null; // Row tạm để nhập profile mới
@@ -18104,6 +18509,10 @@ function applyControlStateToProfileRows(st) {
   });
 }
 
+/**
+ * Central function để quản lý button states cho pause/stop
+ * Đảm bảo logic nhất quán và tránh race conditions
+ */
 function updateStopPauseButtonsByJobs() {
   const jobs = lastJobsStatus || {};
   const botHasProfiles = Array.isArray(jobs && jobs.bot_profile_ids) && jobs.bot_profile_ids.length > 0;
@@ -18114,48 +18523,48 @@ function updateStopPauseButtonsByJobs() {
   );
   const hasSelected = getSelectedProfileIds().length > 0;
   
-  // Nếu đang chạy info collector thì luôn enable các nút pause/dừng
+  // Kiểm tra info collector đang chạy từ backend
+  let infoCollectorRunning = false;
+  try {
+    // Check từ progress API để đảm bảo chính xác
+    // Note: Không dùng isInfoCollectorRunning vì có thể bị out of sync
+    // Sẽ check async trong updateInfoProgress
+  } catch (_) { }
+  
+  // Nếu đang chạy info collector (local flag) hoặc có session running thì enable buttons
   const shouldEnableButtons = sessionRunning || isInfoCollectorRunning;
 
-  // Chỉ khi có tiến trình chạy mới cho bấm STOP/PAUSE
-  const stopBtns = [stopBtn, stopAllSettingBtn].filter(Boolean);
-  stopBtns.forEach((b) => {
-    if (b.classList && b.classList.contains('btn-loading')) return;
-    b.disabled = !shouldEnableButtons;
-    if (shouldEnableButtons) {
-      b.style.opacity = '1';
-      b.style.pointerEvents = 'auto';
-      b.style.cursor = 'pointer';
+  /**
+   * Helper function để set button state một cách nhất quán
+   */
+  function setButtonState(btn, enabled, skipIfLoading = true) {
+    if (!btn) return;
+    if (skipIfLoading && btn.classList && btn.classList.contains('btn-loading')) {
+      return; // Giữ nguyên state nếu đang loading
     }
-  });
-
-  const pauseBtns = [pauseAllBtn].filter(Boolean);
-  pauseBtns.forEach((b) => {
-    if (b.classList && b.classList.contains('btn-loading')) return;
-    b.disabled = !shouldEnableButtons;
-    if (shouldEnableButtons) {
-      b.style.opacity = '1';
-      b.style.pointerEvents = 'auto';
-      b.style.cursor = 'pointer';
-    }
-  });
-
-  if (pauseSelectedProfilesBtn && !pauseSelectedProfilesBtn.classList.contains('btn-loading')) {
-    pauseSelectedProfilesBtn.disabled = !shouldEnableButtons || !hasSelected;
-    if (shouldEnableButtons && hasSelected) {
-      pauseSelectedProfilesBtn.style.opacity = '1';
-      pauseSelectedProfilesBtn.style.pointerEvents = 'auto';
-      pauseSelectedProfilesBtn.style.cursor = 'pointer';
+    
+    btn.disabled = !enabled;
+    if (enabled) {
+      btn.style.opacity = '1';
+      btn.style.pointerEvents = 'auto';
+      btn.style.cursor = 'pointer';
+    } else {
+      btn.style.opacity = '0.5';
+      btn.style.pointerEvents = 'none';
+      btn.style.cursor = 'not-allowed';
     }
   }
-  if (stopSelectedProfilesBtn && !stopSelectedProfilesBtn.classList.contains('btn-loading')) {
-    stopSelectedProfilesBtn.disabled = !shouldEnableButtons || !hasSelected;
-    if (shouldEnableButtons && hasSelected) {
-      stopSelectedProfilesBtn.style.opacity = '1';
-      stopSelectedProfilesBtn.style.pointerEvents = 'auto';
-      stopSelectedProfilesBtn.style.cursor = 'pointer';
-    }
-  }
+
+  // STOP ALL buttons (left panel + settings header)
+  setButtonState(stopBtn, shouldEnableButtons);
+  setButtonState(stopAllSettingBtn, shouldEnableButtons);
+
+  // PAUSE ALL button
+  setButtonState(pauseAllBtn, shouldEnableButtons);
+
+  // Selected profiles buttons (cần cả hasSelected)
+  setButtonState(pauseSelectedProfilesBtn, shouldEnableButtons && hasSelected);
+  setButtonState(stopSelectedProfilesBtn, shouldEnableButtons && hasSelected);
 }
 
 // ==== Settings (frontend-only) ====
@@ -18174,11 +18583,27 @@ async function tryLoadProfileStateFromBackend() {
     if (Array.isArray(profileIds)) {
       profileIds.forEach((pid) => {
         const key = String(pid || '').trim();
-        if (key) nextProfiles[key] = { cookie: '', access_token: '' };
+        if (key) nextProfiles[key] = { 
+          cookie: '', 
+          access_token: '', 
+          fb_dtsg: '', 
+          lsd: '', 
+          spin_r: '', 
+          spin_t: '',
+          groups: []
+        };
       });
     } else if (typeof profileIds === 'string') {
       profileIds.split(',').map((s) => s.trim()).filter(Boolean).forEach((pid) => {
-        nextProfiles[pid] = { cookie: '', access_token: '' };
+        nextProfiles[pid] = { 
+          cookie: '', 
+          access_token: '', 
+          fb_dtsg: '', 
+          lsd: '', 
+          spin_r: '', 
+          spin_t: '',
+          groups: []
+        };
       });
     } else if (profileIds && typeof profileIds === 'object') {
       Object.entries(profileIds).forEach(([pid, cfg]) => {
@@ -18187,6 +18612,10 @@ async function tryLoadProfileStateFromBackend() {
         nextProfiles[key] = {
           cookie: (cfg && cfg.cookie) ? String(cfg.cookie) : '',
           access_token: (cfg && (cfg.access_token || cfg.accessToken)) ? String(cfg.access_token || cfg.accessToken) : '',
+          fb_dtsg: (cfg && cfg.fb_dtsg) ? String(cfg.fb_dtsg) : '',
+          lsd: (cfg && cfg.lsd) ? String(cfg.lsd) : '',
+          spin_r: (cfg && cfg.spin_r) ? String(cfg.spin_r) : '',
+          spin_t: (cfg && cfg.spin_t) ? String(cfg.spin_t) : '',
           groups: (cfg && Array.isArray(cfg.groups)) ? cfg.groups.map((x) => String(x || '').trim()).filter(Boolean) : [],
         };
       });
@@ -18271,16 +18700,6 @@ function updateSettingsActionButtons() {
     b.disabled = !hasSelected;
   });
 
-  // Nếu đang PAUSE ALL thì disable các nút "Chạy" để tránh bấm lại vô nghĩa
-  if (isPausedAll) {
-    [scanPostsSettingBtn, scanGroupSettingBtn, autoJoinGroupBtn, feedAccountSettingBtn, feedStartBtn, scanStartBtn, groupScanStartBtn]
-      .filter(Boolean)
-      .forEach((b) => {
-        if (b.classList && b.classList.contains('btn-loading')) return;
-        b.disabled = true;
-      });
-  }
-
   // Nếu không có selection thì auto đóng panel để tránh người dùng nhập rồi mới biết không chạy được
   if (!hasSelected) {
     if (feedConfigPanel) feedConfigPanel.style.display = 'none';
@@ -18349,7 +18768,7 @@ function setProfileListEmptyStateIfNeeded() {
   profileList.innerHTML = '<p class="muted">Chưa có profile nào</p>';
 }
 
-function buildProfileRow(initialPid, initialInfo) {
+function buildProfileRow(initialPid, initialInfo, isNew = false) {
   let currentPid = initialPid;
   const wrap = document.createElement('div');
   wrap.className = 'profile-row-wrap';
@@ -18395,8 +18814,8 @@ function buildProfileRow(initialPid, initialInfo) {
 
   // Badge hiển thị trạng thái profile (RUNNING/PAUSED/STOPPED)
   const stateBadge = document.createElement('span');
-  stateBadge.className = 'profile-state-badge state-idle';
-  stateBadge.textContent = 'IDLE';
+  stateBadge.className = isNew ? 'profile-state-badge state-ready' : 'profile-state-badge state-idle';
+  stateBadge.textContent = isNew ? 'SẴN SÀNG' : 'IDLE';
 
   // ===== Group editor panel (div) =====
   const groupPanel = document.createElement('div');
@@ -18430,6 +18849,69 @@ function buildProfileRow(initialPid, initialInfo) {
   groupPanel.appendChild(groupTextarea);
   groupPanel.appendChild(groupPanelActions);
 
+  // ===== Token editor panel (div) =====
+  const tokenPanel = document.createElement('div');
+  tokenPanel.className = 'group-panel';
+  tokenPanel.style.display = 'none';
+
+  const tokenPanelHeader = document.createElement('div');
+  tokenPanelHeader.className = 'group-panel-header';
+  tokenPanelHeader.textContent = 'Nhập thông tin token cho profile';
+
+  const tokenForm = document.createElement('div');
+  tokenForm.style.cssText = 'display: flex; flex-direction: column; gap: 12px; padding: 0; margin-bottom: 0;';
+
+  // Tạo 5 input fields
+  const createTokenInput = (label, fieldName, placeholder) => {
+    const container = document.createElement('div');
+    container.style.cssText = 'display: flex; flex-direction: column; gap: 4px; padding: 0 0 8px 0;';
+    
+    const labelEl = document.createElement('label');
+    labelEl.textContent = label;
+    labelEl.style.cssText = 'font-weight: 600; color: #2d3748; font-size: 14px;';
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.name = fieldName;
+    input.placeholder = placeholder;
+    input.style.cssText = 'padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 14px; width: 100%; box-sizing: border-box;';
+    
+    container.appendChild(labelEl);
+    container.appendChild(input);
+    return { container, input };
+  };
+
+  const accessTokenInput = createTokenInput('Access Token', 'access_token', 'Nhập access_token...');
+  const fbDtsgInput = createTokenInput('FB DTSG', 'fb_dtsg', 'Nhập fb_dtsg...');
+  const lsdInput = createTokenInput('LSD', 'lsd', 'Nhập lsd...');
+  const spinRInput = createTokenInput('Spin R', 'spin_r', 'Nhập spin_r...');
+  const spinTInput = createTokenInput('Spin T', 'spin_t', 'Nhập spin_t...');
+
+  tokenForm.appendChild(accessTokenInput.container);
+  tokenForm.appendChild(fbDtsgInput.container);
+  tokenForm.appendChild(lsdInput.container);
+  tokenForm.appendChild(spinRInput.container);
+  tokenForm.appendChild(spinTInput.container);
+
+  const tokenPanelActions = document.createElement('div');
+  tokenPanelActions.className = 'group-panel-actions';
+
+  const tokenSaveBtn = document.createElement('button');
+  tokenSaveBtn.type = 'button';
+  tokenSaveBtn.className = 'btn-success';
+  tokenSaveBtn.textContent = 'Lưu token';
+
+  const tokenCloseBtn = document.createElement('button');
+  tokenCloseBtn.type = 'button';
+  tokenCloseBtn.className = 'btn-secondary';
+  tokenCloseBtn.textContent = 'Đóng';
+
+  tokenPanelActions.appendChild(tokenSaveBtn);
+  tokenPanelActions.appendChild(tokenCloseBtn);
+  tokenPanel.appendChild(tokenPanelHeader);
+  tokenPanel.appendChild(tokenForm);
+  tokenPanel.appendChild(tokenPanelActions);
+
   function getLocalGroups(pid) {
     const info = profileState.profiles[pid] || {};
     const gs = info.groups;
@@ -18438,7 +18920,17 @@ function buildProfileRow(initialPid, initialInfo) {
   }
 
   function setLocalGroups(pid, groups) {
-    if (!profileState.profiles[pid]) profileState.profiles[pid] = { cookie: '', access_token: '', groups: [] };
+    if (!profileState.profiles[pid]) {
+      profileState.profiles[pid] = { 
+        cookie: '', 
+        access_token: '', 
+        fb_dtsg: '', 
+        lsd: '', 
+        spin_r: '', 
+        spin_t: '',
+        groups: [] 
+      };
+    }
     profileState.profiles[pid].groups = Array.isArray(groups) ? groups : [];
   }
 
@@ -18471,7 +18963,7 @@ function buildProfileRow(initialPid, initialInfo) {
   const tokenBtn = document.createElement('button');
   tokenBtn.type = 'button';
   tokenBtn.className = 'btn-success';
-  tokenBtn.textContent = initialInfo?.access_token ? 'Cập nhật token' : 'Lấy access_token';
+  tokenBtn.textContent = 'Cập nhật token' ;
 
   groupBtn.addEventListener('click', async () => {
     const isOpen = groupPanel.style.display !== 'none';
@@ -18547,7 +19039,15 @@ function buildProfileRow(initialPid, initialInfo) {
     // normalize hiển thị để tránh dính space
     if (pidInput.value !== nextPid) pidInput.value = nextPid;
 
-    const cur = profileState.profiles[currentPid] || { cookie: '', access_token: '', groups: [] };
+    const cur = profileState.profiles[currentPid] || { 
+      cookie: '', 
+      access_token: '', 
+      fb_dtsg: '', 
+      lsd: '', 
+      spin_r: '', 
+      spin_t: '',
+      groups: [] 
+    };
     saveBtn.disabled = true;
     try {
       if (nextPid !== currentPid) {
@@ -18561,6 +19061,10 @@ function buildProfileRow(initialPid, initialInfo) {
           body: JSON.stringify({
             cookie: cur.cookie || '',
             access_token: cur.access_token || '',
+            fb_dtsg: cur.fb_dtsg || '',
+            lsd: cur.lsd || '',
+            spin_r: cur.spin_r || '',
+            spin_t: cur.spin_t || '',
           }),
         });
         // copy groups sang profile mới (tránh mất)
@@ -18587,6 +19091,10 @@ function buildProfileRow(initialPid, initialInfo) {
           body: JSON.stringify({
             cookie: cur.cookie || '',
             access_token: cur.access_token || '',
+            fb_dtsg: cur.fb_dtsg || '',
+            lsd: cur.lsd || '',
+            spin_r: cur.spin_r || '',
+            spin_t: cur.spin_t || '',
           }),
         });
       }
@@ -18633,24 +19141,96 @@ function buildProfileRow(initialPid, initialInfo) {
       .finally(() => (cookieBtn.disabled = false));
   });
 
-  tokenBtn.addEventListener('click', () => {
-    const info = profileState.profiles[currentPid] || {};
-    const newVal = prompt(`Dán access token cho profile ${currentPid}:`, info.access_token || '');
-    if (newVal === null) return;
-    const nextToken = newVal.trim();
+  tokenBtn.addEventListener('click', async () => {
+    const isOpen = tokenPanel.style.display !== 'none';
+    if (isOpen) {
+      tokenPanel.style.display = 'none';
+      return;
+    }
+
+    // Mở panel + load token data từ backend
     tokenBtn.disabled = true;
-    callBackend(`/settings/profiles/${encodeURIComponent(currentPid)}`, {
-      method: 'PUT',
-      body: JSON.stringify({ access_token: nextToken }),
-    })
-      .then(() => {
-        profileState.profiles[currentPid] = { ...profileState.profiles[currentPid], access_token: nextToken };
-        saveProfileState();
-        tokenBtn.textContent = nextToken ? 'Cập nhật token' : 'Lấy access_token';
-        showToast('Đã lưu token', 'success');
-      })
-      .catch(() => showToast('Không lưu token (kiểm tra FastAPI).', 'error'))
-      .finally(() => (tokenBtn.disabled = false));
+    try {
+      const settings = await callBackendNoAlert('/settings', { method: 'GET' });
+      const profiles = (settings && (settings.PROFILE_IDS || settings.profile_ids)) || {};
+      const cfg = (profiles && typeof profiles === 'object') ? profiles[currentPid] : null;
+      
+      // Load giá trị hiện tại vào inputs
+      accessTokenInput.input.value = (cfg && cfg.access_token) ? String(cfg.access_token) : '';
+      fbDtsgInput.input.value = (cfg && cfg.fb_dtsg) ? String(cfg.fb_dtsg) : '';
+      lsdInput.input.value = (cfg && cfg.lsd) ? String(cfg.lsd) : '';
+      spinRInput.input.value = (cfg && cfg.spin_r) ? String(cfg.spin_r) : '';
+      spinTInput.input.value = (cfg && cfg.spin_t) ? String(cfg.spin_t) : '';
+      
+      tokenPanel.style.display = 'block';
+      accessTokenInput.input.focus();
+    } catch (e) {
+      // Fallback: load từ local state
+      const info = profileState.profiles[currentPid] || {};
+      accessTokenInput.input.value = info.access_token || '';
+      fbDtsgInput.input.value = info.fb_dtsg || '';
+      lsdInput.input.value = info.lsd || '';
+      spinRInput.input.value = info.spin_r || '';
+      spinTInput.input.value = info.spin_t || '';
+      tokenPanel.style.display = 'block';
+      accessTokenInput.input.focus();
+      showToast('Không load được token từ backend, đang dùng dữ liệu local.', 'error');
+    } finally {
+      tokenBtn.disabled = false;
+    }
+  });
+
+  tokenCloseBtn.addEventListener('click', () => {
+    tokenPanel.style.display = 'none';
+  });
+
+  tokenSaveBtn.addEventListener('click', async () => {
+    const accessToken = accessTokenInput.input.value.trim();
+    const fbDtsg = fbDtsgInput.input.value.trim();
+    const lsd = lsdInput.input.value.trim();
+    const spinR = spinRInput.input.value.trim();
+    const spinT = spinTInput.input.value.trim();
+
+    tokenSaveBtn.disabled = true;
+    try {
+      await callBackend(`/settings/profiles/${encodeURIComponent(currentPid)}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          access_token: accessToken,
+          fb_dtsg: fbDtsg,
+          lsd: lsd,
+          spin_r: spinR,
+          spin_t: spinT,
+        }),
+      });
+      
+      // Update local state
+      if (!profileState.profiles[currentPid]) {
+        profileState.profiles[currentPid] = { 
+          cookie: '', 
+          access_token: '', 
+          fb_dtsg: '', 
+          lsd: '', 
+          spin_r: '', 
+          spin_t: '',
+          groups: [] 
+        };
+      }
+      profileState.profiles[currentPid].access_token = accessToken;
+      profileState.profiles[currentPid].fb_dtsg = fbDtsg;
+      profileState.profiles[currentPid].lsd = lsd;
+      profileState.profiles[currentPid].spin_r = spinR;
+      profileState.profiles[currentPid].spin_t = spinT;
+      saveProfileState();
+      
+      tokenBtn.textContent = accessToken ? 'Cập nhật token' : 'Lấy access_token';
+      showToast('Đã lưu token', 'success');
+      tokenPanel.style.display = 'none';
+    } catch (e) {
+      showToast('Không lưu token (kiểm tra FastAPI).', 'error');
+    } finally {
+      tokenSaveBtn.disabled = false;
+    }
   });
 
   actions.appendChild(stateBadge);
@@ -18666,6 +19246,7 @@ function buildProfileRow(initialPid, initialInfo) {
   row.appendChild(actions);
   wrap.appendChild(row);
   wrap.appendChild(groupPanel);
+  wrap.appendChild(tokenPanel);
   // init label
   try { updatePauseBtnLabel(); } catch (_) { }
   return wrap;
@@ -18721,7 +19302,15 @@ function showAddProfileRow() {
     })
       .then(() => {
         if (!profileState.profiles[value]) {
-          profileState.profiles[value] = { cookie: '', access_token: '', groups: [] };
+          profileState.profiles[value] = { 
+            cookie: '', 
+            access_token: '', 
+            fb_dtsg: '', 
+            lsd: '', 
+            spin_r: '', 
+            spin_t: '',
+            groups: [] 
+          };
         }
         saveProfileState();
         // Thêm row mới mà không render lại toàn bộ (tránh nháy)
@@ -18729,7 +19318,7 @@ function showAddProfileRow() {
           profileList.classList.remove('empty-state-box');
           profileList.innerHTML = '';
         }
-        const newRow = buildProfileRow(value, profileState.profiles[value]);
+        const newRow = buildProfileRow(value, profileState.profiles[value], true); // true = isNew
         // insert trước addRowEl để form vẫn ở cuối
         profileList.insertBefore(newRow, addRowEl);
         // remove form add
@@ -19085,9 +19674,10 @@ if (scanStartBtn) {
   });
 }
 
-async function handleStopAll() {
-  console.log('[UI] STOP ALL triggered');
-  // Reset flag info collector nếu đang chạy
+/**
+ * Helper function để reset info collector state
+ */
+function resetInfoCollectorState() {
   isInfoCollectorRunning = false;
   // Reset loading của các nút info collector
   if (runAllInfoBtn) setButtonLoading(runAllInfoBtn, false);
@@ -19106,9 +19696,18 @@ async function handleStopAll() {
   if (progressToast && (!scanToast || scanToast.style.display === 'none')) {
     progressToast.style.display = 'none';
   }
+}
+
+async function handleStopAll() {
+  console.log('[UI] STOP ALL triggered');
+  
+  // Reset info collector state ngay lập tức
+  resetInfoCollectorState();
+  
   // stop-all có thể bấm từ left panel hoặc từ setting header
   const btns = [stopAllBtn, stopAllSettingBtn].filter(Boolean);
   btns.forEach((b) => setButtonLoading(b, true, 'Đang dừng tất cả...'));
+  
   try {
     // Ưu tiên endpoint mới theo spec, fallback endpoint cũ để khỏi vỡ UI
     let res = null;
@@ -19153,6 +19752,14 @@ async function handleStopAll() {
     setButtonLoading(feedAccountSettingBtn, false);
     setButtonLoading(feedStartBtn, false);
     if (feedConfigPanel) feedConfigPanel.style.display = 'none';
+    
+    // Refresh state và update buttons
+    try {
+      const jobs = await callBackendNoAlert('/jobs/status', { method: 'GET' });
+      if (jobs) lastJobsStatus = jobs;
+    } catch (_) { }
+    try { await refreshControlState(); } catch (_) { }
+    updateStopPauseButtonsByJobs(); // Update buttons sau khi reset state
   }
 }
 
@@ -19165,25 +19772,9 @@ async function handleStopSelectedProfiles() {
   if (!stopSelectedProfilesBtn) return;
   if (stopSelectedProfilesBtn.classList.contains('btn-loading')) return;
 
-  // Reset flag info collector nếu đang chạy
-  isInfoCollectorRunning = false;
-  // Reset loading của các nút info collector
-  if (runAllInfoBtn) setButtonLoading(runAllInfoBtn, false);
-  if (runSelectedInfoBtn) setButtonLoading(runSelectedInfoBtn, false);
-  // Dừng poll tiến trình
-  if (infoProgressInterval) {
-    clearInterval(infoProgressInterval);
-    infoProgressInterval = null;
-  }
-  // Ẩn toast tiến trình
-  const infoToast = document.getElementById('infoProgressToast');
-  const progressToast = document.getElementById('progressToast');
-  if (infoToast) infoToast.style.display = 'none';
-  // Ẩn progressToast nếu cả 2 toast đều ẩn
-  const scanToast = document.getElementById('scanStatsToast');
-  if (progressToast && (!scanToast || scanToast.style.display === 'none')) {
-    progressToast.style.display = 'none';
-  }
+  // Reset info collector state nếu đang chạy (có thể stop info collector)
+  resetInfoCollectorState();
+  
   console.log(`[UI] STOP selected profiles=${selected.join(',')}`);
   setButtonLoading(stopSelectedProfilesBtn, true, 'Đang dừng...');
 
@@ -19203,7 +19794,7 @@ async function handleStopSelectedProfiles() {
       if (jobs) lastJobsStatus = jobs;
     } catch (_) { }
     try { await refreshControlState(); } catch (_) { }
-    try { updateStopPauseButtonsByJobs(); } catch (_) { }
+    updateStopPauseButtonsByJobs(); // Update buttons sau khi refresh state
     // Nếu không còn bot_profile_ids thì UI quét phải về "Sẵn sàng"
     try {
       const botHasProfiles = Array.isArray(lastJobsStatus && lastJobsStatus.bot_profile_ids) && lastJobsStatus.bot_profile_ids.length > 0;
@@ -19218,6 +19809,7 @@ async function handleStopSelectedProfiles() {
     showToast('Không dừng được profile đã chọn (kiểm tra FastAPI).', 'error');
   } finally {
     setButtonLoading(stopSelectedProfilesBtn, false);
+    updateStopPauseButtonsByJobs(); // Update buttons sau khi hoàn thành
   }
 }
 
@@ -19249,7 +19841,10 @@ async function handlePauseSelectedProfiles() {
     showToast('Không pause được profile đã tick (kiểm tra FastAPI).', 'error');
   } finally {
     setButtonLoading(pauseSelectedProfilesBtn, false);
-    try { await refreshControlState(); } catch (_) { }
+    try { 
+      await refreshControlState(); 
+      updateStopPauseButtonsByJobs(); // Update buttons sau khi refresh state
+    } catch (_) { }
   }
 }
 
@@ -19405,8 +20000,11 @@ async function resyncUiFromBackendAfterReload() {
 async function handlePauseAllToggle() {
   if (!pauseAllBtn) return;
   if (pauseAllBtn.classList.contains('btn-loading')) return;
+  
+  const wasPaused = isPausedAll;
+  
   try {
-    if (!isPausedAll) {
+    if (!wasPaused) {
       console.log('[UI] PAUSE ALL triggered');
       setButtonLoading(pauseAllBtn, true, 'Đang tạm dừng...');
       // update UI ngay để tránh user thấy "đang quét" khi đã pause
@@ -19423,10 +20021,14 @@ async function handlePauseAllToggle() {
       showToast('Đã tiếp tục tất cả', 'success');
     }
   } catch (e) {
+    // Rollback UI state nếu có lỗi
+    isPausedAll = wasPaused;
+    syncRunningLabelsWithPauseState();
     showToast('Không pause/resume được (kiểm tra FastAPI).', 'error');
   } finally {
     setButtonLoading(pauseAllBtn, false);
     await refreshControlState();
+    updateStopPauseButtonsByJobs(); // Update buttons sau khi refresh state
   }
 }
 
@@ -19874,6 +20476,33 @@ async function loadInitialData() {
     emptyState.classList.add('show');
   }
 }
+
+// ==========================
+// CẢNH BÁO ACCOUNT CÓ VẤN ĐỀ
+// ==========================
+async function pollAccountStatus() {
+  try {
+    const res = await callBackendNoAlert('/account/status', { method: 'GET' });
+    if (!res || !res.accounts) return;
+
+    const accounts = res.accounts || {};
+    Object.keys(accounts).forEach((pid) => {
+      const info = accounts[pid];
+      if (!info) return;
+      if (!info.banned) return;
+
+      const msg = info.message || 'Tài khoản có vấn đề, hãy kiểm tra lại bằng tay.';
+      showToast(`Profile ${pid}: ${msg}`, 'warning', 10000);
+    });
+  } catch (e) {
+    // bỏ qua lỗi, không ảnh hưởng luồng cũ
+  }
+}
+
+// Poll mỗi 45s, hoàn toàn độc lập, chỉ hiển thị thông báo
+try {
+  setInterval(pollAccountStatus, 45000);
+} catch (_) { }
 
 // Start quét bài viết (dùng chung cho nút "Bắt đầu quét" và nút trong tab Setting profile)
 async function startScanFlow(options = {}) {
@@ -20674,7 +21303,14 @@ async function updateScanStats() {
 async function updateInfoProgress() {
   try {
     const res = await callBackendNoAlert('/info/progress', { method: 'GET' });
-    if (!res) return;
+    if (!res) {
+      // Nếu không có response, reset state
+      if (isInfoCollectorRunning) {
+        resetInfoCollectorState();
+        updateStopPauseButtonsByJobs();
+      }
+      return;
+    }
     
     const toast = document.getElementById('infoProgressToast');
     const text = document.getElementById('infoProgressToastText');
@@ -20682,6 +21318,17 @@ async function updateInfoProgress() {
     const progressToast = document.getElementById('progressToast');
     
     if (!toast || !text || !progressToast) return;
+    
+    // Sync isInfoCollectorRunning với backend state
+    const backendRunning = Boolean(res.is_running);
+    if (isInfoCollectorRunning !== backendRunning) {
+      isInfoCollectorRunning = backendRunning;
+      if (!backendRunning) {
+        // Backend đã dừng, reset state
+        resetInfoCollectorState();
+      }
+      updateStopPauseButtonsByJobs();
+    }
     
     if (res.is_running && res.total > 0) {
       const current = res.current || 0;
@@ -20711,7 +21358,11 @@ async function updateInfoProgress() {
       }
     }
   } catch (e) {
-    // Ignore errors
+    // Nếu có lỗi khi check progress, có thể backend đã dừng
+    if (isInfoCollectorRunning) {
+      resetInfoCollectorState();
+      updateStopPauseButtonsByJobs();
+    }
   }
 }
 
@@ -20726,23 +21377,18 @@ async function runInfoCollector(mode = 'all') {
     return;
   }
 
-  // Đánh dấu đang chạy và enable các nút pause/dừng
+  // Đánh dấu đang chạy
   isInfoCollectorRunning = true;
-  [pauseAllBtn, pauseSelectedProfilesBtn, stopAllSettingBtn, stopSelectedProfilesBtn].forEach((b) => {
-    if (b) {
-      b.disabled = false;
-      b.style.opacity = '1';
-      b.style.pointerEvents = 'auto';
-      b.style.cursor = 'pointer';
-    }
-  });
-
+  
   setButtonLoading(btn, true, 'Đang lấy thông tin...');
   
   // Bắt đầu poll tiến trình
   if (infoProgressInterval) clearInterval(infoProgressInterval);
   updateInfoProgress(); // Cập nhật ngay lập tức
   infoProgressInterval = setInterval(updateInfoProgress, 2000); // Poll mỗi 2 giây
+  
+  // Update buttons để enable pause/stop buttons
+  updateStopPauseButtonsByJobs();
   
   try {
     const body = { mode: isSelected ? 'selected' : 'all' };
@@ -20758,6 +21404,9 @@ async function runInfoCollector(mode = 'all') {
       msgParts.push(`posts: ${summary.total_posts_processed}`);
     }
     showToast(msgParts.join(' | '), 'success', 2200);
+    
+    // Reset flag sau khi hoàn thành thành công
+    resetInfoCollectorState();
   } catch (e) {
     console.error('Error in runInfoCollector:', e);
     // Kiểm tra nếu là lỗi "không có dữ liệu bài viết"
@@ -20771,25 +21420,12 @@ async function runInfoCollector(mode = 'all') {
       const displayMsg = e?.message || e?.detail || 'Không chạy được lấy thông tin (check backend).';
       showToast(displayMsg, 'error', 3000);
     }
+    // Reset flag khi có lỗi
+    resetInfoCollectorState();
   } finally {
     setButtonLoading(btn, false);
-    // Dừng poll tiến trình
-    if (infoProgressInterval) {
-      clearInterval(infoProgressInterval);
-      infoProgressInterval = null;
-    }
-    // Ẩn toast tiến trình
-    const infoToast = document.getElementById('infoProgressToast');
-    const progressToast = document.getElementById('progressToast');
-    if (infoToast) infoToast.style.display = 'none';
-    // Ẩn progressToast nếu cả 2 toast đều ẩn
-    const scanToast = document.getElementById('scanStatsToast');
-    if (progressToast && (!scanToast || scanToast.style.display === 'none')) {
-      progressToast.style.display = 'none';
-    }
-    // Giữ các nút pause/dừng enabled để user có thể bấm dừng
-    // Chỉ reset flag khi user thực sự dừng hoặc hoàn thành
-    // isInfoCollectorRunning sẽ được reset khi user bấm stop/pause
+    // Update buttons sau khi reset state
+    updateStopPauseButtonsByJobs();
   }
 }
 
@@ -21983,10 +22619,11 @@ tbody tr.filtered-out {
 }
 
 .group-panel {
-  padding      : 10px 12px;
+  padding      : 10px 12px 12px 12px;
   background   : #f9fafb;
   border       : 1px dashed var(--border);
   border-radius: 10px;
+  overflow     : visible;
 }
 
 .group-panel-header {
@@ -22018,7 +22655,10 @@ tbody tr.filtered-out {
   display        : flex;
   gap            : 8px;
   justify-content: flex-end;
-  margin-top     : 8px;
+  margin-top     : 12px;
+  padding        : 0;
+  width          : 100%;
+  box-sizing     : border-box;
 }
 
 

@@ -3,6 +3,7 @@ import random
 import os
 from core import control as control_state
 from core.control import smart_sleep
+from core.account_status import check_account_status_brutal, save_account_status
 
 class SimpleBot:
     def __init__(self, fb):
@@ -30,7 +31,32 @@ class SimpleBot:
 
     def run(self, url, duration=None):
         print(f"🚀 Đang truy cập: {url}")
-        self.fb.goto(url) 
+        # Điều hướng trực tiếp tới URL mục tiêu (trang quét bài viết)
+        self.fb.goto(url)
+
+        # ==== CHECK ACCOUNT STATUS MỘT LẦN SAU KHI VÀO TRANG MỤC TIÊU ====
+        profile_id = getattr(self.fb, 'profile_id', None)
+        if profile_id:
+            try:
+                print(f"🔍 [ACCOUNT_STATUS] Kiểm tra trạng thái account cho profile {profile_id} (scraper)...")
+                status = check_account_status_brutal(self.fb)
+                status["profile_id"] = profile_id
+                status["checked_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+                save_account_status(profile_id, status)
+
+                if status.get("banned"):
+                    error_msg = f"⛔ [ACCOUNT_BANNED] Profile {profile_id} bị khóa/bị ban: {status.get('message')}"
+                    print(error_msg)
+                    # DỪNG BOT cho profile này, để caller xử lý/log và không quét tiếp
+                    raise RuntimeError(f"ACCOUNT_BANNED: {status.get('message')}")
+                else:
+                    print(f"✅ [ACCOUNT_STATUS] Profile {profile_id} OK: {status.get('message')}")
+            except RuntimeError:
+                # ACCOUNT_BANNED / EMERGENCY_STOP sẽ được xử lý ở tầng caller
+                raise
+            except Exception as e:
+                # Không cho phép lỗi check account làm vỡ luồng cũ
+                print(f"⚠️ [ACCOUNT_STATUS] Không kiểm tra được trạng thái account (scraper): {e}")
         
         # Track "active time" (chỉ tăng khi không pause) thay vì wall clock time
         # Dùng list để pass by reference cho helper function
