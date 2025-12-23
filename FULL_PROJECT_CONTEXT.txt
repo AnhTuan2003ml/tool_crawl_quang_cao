@@ -2105,6 +2105,8 @@ def save_account_status(profile_id: str, result: Dict[str, Any]) -> None:
 
 
 
+
+
 --- END FILE: backend\core\account_status.py ---
 
 --- START FILE: backend\core\browser.py ---
@@ -5078,9 +5080,9 @@ def clean_profile_list(raw):
   "paused_profiles": [],
   "stopped_profiles": [],
   "profile_states": {
-    "b77da63d-af55-43c2-ab7f-364250b20e30": "RUNNING"
+    "b77da63d-af55-43c2-ab7f-364250b20e30": "ERROR"
   },
-  "updated_at": "2025-12-23T06:54:49.561782+00:00"
+  "updated_at": "2025-12-23T09:24:28.886836+00:00"
 }
 
 --- END FILE: backend\data\runtime_control.json ---
