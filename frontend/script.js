@@ -20,8 +20,7 @@ if (splashStartBtn) {
   });
 }
 
-const startBtn = document.getElementById('startBtn');
-const stopBtn = document.getElementById('stopBtn');
+// startBtn và stopBtn đã bị xóa khỏi left-panel
 const runMinutesInput = document.getElementById('runMinutes');
 const intervalInput = document.getElementById('interval');
 const stopAllBtn = document.getElementById('stopAllBtn');
@@ -113,7 +112,7 @@ function setPauseAllButtonLabel(paused) {
   }
 }
 
-stopBtn.disabled = true;
+// stopBtn đã bị xóa khỏi left-panel, các nút stop được xử lý trong settings tab
 // Mặc định: chưa biết backend có chạy gì => disable STOP/PAUSE ALL trước, lát sẽ resync theo /jobs/status
 try {
   if (pauseAllBtn) pauseAllBtn.disabled = true;
@@ -131,16 +130,18 @@ function updateRowCount() {
 async function loadPostsForManager() {
   if (postsLoaded || !postTableBody) return;
   try {
-    const res = await fetch('../backend/data/post_ids/031ca13d-e8fa-400c-a603-df57a2806788.json');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (!Array.isArray(data) || data.length === 0) {
+    // Gọi API để lấy danh sách post IDs
+    const res = await callBackend('/data/post-ids', { method: 'GET' });
+    const data = res;
+
+    if (!data.files || data.files.length === 0) {
       postEmptyState && postEmptyState.classList.add('show');
       postsLoaded = true;
       return;
     }
 
-    data.forEach((post) => appendPostRow(post));
+    // Hiển thị từng post
+    data.files.forEach((item) => appendPostRow(item));
     postEmptyState && postEmptyState.classList.remove('show');
     postsLoaded = true;
   } catch (err) {
@@ -151,10 +152,8 @@ async function loadPostsForManager() {
 
 function setScanning(isOn) {
   isScanning = isOn;
-  startBtn.disabled = isOn;
-  const startBtnText = startBtn.querySelector('span:last-child');
-  startBtnText.textContent = isOn ? (isPausedAll ? 'Đang tạm dừng...' : 'Đang quét...') : 'Bắt đầu quét';
-  stopBtn.disabled = !isOn;
+  // startBtn và stopBtn đã bị xóa khỏi left-panel
+  // Logic quét được xử lý bởi các nút trong settings tab
   
   // Disable/enable các nút quét khác khi đang quét
   if (scanStartBtn) {
@@ -184,16 +183,7 @@ function setScanning(isOn) {
       progressToast.style.display = 'none';
     }
   }
-  // Thêm loading spinner cho nút bắt đầu quét
-  if (startBtn) {
-    if (isOn) {
-      if (!startBtn.classList.contains('btn-loading')) {
-        startBtn.classList.add('btn-loading');
-      }
-    } else {
-      startBtn.classList.remove('btn-loading');
-    }
-  }
+  // startBtn đã bị xóa khỏi left-panel, loading được xử lý bởi các nút trong settings
 }
 
 function syncRunningLabelsWithPauseState() {
@@ -201,8 +191,7 @@ function syncRunningLabelsWithPauseState() {
   // tránh hiểu nhầm vẫn "đang quét/đang chạy".
   try {
     if (isScanning) {
-      const startBtnText = startBtn?.querySelector?.('span:last-child');
-      if (startBtnText) startBtnText.textContent = isPausedAll ? 'Đang tạm dừng...' : 'Đang quét...';
+      // startBtn đã bị xóa, chỉ cập nhật các nút trong settings
 
       if (scanStartBtn && scanStartBtn.classList.contains('btn-loading')) {
         scanStartBtn.textContent = isPausedAll ? 'Đang tạm dừng...' : 'Đang chạy...';
@@ -330,8 +319,7 @@ function updateStopPauseButtonsByJobs() {
     }
   }
 
-  // STOP ALL buttons (left panel + settings header)
-  setButtonState(stopBtn, shouldEnableButtons);
+  // stopBtn đã bị xóa khỏi left-panel, chỉ còn stopAllSettingBtn
   setButtonState(stopAllSettingBtn, shouldEnableButtons);
 
   // PAUSE ALL button
@@ -1143,6 +1131,55 @@ if (saveApiKeyBtn) {
   });
 }
 
+// Cleanup files button
+const cleanupFilesBtn = document.getElementById('cleanupFilesBtn');
+const cleanupStatus = document.getElementById('cleanupStatus');
+
+if (cleanupFilesBtn) {
+  cleanupFilesBtn.addEventListener('click', async () => {
+    if (!cleanupStatus) return;
+
+    // Disable button và hiển thị loading
+    cleanupFilesBtn.disabled = true;
+    cleanupFilesBtn.textContent = 'Đang dọn dẹp...';
+    cleanupStatus.style.display = 'block';
+    cleanupStatus.className = 'cleanup-status';
+    cleanupStatus.textContent = 'Đang dọn dẹp file cũ...';
+
+    try {
+      const response = await callBackend('/cleanup/old-files', {
+        method: 'POST',
+        body: JSON.stringify({ max_days: 3 })
+      });
+
+      // Hiển thị kết quả
+      cleanupStatus.className = 'cleanup-status success';
+      cleanupStatus.textContent = `✅ ${response.message}`;
+
+      // Hiển thị danh sách file đã xóa nếu có
+      if (response.deleted_files && response.deleted_files.length > 0) {
+        cleanupStatus.innerHTML += '<br><small>Files đã xóa:</small><ul>';
+        response.deleted_files.forEach(filename => {
+          cleanupStatus.innerHTML += `<li>${filename}</li>`;
+        });
+        cleanupStatus.innerHTML += '</ul>';
+      }
+
+      showToast(`Đã dọn dẹp ${response.deleted_count} file cũ`, 'success');
+
+    } catch (error) {
+      console.error('Lỗi khi dọn dẹp file:', error);
+      cleanupStatus.className = 'cleanup-status error';
+      cleanupStatus.textContent = '❌ Lỗi khi dọn dẹp file cũ';
+      showToast('Lỗi khi dọn dẹp file cũ', 'error');
+    } finally {
+      // Reset button
+      cleanupFilesBtn.disabled = false;
+      cleanupFilesBtn.innerHTML = '🗑️ Dọn dẹp ngay';
+    }
+  });
+}
+
 if (addProfileRowBtn) {
   addProfileRowBtn.addEventListener('click', showAddProfileRow);
 }
@@ -1512,7 +1549,7 @@ async function handleStopAll() {
     setScanning(false);
     setButtonLoading(scanStartBtn, false);
     setButtonLoading(scanPostsSettingBtn, false);
-    setButtonLoading(stopBtn, false);
+    // stopBtn đã bị xóa khỏi left-panel
 
     btns.forEach((b) => setButtonLoading(b, false));
     if (joinGroupPollTimer) {
@@ -1938,13 +1975,14 @@ function appendRow({ id, userId, name, react, comment, time, type }) {
 }
 
 // Thêm dòng cho bảng Quản lý post
-function appendPostRow(post) {
+function appendPostRow(item) {
   if (!postTableBody) return;
-  const type = mapFlagToType(post.flag);
+  const flag = item.flag || '';
+  const type = mapFlagToType(flag);
   const typeClass = getTypeColorClass(type);
   const tr = document.createElement('tr');
-  const postId = post.id || '';
-  const text = post.text || '';
+  const postId = item.post_id || '';
+  const text = item.text || '';
 
   const postLink = postId
     ? `<a href="https://fb.com/${postId}" target="_blank" rel="noopener noreferrer" class="id-link">${postId}</a>`
@@ -2376,68 +2414,7 @@ async function startScanFlow(options = {}) {
   }
 }
 
-startBtn.addEventListener(
-  'click',
-  async () => {
-    // Nếu đang quét thì không cho bấm lại
-    if (isScanning) {
-      showToast('Đang quét, vui lòng đợi hoặc bấm dừng trước', 'warning');
-      return;
-    }
-    
-    // Nếu nút đang loading thì không cho bấm lại
-    if (startBtn.classList.contains('btn-loading')) {
-      return;
-    }
-    
-    try {
-      await startScanFlow();
-    } catch (err) {
-      console.warn('Không startScanFlow được:', err);
-      showToast('Không thể khởi động quét', 'error');
-      setScanning(false);
-    }
-  }
-);
-
-stopBtn.addEventListener('click', async () => {
-  // Nếu đang dừng rồi thì không làm gì
-  if (stopBtn.classList.contains('btn-loading')) {
-    return;
-  }
-  
-  // Thêm loading state cho nút dừng
-  setButtonLoading(stopBtn, true, 'Đang dừng...');
-  
-  try {
-    // Dừng tất cả intervals và timers
-    if (timerId) {
-      clearInterval(timerId);
-      timerId = null;
-    }
-    // Dừng kiểm tra dữ liệu mới
-    if (dataCheckInterval) {
-      clearInterval(dataCheckInterval);
-      dataCheckInterval = null;
-    }
-
-    // Reset UI NGAY LẬP TỨC để user bấm lại được (không chờ backend)
-    setScanning(false);
-    setButtonLoading(scanStartBtn, false);
-    setButtonLoading(scanPostsSettingBtn, false);
-
-    // Gửi lệnh dừng backend (có thể chậm/timeout, nhưng UI không bị kẹt)
-    await sendStopSignal();
-    
-    showToast('Đã dừng quét', 'success');
-  } catch (err) {
-    console.warn('Lỗi khi dừng:', err);
-    showToast('Có lỗi khi dừng quét', 'error');
-  } finally {
-    // Bỏ loading state của nút dừng
-    setButtonLoading(stopBtn, false);
-  }
-});
+// Event listeners cho startBtn và stopBtn đã bị xóa vì left-panel không còn tồn tại
 
 // Xuất file Excel
 const exportExcelBtn = document.getElementById('exportExcelBtn');
@@ -2462,10 +2439,33 @@ function exportToExcel() {
   data.push(headerRow);
 
   // Thêm dữ liệu
-  table.querySelectorAll('tbody tr').forEach(tr => {
+  table.querySelectorAll('tbody tr').forEach((tr, rowIndex) => {
     const row = [];
-    tr.querySelectorAll('td').forEach(td => {
-      row.push(td.textContent);
+    tr.querySelectorAll('td').forEach((td, colIndex) => {
+      // Cột thứ 1 (index 0) là ID Bài Post - tạo hyperlink đến bài post
+      if (colIndex === 0 && td.textContent.trim()) {
+        const postId = td.textContent.trim();
+        const postUrl = `https://www.facebook.com/${postId}`;
+        // Tạo hyperlink trong Excel
+        row.push({
+          t: 's', // string type
+          v: postId,
+          l: { Target: postUrl, Tooltip: `Xem bài post trên Facebook` }
+        });
+      }
+      // Cột thứ 2 (index 1) là ID User - tạo hyperlink đến profile
+      else if (colIndex === 1 && td.textContent.trim()) {
+        const userId = td.textContent.trim();
+        const profileUrl = `https://www.facebook.com/${userId}`;
+        // Tạo hyperlink trong Excel
+        row.push({
+          t: 's', // string type
+          v: userId,
+          l: { Target: profileUrl, Tooltip: `Xem profile Facebook của ${userId}` }
+        });
+      } else {
+        row.push(td.textContent);
+      }
     });
     data.push(row);
   });
@@ -2693,7 +2693,6 @@ const helpTooltip = document.getElementById('helpTooltip');
 // Date range buttons
 const todayBtn = document.getElementById('todayBtn');
 const threeDaysBtn = document.getElementById('threeDaysBtn');
-const fiveDaysBtn = document.getElementById('fiveDaysBtn');
 
 // File selector dropdown
 const fileSelectorContainer = document.getElementById('fileSelectorContainer');
@@ -3488,7 +3487,6 @@ async function showFileSelector(rangeType, fromDate, toDate) {
     let title = '';
     if (rangeType === 'today') title = 'Chọn file data ngày hôm nay';
     else if (rangeType === '3days') title = 'Chọn file data 3 ngày gần nhất';
-    else if (rangeType === '5days') title = 'Chọn file data 5 ngày gần nhất';
     fileSelectorTitle.textContent = title;
 
     // Gọi API để lấy danh sách files
@@ -3523,10 +3521,9 @@ async function showFileSelector(rangeType, fromDate, toDate) {
           fileSelectorContainer.classList.add('hidden');
 
           // Update active button
-          [todayBtn, threeDaysBtn, fiveDaysBtn].forEach(btn => btn.classList.remove('active'));
+          [todayBtn, threeDaysBtn].forEach(btn => btn.classList.remove('active'));
           if (rangeType === 'today') todayBtn.classList.add('active');
           else if (rangeType === '3days') threeDaysBtn.classList.add('active');
-          else if (rangeType === '5days') fiveDaysBtn.classList.add('active');
         });
 
         fileList.appendChild(fileItem);
@@ -3740,12 +3737,6 @@ if (threeDaysBtn) {
   });
 }
 
-if (fiveDaysBtn) {
-  fiveDaysBtn.addEventListener('click', async () => {
-    const { fromDate, toDate } = setDateRange(5);
-    await showFileSelector('5days', fromDate, toDate);
-  });
-}
 
 // Event listeners cho file selector
 if (closeFileSelector) {

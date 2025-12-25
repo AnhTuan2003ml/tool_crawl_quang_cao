@@ -44,6 +44,54 @@ ALL_RESULTS_DATA = {
     "total_comments": 0,
 }
 
+def cleanup_old_result_files(max_days: int = 3) -> int:
+    """
+    Xóa các file all_results cũ quá max_days ngày.
+    Trả về số file đã xóa.
+    """
+    import re
+    from datetime import datetime, timedelta
+
+    if not OUTPUT_DIR.exists():
+        return 0
+
+    # Pattern để parse timestamp từ tên file: all_results_YYYYMMDD_HHMMSS.json
+    pattern = re.compile(r'all_results_(\d{8})_(\d{6})\.json$')
+
+    current_time = datetime.now()
+    max_age = timedelta(days=max_days)
+    deleted_count = 0
+
+    # Duyệt qua tất cả file trong thư mục
+    for file_path in OUTPUT_DIR.glob("*.json"):
+        if not file_path.is_file():
+            continue
+
+        match = pattern.match(file_path.name)
+        if not match:
+            continue
+
+        date_str, time_str = match.groups()
+        try:
+            # Parse thành datetime
+            file_datetime = datetime.strptime(f"{date_str} {time_str}", "%Y%m%d %H%M%S")
+
+            # Kiểm tra tuổi file
+            if current_time - file_datetime > max_age:
+                try:
+                    file_path.unlink()  # Xóa file
+                    deleted_count += 1
+                    print(f"Đã xóa file cũ: {file_path.name}")
+                except Exception as e:
+                    print(f"Lỗi khi xóa file {file_path.name}: {e}")
+
+        except ValueError:
+            # Nếu không parse được timestamp, bỏ qua
+            continue
+
+    return deleted_count
+
+
 # Biến global để lưu tiến trình khi đang lấy thông tin
 INFO_PROGRESS = {
     "is_running": False,
@@ -242,6 +290,9 @@ def append_to_all_results(file_name: str, result: dict):
         ALL_RESULTS_DATA["total_reactions"] += int(result.get("reactions_count", 0) or 0)
         ALL_RESULTS_DATA["total_comments"] += int(result.get("comments_count", 0) or 0)
         ALL_RESULTS_DATA["total_files"] = len(results_by_file.keys())
+
+        # Cleanup file cũ quá 3 ngày trước khi ghi file mới
+        cleanup_old_result_files(3)
 
         # Ghi file NGAY LẬP TỨC và flush để đảm bảo dữ liệu được ghi ngay
         with open(ALL_RESULTS_FILE, "w", encoding="utf-8") as f:

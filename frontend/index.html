@@ -59,67 +59,11 @@
     </header>
 
     <div class="layout">
-      <div class="left-panel">
-        <div class="panel-header">
-          <h3>⚙️ Điều khiển</h3>
-        </div>
-        <div class="panel-body">
-          <div class="field">
-            <button id="startBtn" class="btn-primary">
-              <span class="btn-icon">▶️</span>
-              <span>Bắt đầu quét</span>
-            </button>
-          </div>
-          <div class="field">
-            <button id="stopBtn" class="btn-danger stop">
-              <span class="btn-icon">⏹️</span>
-              <span>Dừng quét</span>
-            </button>
-          </div>
-          <div class="field">
-            <label for="interval">
-              <span class="label-icon">⏱️</span>
-              Thời gian lặp lại (phút)
-            </label>
-            <input id="interval" type="number" min="1" value="1" placeholder="Nhập số phút" />
-          </div>
-          <div class="field">
-            <label for="runMinutes">
-              <span class="label-icon">⏳</span>
-              Thời gian chạy mỗi phiên (phút)
-            </label>
-            <input id="runMinutes" type="number" min="1" value="30" placeholder="VD: 30" />
-          </div>
-          <div class="field">
-            <label for="postCount">
-              <span class="label-icon">📝</span>
-              SỐ BÀI VIẾT theo dõi
-            </label>
-            <input id="postCount" type="number" min="0" value="0" placeholder="Nhập số bài viết" />
-          </div>
-
-          <div class="field">
-            <button id="exportExcelBtn" class="btn-success">
-              <span class="btn-icon">📊</span>
-              <span>Xuất file Excel</span>
-            </button>
-          </div>
-
-          <div class="status-line">
-            <span id="statusDot" class="status-dot"></span>
-            <div class="status-text-group">
-              <div class="status-label">Trạng thái backend</div>
-              <div id="backendStatus" class="status-text">Chưa khởi động</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div class="right-panel">
         <div class="panel-header">
           <div class="panel-tabs">
-            <button id="tabScanList" type="button" class="tab-button active">📋 Danh sách quét</button>
-            <button id="tabPostManager" type="button" class="tab-button">📝 Quản lý post</button>
+            <button id="tabScanList" type="button" class="tab-button active">📋 Kết quả</button>
+            <button id="tabPostManager" type="button" class="tab-button">📝   Quản Lý Post</button>
             <button id="tabSettings" type="button" class="tab-button">⚙️ Setting profile</button>
           </div>
           <span id="rowCount" class="badge">0</span>
@@ -148,6 +92,7 @@
                 </button>
               </div>
             </div>
+
             <div class="filter-group">
               <div class="filter-label">📊 Lọc theo:</div>
               <div class="filter-buttons">
@@ -179,6 +124,11 @@
                   <button id="clearTimeFilterBtn" class="time-filter-btn-compact time-filter-clear-compact" title="Xóa">
                     <span>✗</span>
                   </button>
+                <!-- Export Button - Bên phải trong hàng lọc thời gian -->
+                <button id="exportExcelBtn" class="btn-success export-btn-inline-time">
+                  <span class="btn-icon">📊</span>
+                  <span>Xuất Excel</span>
+                </button>
                 </div>
               </div>
             </div>
@@ -191,9 +141,6 @@
                 </button>
                 <button id="threeDaysBtn" class="date-btn" title="Chọn file data 3 ngày gần nhất">
                   📊 3 ngày
-                </button>
-                <button id="fiveDaysBtn" class="date-btn" title="Chọn file data 5 ngày gần nhất">
-                  📈 5 ngày
                 </button>
               </div>
 
@@ -245,7 +192,7 @@
                 <tr>
                   <th>ID Post</th>
                   <th>Nội dung</th>
-                  <th>Type</th>
+                  <th>Type</th> 
                 </tr>
               </thead>
               <tbody></tbody>
@@ -288,9 +235,6 @@
                   <button id="scanGroupSettingBtn" class="btn-yellow" type="button">Quét theo group</button>
                   <button id="autoJoinGroupBtn" class="btn-primary" type="button">Tự động tham gia group</button>
                   <button id="feedAccountSettingBtn" class="btn-nuoiacc" type="button">Nuôi acc</button>
-                  <button id="pauseAllBtn" class="btn-yellow" type="button">Tạm dừng tất cả</button>
-                  <button id="pauseSelectedProfilesBtn" class="btn-pause" type="button">Tạm dừng profile đã chọn</button>
-                  <button id="stopSelectedProfilesBtn" class="btn-orange" type="button">Dừng profile đã chọn</button>
                   <button id="stopAllSettingBtn" class="btn-danger" type="button">Dừng tất cả</button>
                 </div>
               </div>
@@ -410,6 +354,7 @@ https://www.facebook.com/groups/abc123"></textarea>
     <span>?</span>
   </button>
   <div id="helpTooltip" class="help-tooltip">
+    
     <div class="tooltip-header">
       <h4>📋 Giải thích màu sắc</h4>
       <button class="tooltip-close">&times;</button>
@@ -431,6 +376,22 @@ https://www.facebook.com/groups/abc123"></textarea>
         <span class="tooltip-dot tooltip-red"></span>
         <div>
           <strong>Đỏ (type3):</strong>data khách tìm kiếm trên facebook
+        </div>
+      </div>
+
+      <div class="setting-card">
+        <div class="setting-card-header">
+          <div>
+            <h4>Dọn dẹp file cũ</h4>
+            <p class="muted">Tự động xóa file dữ liệu cũ quá 3 ngày</p>
+          </div>
+          <div class="setting-card-actions">
+            <button id="cleanupFilesBtn" class="btn-danger" type="button">🗑️ Dọn dẹp ngay</button>
+          </div>
+        </div>
+        <div class="cleanup-info">
+          <p class="hint">Hệ thống sẽ tự động dọn dẹp file cũ khi tạo file mới. Bạn cũng có thể dọn dẹp thủ công bằng nút trên.</p>
+          <div id="cleanupStatus" class="cleanup-status" style="display: none;"></div>
         </div>
       </div>
     </div>

@@ -1820,6 +1820,118 @@ def get_latest_results_file_get(filename: Optional[str] = Query(None)) -> dict:
     return _get_latest_results_file_logic(filename)
 
 
+@app.get("/data/post-ids")
+def get_post_ids_list() -> dict:
+    """
+    Lấy danh sách tất cả file post_ids và nội dung của chúng.
+    """
+    from pathlib import Path
+    import json
+
+    BASE_DIR = Path(__file__).resolve().parents[1]
+    POST_IDS_DIR = BASE_DIR / "data" / "post_ids"
+
+    if not POST_IDS_DIR.exists():
+        return {"files": [], "total": 0}
+
+    files_data = []
+    json_files = list(POST_IDS_DIR.glob("*.json"))
+
+    for file_path in json_files:
+        try:
+            with file_path.open("r", encoding="utf-8") as f:
+                content = f.read().strip()
+
+            # Parse JSON
+            data = json.loads(content)
+
+            # Xử lý cả trường hợp array hoặc object
+            if isinstance(data, list):
+                posts = data
+            elif isinstance(data, dict):
+                posts = [data]
+            else:
+                continue
+
+            # Lấy thông tin từ posts
+            for post in posts:
+                if isinstance(post, dict) and "id" in post:
+                    files_data.append({
+                        "filename": file_path.name,
+                        "post_id": post.get("id"),
+                        "flag": post.get("flag", ""),
+                        "text": post.get("text", ""),
+                        "owning_profile": post.get("owning_profile", {})
+                    })
+
+        except Exception as e:
+            # Nếu không đọc được file, bỏ qua
+            continue
+
+    return {
+        "files": files_data,
+        "total": len(files_data)
+    }
+
+
+@app.post("/cleanup/old-files")
+def cleanup_old_files(max_days: int = 3) -> dict:
+    """
+    Dọn dẹp các file all_results cũ quá max_days ngày.
+    """
+    from pathlib import Path
+    import re
+    from datetime import datetime, timedelta
+
+    BASE_DIR = Path(__file__).resolve().parents[1]
+    RESULTS_DIR = BASE_DIR / "data" / "results"
+
+    if not RESULTS_DIR.exists():
+        return {"deleted_count": 0, "message": "Thư mục results không tồn tại"}
+
+    # Pattern để parse timestamp từ tên file: all_results_YYYYMMDD_HHMMSS.json
+    pattern = re.compile(r'all_results_(\d{8})_(\d{6})\.json$')
+
+    current_time = datetime.now()
+    max_age = timedelta(days=max_days)
+    deleted_count = 0
+    deleted_files = []
+
+    # Duyệt qua tất cả file trong thư mục
+    for file_path in RESULTS_DIR.glob("*.json"):
+        if not file_path.is_file():
+            continue
+
+        match = pattern.match(file_path.name)
+        if not match:
+            continue
+
+        date_str, time_str = match.groups()
+        try:
+            # Parse thành datetime
+            file_datetime = datetime.strptime(f"{date_str} {time_str}", "%Y%m%d %H%M%S")
+
+            # Kiểm tra tuổi file
+            if current_time - file_datetime > max_age:
+                try:
+                    file_path.unlink()  # Xóa file
+                    deleted_count += 1
+                    deleted_files.append(file_path.name)
+                    print(f"Đã xóa file cũ: {file_path.name}")
+                except Exception as e:
+                    print(f"Lỗi khi xóa file {file_path.name}: {e}")
+
+        except ValueError:
+            # Nếu không parse được timestamp, bỏ qua
+            continue
+
+    return {
+        "deleted_count": deleted_count,
+        "deleted_files": deleted_files,
+        "message": f"Đã xóa {deleted_count} file cũ quá {max_days} ngày"
+    }
+
+
 @app.post("/data/latest-results")
 def get_latest_results_file_post(request: Optional[dict] = Body(None)) -> dict:
     """
