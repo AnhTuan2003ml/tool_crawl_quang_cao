@@ -442,6 +442,8 @@ class FBController:
                     # đang đứng trên ref / kết bạn / module rác
                     self.control_checkpoint("before_escape_wheel")
                     self.smooth_scroll(escape_step)
+                    # Đợi một chút để trang render lại sau khi scroll
+                    time.sleep(random.uniform(0.12, 0.15))
                     continue
 
                 # =========================
@@ -451,6 +453,8 @@ class FBController:
                     try:
                         self.control_checkpoint("before_normal_wheel")
                         self.smooth_scroll(normal_step)
+                        # Đợi một chút để trang render lại sau khi scroll
+                        time.sleep(random.uniform(0.08, 0.12))
                     except Exception as e:
                         error_msg = str(e).lower()
                         if any(keyword in error_msg for keyword in ["closed", "disconnected", "target page", "context or browser"]):
@@ -493,7 +497,7 @@ class FBController:
             # Like theo xác suất để đảm bảo khoảng cách 45-90 giây giữa các lần like:
             # - Với nghỉ 12-20s sau mỗi bài, để có khoảng cách 45-90s cần like 20-30% bài
             # - Sau đó roll để quyết định có Like hay không
-            p = random.uniform(0.20, 0.30)
+            p = random.uniform(0.3, 0.4)
             roll = random.random()
             should_like = roll < p
             print(f"🎲 [LikeProb] p={p:.2f} roll={roll:.2f} -> {'LIKE' if should_like else 'SKIP'}")
@@ -833,7 +837,7 @@ class FBController:
             
             for _ in range(num_steps):
                 self.page.mouse.wheel(0, step_distance)
-                sleep_time = random.uniform(0.01, 0.05)
+                sleep_time = random.uniform(0.01, 0.03)
                 self.page.wait_for_timeout(int(sleep_time * 1000))
         except Exception as e:
             # Fallback: scroll một lần nếu lỗi

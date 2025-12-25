@@ -371,7 +371,14 @@ class SearchBotController(FBController):
                 print("❌ Không đạt điều kiện (cần keyword mặc định + có 1 trong text nhập) -> Bỏ qua")
                 self.mark_post_as_processed(post_handle)
                 
-                
+                # Scroll qua bài viết để tiếp tục
+                try:
+                    viewport = self.page.viewport_size
+                    height = viewport['height'] if viewport else 800
+                    self.smooth_scroll(height * 0.4)
+                    time.sleep(random.uniform(0.1, 0.15))
+                except Exception:
+                    pass
                 
                 return False
 
