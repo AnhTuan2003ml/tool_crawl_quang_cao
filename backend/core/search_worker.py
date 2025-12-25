@@ -387,7 +387,7 @@ class SearchBotController(FBController):
             # Like theo xác suất để đảm bảo khoảng cách 45-90 giây giữa các lần like:
             # - Với nghỉ 12-20s sau mỗi bài, để có khoảng cách 45-90s cần like 20-30% bài
             # - Sau đó roll để quyết định có Like hay không
-            p = random.uniform(0.20, 0.30)
+            p = random.uniform(0.3, 0.4)
             roll = random.random()
             should_like = roll < p
             print(f"🎲 [LikeProb] p={p:.2f} roll={roll:.2f} -> {'LIKE' if should_like else 'SKIP'}")
