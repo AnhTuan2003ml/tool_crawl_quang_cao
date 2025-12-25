@@ -24,7 +24,7 @@ from core.control import smart_sleep
 from core.scraper import SimpleBot
 from core.settings import get_settings
 from worker.get_all_info import get_all_info_from_post_ids_dir, get_info_for_profile_ids
-
+from core.paths import get_data_dir, get_settings_path
 app = FastAPI(title="NST Tool API", version="1.0.0")
 class InfoRunRequest(BaseModel):
     mode: str = "all"  # "all" hoặc "selected"
@@ -836,7 +836,7 @@ def report_account_status(payload: AccountStatusPayload) -> dict:
     if not pid:
         raise HTTPException(status_code=400, detail="profile_id rỗng")
 
-    status_file = Path("backend/data/account_status.json")
+    status_file = get_data_dir() / "account_status.json"
     status_file.parent.mkdir(parents=True, exist_ok=True)
 
     data: Dict[str, Any] = {}
@@ -875,7 +875,7 @@ def get_account_status() -> dict:
     Lấy snapshot trạng thái account (do worker đã ghi ra file).
     Frontend chỉ dùng để hiển thị cảnh báo, không điều khiển luồng.
     """
-    status_file = Path("backend/data/account_status.json")
+    status_file = get_data_dir() / "account_status.json"
     if not status_file.exists():
         return {"accounts": {}}
 
@@ -1432,8 +1432,7 @@ def get_scan_stats() -> dict:
     import json
     import os
     
-    BASE_DIR = Path(__file__).resolve().parents[1]
-    POST_IDS_DIR = BASE_DIR / "data" / "post_ids"
+    POST_IDS_DIR = get_data_dir() / "post_ids"
     
     stats = {}
     
@@ -1444,7 +1443,7 @@ def get_scan_stats() -> dict:
     for file_path in json_files:
         profile_id = file_path.stem  # Lấy tên file không có extension
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with file_path.open("r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, list):
                     count = len(data)
@@ -1714,8 +1713,7 @@ def _get_latest_results_file_logic(filename_param: Optional[str] = None) -> dict
     from pathlib import Path
     import re
 
-    BASE_DIR = Path(__file__).resolve().parents[1]
-    RESULTS_DIR = BASE_DIR / "data" / "results"
+    RESULTS_DIR = get_data_dir() / "results"
 
     # Nếu có filename, load file đó
     if filename_param:
@@ -1843,8 +1841,7 @@ def get_post_ids_list() -> dict:
     from pathlib import Path
     import json
 
-    BASE_DIR = Path(__file__).resolve().parents[1]
-    POST_IDS_DIR = BASE_DIR / "data" / "post_ids"
+    POST_IDS_DIR = get_data_dir() / "post_ids"
 
     if not POST_IDS_DIR.exists():
         return {"files": [], "total": 0}
@@ -1898,8 +1895,7 @@ def cleanup_old_files(max_days: int = 3) -> dict:
     import re
     from datetime import datetime, timedelta
 
-    BASE_DIR = Path(__file__).resolve().parents[1]
-    RESULTS_DIR = BASE_DIR / "data" / "results"
+    RESULTS_DIR = get_data_dir() / "results"
 
     if not RESULTS_DIR.exists():
         return {"deleted_count": 0, "message": "Thư mục results không tồn tại"}
@@ -1966,8 +1962,7 @@ def get_results_by_date_range(request: dict) -> dict:
     from pathlib import Path
     import re
 
-    BASE_DIR = Path(__file__).resolve().parents[1]
-    RESULTS_DIR = BASE_DIR / "data" / "results"
+    RESULTS_DIR = get_data_dir() / "results"
 
     from_timestamp = request.get("from_timestamp")
     to_timestamp = request.get("to_timestamp")
@@ -2049,8 +2044,7 @@ def get_files_in_date_range(request: dict) -> dict:
     from pathlib import Path
     import re
 
-    BASE_DIR = Path(__file__).resolve().parents[1]
-    RESULTS_DIR = BASE_DIR / "data" / "results"
+    RESULTS_DIR = get_data_dir() / "results"
 
     from_timestamp = request.get("from_timestamp")
     to_timestamp = request.get("to_timestamp")

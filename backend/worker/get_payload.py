@@ -6,9 +6,9 @@ from urllib.parse import parse_qs, unquote_plus
 from pathlib import Path
 
 # ====== ĐƯỜNG DẪN THEO PROJECT ROOT ======
-BASE_DIR = Path(__file__).resolve().parents[2]  # Thư mục gốc project
-SETTINGS_JSON_FILE = BASE_DIR / "backend" / "config" / "settings.json"
-PAYLOAD_TXT_FILE = BASE_DIR / "backend" / "config" / "payload.txt"
+from core.paths import get_config_dir, get_settings_path
+SETTINGS_JSON_FILE = get_settings_path()  # backend/config/settings.json
+PAYLOAD_TXT_FILE = get_config_dir() / "payload.txt"
 
 
 def _normalize_cookie(cookie: str | None) -> str | None:
@@ -29,7 +29,7 @@ def _read_settings_profile_config(profile_id: str) -> dict | None:
     try:
         if not SETTINGS_JSON_FILE.exists():
             return None
-        with open(SETTINGS_JSON_FILE, "r", encoding="utf-8") as f:
+        with SETTINGS_JSON_FILE.open("r", encoding="utf-8") as f:
             raw = json.load(f)
         profiles = raw.get("PROFILE_IDS")
         if not isinstance(profiles, dict):
@@ -502,7 +502,7 @@ def get_all_payload_values(cookie, profile_id: str | None = None):
                 if profile_id:
                     try:
                         if SETTINGS_JSON_FILE.exists():
-                            with open(SETTINGS_JSON_FILE, "r", encoding="utf-8") as sf:
+                            with SETTINGS_JSON_FILE.open("r", encoding="utf-8") as sf:
                                 sdata = json.load(sf)
                         else:
                             sdata = {}
@@ -515,7 +515,7 @@ def get_all_payload_values(cookie, profile_id: str | None = None):
                         profile_cfg["fb_dtsg"] = fb_dtsg
                         profiles[profile_id] = profile_cfg
                         sdata["PROFILE_IDS"] = profiles
-                        with open(SETTINGS_JSON_FILE, "w", encoding="utf-8") as sf:
+                        with SETTINGS_JSON_FILE.open("w", encoding="utf-8") as sf:
                             json.dump(sdata, sf, ensure_ascii=False, indent=2)
                         print(f"✅ Đã ghi fb_dtsg vào {SETTINGS_JSON_FILE} cho profile_id={profile_id}")
                     except Exception as e:
@@ -674,7 +674,7 @@ def create_payload_dict(payload_values):
     """
     try:
         # Đọc file payload.txt
-        with open(PAYLOAD_TXT_FILE, "r", encoding="utf-8") as f:
+        with PAYLOAD_TXT_FILE.open("r", encoding="utf-8") as f:
             content = f.read().strip()
         
         # Parse từng dòng key: value
@@ -764,11 +764,15 @@ def update_payload_file(payload_values):
     Returns:
         bool: True nếu thành công, False nếu lỗi
     """
-    PAYLOAD_FILE = "backend/config/payload.txt"
+    PAYLOAD_FILE = get_config_dir() / "payload.txt"
     
     try:
         # Đọc file payload hiện tại
-        with open(PAYLOAD_FILE, "r", encoding="utf-8") as f:
+        if not PAYLOAD_FILE.exists():
+            print(f"⚠️ File {PAYLOAD_FILE} không tồn tại")
+            return False
+            
+        with PAYLOAD_FILE.open("r", encoding="utf-8") as f:
             lines = f.readlines()
         
         # Cập nhật các giá trị
@@ -806,7 +810,7 @@ def update_payload_file(payload_values):
             updated_lines.append(line)
         
         # Ghi lại file
-        with open(PAYLOAD_FILE, "w", encoding="utf-8") as f:
+        with PAYLOAD_FILE.open("w", encoding="utf-8") as f:
             f.writelines(updated_lines)
         
         print(f"✅ Đã cập nhật file {PAYLOAD_FILE}")
@@ -899,7 +903,7 @@ def ensure_payload_from_bad_response(profile_id: str | None, cookie: str | None,
         if profile_id and (fb_dtsg or lsd):
             try:
                 if SETTINGS_JSON_FILE.exists():
-                    with open(SETTINGS_JSON_FILE, "r", encoding="utf-8") as sf:
+                    with SETTINGS_JSON_FILE.open("r", encoding="utf-8") as sf:
                         sdata = json.load(sf)
                 else:
                     sdata = {}
@@ -915,7 +919,7 @@ def ensure_payload_from_bad_response(profile_id: str | None, cookie: str | None,
                     profile_cfg["lsd"] = lsd
                 profiles[profile_id] = profile_cfg
                 sdata["PROFILE_IDS"] = profiles
-                with open(SETTINGS_JSON_FILE, "w", encoding="utf-8") as sf:
+                with SETTINGS_JSON_FILE.open("w", encoding="utf-8") as sf:
                     json.dump(sdata, sf, ensure_ascii=False, indent=2)
                 print(f"✅ Đã ghi payload values vào {SETTINGS_JSON_FILE} cho profile_id={profile_id}")
             except Exception as e:

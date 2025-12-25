@@ -4,6 +4,7 @@ PROJECT STRUCTURE:
 tool_crawl_quang_cao/
     .gitignore
     b77da63d-af55-43c2-ab7f-364250b20e30.json
+    BUILD.txt
     comments.json
     HUONG_DAN_SU_DUNG.md
     readme.md
@@ -11,9 +12,12 @@ tool_crawl_quang_cao/
     users.json
     backend/
         .gitignore
+        build.bat
+        build_exe.spec
         main.py
         requirements.txt
         response_debug.txt
+        run_api.py
         app/
             api.py
             __init__.py
@@ -28,11 +32,13 @@ tool_crawl_quang_cao/
             control.py
             join_groups.py
             nst.py
+            paths.py
             runner.py
             scraper.py
             search_worker.py
             settings.py
             utils.py
+            __init__.py
         data/
             account_status.json
             runtime_control.json
@@ -58,6 +64,7 @@ tool_crawl_quang_cao/
             get_post_from_page.py
             single_get_comment.py
             single_get_reactions.py
+            __init__.py
     frontend/
         data.json
         index.html
@@ -156,6 +163,88 @@ if __name__ == "__main__":
 
 --- END FILE: backend\main.py ---
 
+--- START FILE: backend\run_api.py ---
+# backend/run_api.py
+import uvicorn
+import sys
+import os
+import webbrowser
+import threading
+import time
+from multiprocessing import freeze_support
+from pathlib import Path
+
+# --- CẤU HÌNH ĐƯỜNG DẪN QUAN TRỌNG ---
+# Lấy đường dẫn thư mục chứa file chạy hiện tại (backend)
+base_dir = os.path.dirname(os.path.abspath(__file__))
+
+# 1. Thêm 'backend' vào sys.path để gọi được 'app', 'core'
+if base_dir not in sys.path:
+    sys.path.append(base_dir)
+
+# 2. Thêm 'backend/worker' vào sys.path để gọi được 'single_get_reactions', 'get_id', ...
+worker_dir = os.path.join(base_dir, "worker")
+if worker_dir not in sys.path:
+    sys.path.append(worker_dir)
+# --------------------------------------
+
+# === ÉP PYINSTALLER NHẬN DIỆN MODULE ===
+try:
+    import core.paths
+    import core.settings
+    # Import app chính
+    from app.api import app 
+    
+    # Import thủ công các file trong worker để PyInstaller không bỏ sót
+    # (Dùng try-except lồng để tránh crash nếu file chưa chạy tới)
+    try:
+        import worker.single_get_reactions
+        import worker.single_get_comment
+        import worker.get_all_info
+        import worker.get_id
+    except ImportError:
+        pass
+        
+except ImportError as e:
+    print(f"CRITICAL ERROR: Thiếu module! Chi tiết: {e}")
+    print("Sếp kiểm tra lại xem đã có file __init__.py trong thư mục 'worker' chưa nhé!")
+    input("An Enter de thoat...")
+    sys.exit(1)
+# =======================================
+
+def open_browser():
+    """Đợi server chạy rồi mở trình duyệt"""
+    time.sleep(2) 
+    try:
+        from core.paths import get_frontend_dir
+        frontend_path = get_frontend_dir() / "index.html"
+        
+        if frontend_path.exists():
+            print(f"\n🌐 Đang mở giao diện: {frontend_path}")
+            webbrowser.open(frontend_path.as_uri())
+        else:
+            print(f"\n⚠️ Không tìm thấy frontend tại: {frontend_path}")
+    except Exception as e:
+        print(f"Lỗi mở trình duyệt: {e}")
+
+if __name__ == "__main__":
+    freeze_support()
+    
+    threading.Thread(target=open_browser, daemon=True).start()
+    
+    print("=" * 60)
+    print("🚀 Đang khởi động Tool Crawl...")
+    print("=" * 60)
+    
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8000,
+        log_level="info",
+        reload=False 
+    )
+--- END FILE: backend\run_api.py ---
+
 --- START FILE: backend\app\api.py ---
 from multiprocessing import Process
 import time
@@ -183,7 +272,7 @@ from core.control import smart_sleep
 from core.scraper import SimpleBot
 from core.settings import get_settings
 from worker.get_all_info import get_all_info_from_post_ids_dir, get_info_for_profile_ids
-
+from core.paths import get_data_dir, get_settings_path
 app = FastAPI(title="NST Tool API", version="1.0.0")
 class InfoRunRequest(BaseModel):
     mode: str = "all"  # "all" hoặc "selected"
@@ -995,7 +1084,7 @@ def report_account_status(payload: AccountStatusPayload) -> dict:
     if not pid:
         raise HTTPException(status_code=400, detail="profile_id rỗng")
 
-    status_file = Path("backend/data/account_status.json")
+    status_file = get_data_dir() / "account_status.json"
     status_file.parent.mkdir(parents=True, exist_ok=True)
 
     data: Dict[str, Any] = {}
@@ -1034,7 +1123,7 @@ def get_account_status() -> dict:
     Lấy snapshot trạng thái account (do worker đã ghi ra file).
     Frontend chỉ dùng để hiển thị cảnh báo, không điều khiển luồng.
     """
-    status_file = Path("backend/data/account_status.json")
+    status_file = get_data_dir() / "account_status.json"
     if not status_file.exists():
         return {"accounts": {}}
 
@@ -1592,7 +1681,7 @@ def get_scan_stats() -> dict:
     import os
     
     BASE_DIR = Path(__file__).resolve().parents[1]
-    POST_IDS_DIR = BASE_DIR / "data" / "post_ids"
+    POST_IDS_DIR = get_data_dir() / "post_ids"
     
     stats = {}
     
@@ -1874,7 +1963,7 @@ def _get_latest_results_file_logic(filename_param: Optional[str] = None) -> dict
     import re
 
     BASE_DIR = Path(__file__).resolve().parents[1]
-    RESULTS_DIR = BASE_DIR / "data" / "results"
+    RESULTS_DIR = get_data_dir() / "results"
 
     # Nếu có filename, load file đó
     if filename_param:
@@ -2003,7 +2092,7 @@ def get_post_ids_list() -> dict:
     import json
 
     BASE_DIR = Path(__file__).resolve().parents[1]
-    POST_IDS_DIR = BASE_DIR / "data" / "post_ids"
+    POST_IDS_DIR = get_data_dir() / "post_ids"
 
     if not POST_IDS_DIR.exists():
         return {"files": [], "total": 0}
@@ -2058,7 +2147,7 @@ def cleanup_old_files(max_days: int = 3) -> dict:
     from datetime import datetime, timedelta
 
     BASE_DIR = Path(__file__).resolve().parents[1]
-    RESULTS_DIR = BASE_DIR / "data" / "results"
+    RESULTS_DIR = get_data_dir() / "results"
 
     if not RESULTS_DIR.exists():
         return {"deleted_count": 0, "message": "Thư mục results không tồn tại"}
@@ -2126,7 +2215,7 @@ def get_results_by_date_range(request: dict) -> dict:
     import re
 
     BASE_DIR = Path(__file__).resolve().parents[1]
-    RESULTS_DIR = BASE_DIR / "data" / "results"
+    RESULTS_DIR = get_data_dir() / "results"
 
     from_timestamp = request.get("from_timestamp")
     to_timestamp = request.get("to_timestamp")
@@ -2209,7 +2298,7 @@ def get_files_in_date_range(request: dict) -> dict:
     import re
 
     BASE_DIR = Path(__file__).resolve().parents[1]
-    RESULTS_DIR = BASE_DIR / "data" / "results"
+    RESULTS_DIR = get_data_dir() / "results"
 
     from_timestamp = request.get("from_timestamp")
     to_timestamp = request.get("to_timestamp")
@@ -2321,8 +2410,8 @@ import json
 from core.browser import FBController
 
 
-BASE_DIR = Path(__file__).resolve().parents[1]
-STATUS_FILE = BASE_DIR / "data" / "account_status.json"
+from core.paths import get_data_dir
+STATUS_FILE = get_data_dir() / "account_status.json"
 
 
 def check_account_status_brutal(fb: FBController) -> Dict[str, Any]:
@@ -3458,9 +3547,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+from core.paths import get_data_dir
 
-BASE_DIR = Path(__file__).resolve().parents[1]  # backend/
-CONTROL_STATE_PATH = BASE_DIR / "data" / "runtime_control.json"
+# Thay vì tự tính path, hãy dùng hàm chuẩn
+CONTROL_STATE_PATH = get_data_dir() / "runtime_control.json"
+
+
 
 _lock = threading.Lock()
 
@@ -3825,7 +3917,8 @@ from core.nst import stop_profile
 from core.browser import FBController
 from core import control as control_state
 from core.control import smart_sleep
-
+from core.paths import get_config_dir
+GROUPS_JSON_PATH = get_config_dir() / "groups.json"
 # Worker lấy page_id/post_id từ URL (dùng cookie theo profile_id trong settings.json)
 try:
     from worker.get_id import get_id_from_url
@@ -3836,7 +3929,7 @@ except Exception:
         get_id_from_url = None
 
 # Lưu mapping group -> page_id theo profile_id
-GROUPS_JSON_PATH = Path(parent_dir) / "config" / "groups.json"
+
 GROUPS_LOCK_PATH = Path(str(GROUPS_JSON_PATH) + ".lock")
 
 
@@ -4457,6 +4550,46 @@ def connect_profile(profile_id: str):
         print(error_msg)
         raise Exception(error_msg) from e
 --- END FILE: backend\core\nst.py ---
+
+--- START FILE: backend\core\paths.py ---
+# backend/core/paths.py
+import sys
+import os
+from pathlib import Path
+
+def get_base_dir() -> Path:
+    """
+    Trả về thư mục gốc:
+    - Nếu chạy .exe: là thư mục chứa file .exe (để load config/data bên ngoài)
+    - Nếu chạy code: là thư mục backend
+    """
+    if getattr(sys, 'frozen', False):
+        # Đang chạy từ file .exe -> Lấy thư mục chứa file exe
+        return Path(sys.executable).parent
+    else:
+        # Đang chạy code python -> Lấy thư mục chứa file hiện tại (core) rồi ra ngoài 2 cấp
+        return Path(__file__).resolve().parent.parent
+
+def get_config_dir() -> Path:
+    """Folder config nằm cùng cấp file exe"""
+    return get_base_dir() / "config"
+
+def get_data_dir() -> Path:
+    """Folder data nằm cùng cấp file exe"""
+    return get_base_dir() / "data"
+
+def get_frontend_dir() -> Path:
+    """Folder frontend nằm cùng cấp file exe"""
+    base = get_base_dir()
+    if getattr(sys, 'frozen', False):
+        return base / "frontend"
+    else:
+        # Nếu chạy code thì frontend nằm ngang hàng với backend
+        return base.parent / "frontend"
+
+def get_settings_path() -> Path:
+    return get_config_dir() / "settings.json"
+--- END FILE: backend\core\paths.py ---
 
 --- START FILE: backend\core\runner.py ---
 import time  # [Cần thêm thư viện này để đếm giờ]
@@ -5402,9 +5535,9 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import List, Any, Dict
-
+from core.paths import get_settings_path
 # Đường dẫn cố định để đọc cấu hình
-SETTINGS_PATH = Path(__file__).resolve().parent.parent / "config" / "settings.json"
+SETTINGS_PATH = get_settings_path()
 
 
 def _parse_bool(value: Any) -> bool:
@@ -5543,6 +5676,10 @@ def clean_profile_list(raw):
     items = raw if isinstance(raw, list) else str(raw).split(",")
     return [str(p).strip() for p in items if str(p).strip()]
 --- END FILE: backend\core\utils.py ---
+
+--- START FILE: backend\core\__init__.py ---
+
+--- END FILE: backend\core\__init__.py ---
 
 --- START FILE: backend\data\account_status.json ---
 {
@@ -16390,7 +16527,7 @@ from datetime import datetime
 from single_get_reactions import get_all_users_by_fid
 from single_get_comment import get_all_comments_by_post_id
 from core import control as control_state
-
+from core.paths import get_data_dir
 
 def _import_get_payload_funcs():
     """
@@ -16415,8 +16552,8 @@ get_payload_by_profile_id, get_cookies_by_profile_id, get_access_token_by_profil
 
 # ====== ĐƯỜNG DẪN THEO PROJECT ROOT ======
 BASE_DIR = Path(__file__).resolve().parents[2]  # Thư mục gốc project
-POST_IDS_DIR = BASE_DIR / "backend" / "data" / "post_ids"
-OUTPUT_DIR = BASE_DIR / "backend" / "data" / "results"
+POST_IDS_DIR = get_data_dir() / "post_ids"
+RESULTS_DIR = get_data_dir() / "results"
 # File all_results kèm timestamp cho mỗi lần chạy (chỉ một file duy nhất)
 RUN_TS = datetime.now().strftime("%Y%m%d_%H%M%S")
 ALL_RESULTS_FILE = OUTPUT_DIR / f"all_results_{RUN_TS}.json"
@@ -19995,6 +20132,10 @@ if __name__ == "__main__":
         users = get_all_users_by_fid(fid, payload_dict, profile_id, cookies)
 
 --- END FILE: backend\worker\single_get_reactions.py ---
+
+--- START FILE: backend\worker\__init__.py ---
+
+--- END FILE: backend\worker\__init__.py ---
 
 --- START FILE: frontend\data.json ---
 [

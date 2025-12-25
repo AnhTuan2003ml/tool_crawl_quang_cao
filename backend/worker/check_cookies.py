@@ -29,7 +29,7 @@ def check_cookie_by_title(profile_id: str) -> dict:
     url = "https://www.facebook.com/"
     headers = {
         "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-        "accept-encoding": "gzip, deflate, br",
+        "accept-encoding": "gzip, deflate",
         "accept-language": "en,vi;q=0.9,en-US;q=0.8",
         "referer": "https://www.facebook.com/",
         "sec-ch-ua": '"Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"',

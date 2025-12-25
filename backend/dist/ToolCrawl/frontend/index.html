@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hệ thống Quét Facebook</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+
+<body>
+  <!-- Splash Screen -->
+  <div id="splashScreen" class="splash-screen">
+    <div class="splash-content">
+      <h1 class="splash-title">HỆ THỐNG ADS FACEBOOK</h1>
+      <p class="splash-subtitle">Giải pháp tự động hóa – quản lý & scale quảng cáo</p>
+      <button id="splashStartBtn" class="splash-btn">Bắt đầu</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+    <!-- Toast thông báo tiến trình và số bài đã quét -->
+    <div id="progressToast" style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10000; max-width: 600px; width: 90%; display: none;">
+      <!-- Toast tiến trình lấy thông tin -->
+      <div id="infoProgressToast" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); padding: 20px; margin-bottom: 12px; border: 2px solid #5a67d8; position: relative; overflow: hidden; display: none;">
+        <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);"></div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 45px; height: 45px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;">
+            ⚡
+          </div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: bold; color: white; font-size: 16px; margin-bottom: 6px;">Đang lấy thông tin</div>
+            <div id="infoProgressToastText" style="color: rgba(255,255,255,0.9); font-size: 14px; margin-bottom: 8px;"></div>
+            <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.2); border-radius: 4px; overflow: hidden;">
+              <div id="infoProgressToastBar" style="height: 100%; background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%); border-radius: 4px; transition: width 0.3s ease; width: 0%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Toast số bài đã quét được -->
+      <div id="scanStatsToast" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); padding: 20px; border: 2px solid #5a67d8; position: relative; overflow: hidden; display: none;">
+        <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);"></div>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+          <div style="width: 45px; height: 45px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;">
+            📊
+          </div>
+          <div style="font-weight: bold; color: white; font-size: 16px;">Số bài đã quét được</div>
+        </div>
+        <div id="scanStatsToastList" style="background: rgba(255,255,255,0.95); padding: 12px; border-radius: 8px; max-height: 200px; overflow-y: auto;"></div>
+      </div>
+    </div>
+    <header class="header">
+      <div class="header-content">
+        <h1>HỆ THỐNG ADS FACEBOOK</h1>
+        <p class="subtitle">Giải pháp tự động hóa – quản lý & scale quảng cáo</p>
+      </div>
+    </header>
+
+    <div class="layout">
+      <div class="right-panel">
+        <div class="panel-header">
+          <div class="panel-tabs">
+            <button id="tabScanList" type="button" class="tab-button active">📋 Kết quả</button>
+            <button id="tabPostManager" type="button" class="tab-button">📝   Quản Lý Post</button>
+            <button id="tabSettings" type="button" class="tab-button">⚙️ Setting profile</button>
+          </div>
+          <span id="rowCount" class="badge">0</span>
+        </div>
+
+        <!-- View: Danh sách quét -->
+        <div id="scanView">
+          <div class="filter-container">
+            <div class="filter-group">
+              <div class="filter-label">🔍 Lọc theo màu:</div>
+              <div class="filter-buttons">
+                <button class="filter-btn filter-all active" data-filter="all">
+                  <span>Tất cả</span>
+                </button>
+                <button class="filter-btn filter-green" data-filter="type-green">
+                  <span class="filter-dot filter-dot-green"></span>
+                  <span>Xanh (type1)</span>
+                </button>
+                <button class="filter-btn filter-yellow" data-filter="type-yellow">
+                  <span class="filter-dot filter-dot-yellow"></span>
+                  <span>Vàng (type2)</span>
+                </button>
+                <button class="filter-btn filter-red" data-filter="type-red">
+                  <span class="filter-dot filter-dot-red"></span>
+                  <span>Đỏ (type3)</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="filter-group">
+              <div class="filter-label">📊 Lọc theo:</div>
+              <div class="filter-buttons">
+                <button class="filter-btn filter-react" data-filter-react="has">
+                  <span>✓ Có React</span>
+                </button>
+                <button class="filter-btn filter-react" data-filter-react="none">
+                  <span>✗ Không React</span>
+                </button>
+                <button class="filter-btn filter-comment" data-filter-comment="has">
+                  <span>💬 Có Comment</span>
+                </button>
+                <button class="filter-btn filter-comment" data-filter-comment="none">
+                  <span>✗ Không Comment</span>
+                </button>
+              </div>
+            </div>
+            <div class="filter-group">
+              <div class="filter-label">⏰ Lọc theo thời gian:</div>
+              <div class="time-filter-compact">
+                <div class="time-filter-inline">
+                  <input type="datetime-local" id="timeFilterFrom" class="time-filter-input-compact" placeholder="Từ" />
+                  <span class="time-filter-separator">→</span>
+                  <input type="datetime-local" id="timeFilterTo" class="time-filter-input-compact" placeholder="Đến" />
+                  <button id="applyTimeFilterBtn" class="time-filter-btn-compact time-filter-apply-compact"
+                    title="Áp dụng">
+                    <span>✓</span>
+                  </button>
+                  <button id="clearTimeFilterBtn" class="time-filter-btn-compact time-filter-clear-compact" title="Xóa">
+                    <span>✗</span>
+                  </button>
+                <!-- Export Button - Bên phải trong hàng lọc thời gian -->
+                <button id="exportExcelBtn" class="btn-success export-btn-inline-time">
+                  <span class="btn-icon">📊</span>
+                  <span>Xuất Excel</span>
+                </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Date Range Buttons -->
+            <div class="date-range-container">
+              <div class="date-range-buttons">
+                <button id="todayBtn" class="date-btn" title="Chọn file data ngày hôm nay">
+                  📅 Ngày hôm nay
+                </button>
+                <button id="threeDaysBtn" class="date-btn" title="Chọn file data 3 ngày gần nhất">
+                  📊 3 ngày
+                </button>
+              </div>
+
+              <!-- File Selector Dropdown -->
+              <div id="fileSelectorContainer" class="file-selector-container hidden">
+                <div class="file-selector-header">
+                  <span id="fileSelectorTitle">Chọn file data</span>
+                  <button id="closeFileSelector" class="close-btn">✕</button>
+                </div>
+                <div class="file-selector-content">
+                  <div id="fileList" class="file-list">
+                    <!-- Files will be populated here -->
+                  </div>
+                  <div class="file-selector-actions">
+                    <button id="cancelFileSelection" class="btn-secondary">Hủy</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="table-container">
+            <table id="listTable">
+              <thead>
+                <tr>
+                  <th>ID Bài Post</th>
+                  <th>ID User</th>
+                  <th>Name</th>
+                  <th>React</th>
+                  <th>Comment</th>
+                  <th>Time</th>
+                  <th>Type</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div id="emptyState" class="empty">
+            <div class="empty-icon">📭</div>
+            <p>Chưa có dữ liệu</p>
+            <p class="empty-hint">Nhấn "Bắt đầu quét" để bắt đầu</p>
+          </div>
+        </div>
+
+        <!-- View: Quản lý post -->
+        <div id="postView" style="display:none;">
+          <div class="table-container">
+            <table id="postTable">
+              <thead>
+                <tr>
+                  <th>ID Post</th>
+                  <th>Nội dung</th>
+                  <th>Type</th> 
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div id="postEmptyState" class="empty">
+            <div class="empty-icon">📭</div>
+            <p>Chưa có dữ liệu post</p>
+            <p class="empty-hint">Kiểm tra lại file JSON trong thư mục post_ids</p>
+          </div>
+        </div>
+
+        <!-- View: Setting profile -->
+        <div id="settingsView" style="display:none;">
+          <div class="settings-stack">
+            <div class="setting-card">
+              <div class="setting-card-header">
+                <div>
+                  <h4>API Key</h4>
+
+                </div>
+              </div>
+              <div class="inline-field">
+                <input id="settingApiKey" type="text" placeholder="Nhập API Key" />
+                <button id="saveApiKeyBtn" class="btn-primary" type="button">Lưu API Key</button>
+              </div>
+              <p class="hint">API Key được lưu trên trình duyệt; đổi thì nhập mới rồi bấm Lưu.</p>
+            </div>
+
+            <div class="setting-card">
+              <div class="setting-card-header">
+                <div>
+                  <h4>Danh sách profile</h4>
+                  <p class="muted">Thêm profile_id và thao tác nhanh</p>
+                </div>
+                <div class="setting-card-actions">
+                  <button id="runAllInfoBtn" class="btn-primary" type="button">Lấy thông tin toàn bộ</button>
+                  <button id="runSelectedInfoBtn" class="btn-secondary" type="button">Lấy thông tin profile đã chọn</button>
+                  <button id="scanPostsSettingBtn" class="btn-success" type="button">Quét bài viết</button>
+                  <button id="scanGroupSettingBtn" class="btn-yellow" type="button">Quét theo group</button>
+                  <button id="autoJoinGroupBtn" class="btn-primary" type="button">Tự động tham gia group</button>
+                  <button id="feedAccountSettingBtn" class="btn-nuoiacc" type="button">Nuôi acc</button>
+                  <button id="stopAllSettingBtn" class="btn-danger" type="button">Dừng tất cả</button>
+                </div>
+              </div>
+              <div id="feedConfigPanel" class="feed-panel" style="display:none;">
+                <div class="feed-panel-row">
+                  <label class="feed-radio">
+                    <input type="radio" name="feedMode" value="feed" checked />
+                    <span>Feed</span>
+                  </label>
+                  <label class="feed-radio">
+                    <input type="radio" name="feedMode" value="search" />
+                    <span>Search</span>
+                  </label>
+                  <div class="feed-duration">
+                    <span class="feed-label">Chạy (phút)</span>
+                    <input id="feedRunMinutesInput" type="number" min="1" value="30" />
+                  </div>
+                  <div class="feed-duration">
+                    <span class="feed-label">Thời gian lặp lại (phút)</span>
+                    <input id="feedRestMinutesInput" type="number" min="0" value="120" />
+                  </div>
+                </div>
+                <div class="feed-panel-row">
+                  <textarea id="feedTextInput"
+                    placeholder="Nhập text. VD: bắc ninh , bắc giang  |  hoặc: tuyển dụng bắc ninh , bắc giang"></textarea>
+                </div>
+                <div class="feed-panel-row feed-panel-actions">
+                  <button id="feedStartBtn" class="btn-success" type="button">Chạy</button>
+                  <button id="feedCancelBtn" class="btn-secondary" type="button">Hủy</button>
+                </div>
+                <p class="hint">
+                  Rule like: bài phải có (tuyển dụng/tuyển gấp/tuyển nhân viên) <b>và</b> có (bắc ninh <b>hoặc</b> bắc
+                  giang).
+                </p>
+              </div>
+
+              <!-- Panel: Quét bài viết (dùng core/browser.py: scan + like + share + bắt id) -->
+              <div id="scanConfigPanel" class="feed-panel" style="display:none;">
+                <div class="feed-panel-row">
+                  <label class="feed-radio">
+                    <input type="radio" name="scanMode" value="feed" checked />
+                    <span>Feed</span>
+                  </label>
+                  <label class="feed-radio">
+                    <input type="radio" name="scanMode" value="search" />
+                    <span>Search</span>
+                  </label>
+                  <div class="feed-duration">
+                    <span class="feed-label">Chạy (phút)</span>
+                    <input id="scanRunMinutesInput" type="number" min="1" value="30" />
+                  </div>
+                  <div class="feed-duration">
+                    <span class="feed-label">Thời gian lặp lại (phút)</span>
+                    <input id="scanRestMinutesInput" type="number" min="0" value="120" />
+                  </div>
+                </div>
+                <div class="feed-panel-row">
+                  <textarea id="scanTextInput"
+                    placeholder="Nhập text. VD: bắc ninh , bắc giang  |  hoặc: tuyển dụng bắc ninh , bắc giang"></textarea>
+                </div>
+                <div class="feed-panel-row feed-panel-actions">
+                  <button id="scanStartBtn" class="btn-success" type="button">Chạy</button>
+                  <button id="scanCancelBtn" class="btn-secondary" type="button">Hủy</button>
+                </div>
+                <p class="hint">
+                  Rule scan: bài phải có keyword mặc định (tuyển dụng/lương/...) <b>và</b> có ít nhất 1 cụm từ trong
+                  text
+                  nhập (nếu có).
+                </p>
+              </div>
+
+              <!-- Panel: Quét theo group (UI only - chưa nối API) -->
+              <div id="groupScanPanel" class="feed-panel" style="display:none;">
+                <div class="feed-panel-row">
+                  <div class="feed-duration feed-duration-left">
+                    <span class="feed-label">Số bài viết theo dõi</span>
+                    <input id="groupScanPostCountInput" type="number" min="0" value="0" placeholder="VD: 100" />
+                  </div>
+                  <div class="feed-duration">
+                    <span class="feed-label">Từ (ngày/giờ)</span>
+                    <input id="groupScanStartDateInput" type="datetime-local" />
+                  </div>
+                  <div class="feed-duration">
+                    <span class="feed-label">Đến (ngày/giờ)</span>
+                    <input id="groupScanEndDateInput" type="datetime-local" />
+                  </div>
+                </div>
+                <div class="feed-panel-row">
+                  <textarea id="groupScanUrlInput"
+                    placeholder="Nhập URL group (mỗi dòng 1 URL). VD:
+https://www.facebook.com/groups/tuyendungkisuIT
+https://www.facebook.com/groups/abc123"></textarea>
+                </div>
+                <div class="feed-panel-row feed-panel-actions">
+                  <button id="groupScanStartBtn" class="btn-success" type="button">Chạy</button>
+                  <button id="groupScanCancelBtn" class="btn-secondary" type="button">Đóng</button>
+                </div>
+                <p class="hint">Chỉ UI để nhập URL + khoảng thời gian (chưa nối API).</p>
+              </div>
+
+              <div id="profileList" class="profile-list empty-state-box">
+                <p class="muted">Chưa có profile nào</p>
+              </div>
+
+              <div class="add-profile-row">
+                <button id="addProfileRowBtn" class="btn-success" type="button">+ Thêm profile</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help button với tooltip -->
+  <button id="helpBtn" class="help-button" title="Xem hướng dẫn sử dụng đầy đủ">
+    <span>?</span>
+  </button>
+  <div id="helpTooltip" class="help-tooltip">
+
+    <div class="tooltip-header">
+      <h4>📖 HƯỚNG DẪN SỬ DỤNG</h4>
+      <button class="tooltip-close">&times;</button>
+    </div>
+    <div class="tooltip-body">
+      <div class="help-content">
+
+        <h3>📋 Các Trang/Chức Năng Chính</h3>
+
+        <h4>1. 📋 Trang Kết Quả (Scan Results)</h4>
+        <ul>
+          <li><strong>Chức năng:</strong> Hiển thị dữ liệu đã quét được từ Facebook</li>
+          <li><strong>Các bộ lọc:</strong>
+            <ul>
+              <li><strong>🔍 Lọc theo màu:</strong> Phân loại dữ liệu theo độ ưu tiên
+                <ul>
+                  <li>🟢 <strong>Xanh (type1):</strong> Dữ liệu ưu tiên cao, dữ liệu đối thủ</li>
+                  <li>🟡 <strong>Vàng (type2):</strong> Dữ liệu ưu tiên trung bình</li>
+                  <li>🔴 <strong>Đỏ (type3):</strong> Dữ liệu từ tìm kiếm khách hàng</li>
+                </ul>
+              </li>
+              <li><strong>📊 Lọc theo tương tác:</strong> Có/Không có React, Comment</li>
+              <li><strong>⏰ Lọc theo thời gian:</strong> Chọn khoảng thời gian cụ thể</li>
+            </ul>
+          </li>
+        </ul>
+
+
+ 
+        <h3>🔄 Quy trình sử dụng</h3>
+        <ol>
+          <li><strong>Khởi động:</strong> Mở trang web và chờ backend sẵn sàng</li>
+          <li><strong>Cài đặt:</strong> Nhập API Key và thêm profile</li>
+          <li><strong>Cấu hình:</strong> Setting thời gian và điều kiện quét</li>
+          <li><strong>Chạy:</strong> Bắt đầu quét và theo dõi kết quả</li>
+          <li><strong>Xuất dữ liệu:</strong> Export Excel khi cần phân tích</li>
+        </ol>
+
+        <div class="tooltip-item">
+          <span class="tooltip-dot tooltip-green"></span>
+          <div>
+            <strong>Mẹo:</strong> Click vào dấu ? bất cứ lúc nào để xem hướng dẫn này!
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nút chat Messenger & Zalo -->
+  <div class="chat-floating">
+    <a href="https://m.me/" target="_blank" rel="noopener noreferrer" class="chat-btn chat-mess" title="Chat Messenger">
+      <img src="icon/logo-messenger-inkythuatso-2-01-30-15-47-51.jpg" alt="Messenger" class="chat-img" />
+    </a>
+    <a href="https://zalo.me/" target="_blank" rel="noopener noreferrer" class="chat-btn chat-zalo" title="Chat Zalo">
+      <img src="icon/zalo-icon.png" alt="Zalo" class="chat-img" />
+    </a>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+
+</html>

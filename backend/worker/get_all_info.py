@@ -5,7 +5,7 @@ from datetime import datetime
 from single_get_reactions import get_all_users_by_fid
 from single_get_comment import get_all_comments_by_post_id
 from core import control as control_state
-
+from core.paths import get_data_dir
 
 def _import_get_payload_funcs():
     """
@@ -29,9 +29,9 @@ def _import_get_payload_funcs():
 get_payload_by_profile_id, get_cookies_by_profile_id, get_access_token_by_profile_id = _import_get_payload_funcs()
 
 # ====== ĐƯỜNG DẪN THEO PROJECT ROOT ======
-BASE_DIR = Path(__file__).resolve().parents[2]  # Thư mục gốc project
-POST_IDS_DIR = BASE_DIR / "backend" / "data" / "post_ids"
-OUTPUT_DIR = BASE_DIR / "backend" / "data" / "results"
+POST_IDS_DIR = get_data_dir() / "post_ids"
+RESULTS_DIR = get_data_dir() / "results"
+OUTPUT_DIR = RESULTS_DIR  # Alias cho RESULTS_DIR để tương thích
 # File all_results kèm timestamp cho mỗi lần chạy (chỉ một file duy nhất)
 RUN_TS = datetime.now().strftime("%Y%m%d_%H%M%S")
 ALL_RESULTS_FILE = OUTPUT_DIR / f"all_results_{RUN_TS}.json"
@@ -101,7 +101,7 @@ INFO_PROGRESS = {
 }
 
 # Tạo thư mục output nếu chưa có
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ====== PROFILE ID ======
 # Profile ID mặc định, có thể thay đổi
@@ -295,7 +295,7 @@ def append_to_all_results(file_name: str, result: dict):
         cleanup_old_result_files(3)
 
         # Ghi file NGAY LẬP TỨC và flush để đảm bảo dữ liệu được ghi ngay
-        with open(ALL_RESULTS_FILE, "w", encoding="utf-8") as f:
+        with ALL_RESULTS_FILE.open("w", encoding="utf-8") as f:
             json.dump(ALL_RESULTS_DATA, f, ensure_ascii=False, indent=2)
             f.flush()  # Đảm bảo dữ liệu được ghi ngay vào disk
             os.fsync(f.fileno())  # Force write to disk (nếu hệ thống hỗ trợ)
@@ -343,12 +343,14 @@ def process_post_ids_file(file_path):
     Xử lý một file JSON chứa danh sách post_ids
     
     Args:
-        file_path (str): Đường dẫn đến file JSON
+        file_path (str | Path): Đường dẫn đến file JSON
         
     Returns:
         list: Danh sách kết quả của tất cả post_ids trong file
     """
-    file_name = os.path.basename(file_path)
+    # Chuyển đổi thành Path nếu là string
+    file_path = Path(file_path) if not isinstance(file_path, Path) else file_path
+    file_name = file_path.name
     
     # Tự động tách profile_id từ tên file
     profile_id = extract_profile_id_from_filename(file_name)
@@ -366,7 +368,7 @@ def process_post_ids_file(file_path):
     print("="*70)
     
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with file_path.open("r", encoding="utf-8") as f:
             post_ids = json.load(f)
         
         if not isinstance(post_ids, list):
@@ -445,7 +447,7 @@ def process_post_ids_file(file_path):
                 # Xóa post_id đã xử lý khỏi file nguồn
                 post_ids.pop(idx)
                 try:
-                    with open(file_path, "w", encoding="utf-8") as f:
+                    with file_path.open("w", encoding="utf-8") as f:
                         json.dump(post_ids, f, ensure_ascii=False, indent=2)
                     print(f"🗑️ Đã xóa post_id {post_id} khỏi {file_name}")
                 except Exception as e:
@@ -512,7 +514,7 @@ def get_all_info_from_post_ids_dir():
     total_posts = 0
     for file_path in json_files:
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with file_path.open("r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, list):
                     total_posts += len(data)
@@ -620,7 +622,7 @@ def get_info_for_profile_ids(profile_ids):
     total_posts = 0
     for file_path in json_files:
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with file_path.open("r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, list):
                     total_posts += len(data)

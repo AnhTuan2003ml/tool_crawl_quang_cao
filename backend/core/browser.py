@@ -9,6 +9,7 @@ import sys
 from core.settings import get_settings, SETTINGS_PATH
 from core import control as control_state
 from core.control import smart_sleep
+from core.paths import get_data_dir
 # ==============================================================================
 # JS TOOLS & HELPER FUNCTIONS
 # ==============================================================================
@@ -374,14 +375,14 @@ class FBController:
                 print("⚠️ Không có post_id trong details")
                 return False
                 
-            folder = "data/post_ids"
-            os.makedirs(folder, exist_ok=True)
-            filepath = f"{folder}/{self.profile_id}.json"
+            folder = get_data_dir() / "post_ids"
+            folder.mkdir(parents=True, exist_ok=True)
+            filepath = folder / f"{self.profile_id}.json"
 
             data = []
-            if os.path.exists(filepath):
+            if filepath.exists():
                 try:
-                    with open(filepath, "r", encoding="utf8") as f:
+                    with filepath.open("r", encoding="utf8") as f:
                         data = json.load(f)
                 except:
                     data = []
@@ -410,7 +411,7 @@ class FBController:
 
             data.append(record)
 
-            with open(filepath, "w", encoding="utf8") as f:
+            with filepath.open("w", encoding="utf8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
 
             print(f"💾 Đã lưu Post {post_id} | Chủ bài: {owning_profile.get('name', 'N/A')}")

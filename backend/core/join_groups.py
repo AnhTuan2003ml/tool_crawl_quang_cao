@@ -16,7 +16,8 @@ from core.nst import stop_profile
 from core.browser import FBController
 from core import control as control_state
 from core.control import smart_sleep
-
+from core.paths import get_config_dir, get_data_dir
+GROUPS_JSON_PATH = get_config_dir() / "groups.json"
 # Worker lấy page_id/post_id từ URL (dùng cookie theo profile_id trong settings.json)
 try:
     from worker.get_id import get_id_from_url
@@ -27,7 +28,7 @@ except Exception:
         get_id_from_url = None
 
 # Lưu mapping group -> page_id theo profile_id
-GROUPS_JSON_PATH = Path(parent_dir) / "config" / "groups.json"
+
 GROUPS_LOCK_PATH = Path(str(GROUPS_JSON_PATH) + ".lock")
 
 
@@ -371,8 +372,10 @@ def run_batch_join_from_list(profile_id, group_ids):
 
 def run_batch_join(profile_id, json_file_path):
     # 1. Đọc file JSON
+    # Chuyển đổi thành Path nếu là string
+    json_file_path = Path(json_file_path) if not isinstance(json_file_path, Path) else json_file_path
     try:
-        with open(json_file_path, "r", encoding="utf-8") as f:
+        with json_file_path.open("r", encoding="utf-8") as f:
             group_ids = json.load(f)
         
         if not group_ids:
@@ -390,6 +393,6 @@ def run_batch_join(profile_id, json_file_path):
 if __name__ == "__main__":
     # --- CẤU HÌNH ---
     MY_PROFILE_ID = "621e1f5d-0c42-481e-9ddd-7abaafce68ed" 
-    JSON_PATH = os.path.join(parent_dir, "data", "groups.json")
+    JSON_PATH = get_config_dir() / "groups.json"
     
-    run_batch_join(MY_PROFILE_ID, JSON_PATH)
+    run_batch_join(MY_PROFILE_ID, str(JSON_PATH))

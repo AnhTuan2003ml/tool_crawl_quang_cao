@@ -381,10 +381,10 @@ if __name__ == "__main__":
         for post in posts[:5]:
             print(f"      - {post['id']} (created: {post['created_time']})")
     
-    # Lưu ra file JSON (theo project root)
-    base_dir = Path(__file__).resolve().parents[2]
-    output_dir = base_dir / "backend" / "data"
-    os.makedirs(output_dir, exist_ok=True)
+    # Lưu ra file JSON (dùng get_data_dir để đúng cả khi chạy .exe)
+    from core.paths import get_data_dir
+    output_dir = get_data_dir()
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # Tạo tên file dựa trên page_id và ngày
     filename = f"{page_id}_posts_{start_date.replace('/', '-')}_to_{end_date.replace('/', '-')}.json"
@@ -401,7 +401,7 @@ if __name__ == "__main__":
     }
     
     # Lưu file JSON
-    with open(filepath, "w", encoding="utf-8") as f:
+    with filepath.open("w", encoding="utf-8") as f:
         json.dump(output_data, f, ensure_ascii=False, indent=2)
     
     print(f"\n💾 Đã lưu kết quả vào: {filepath}")
