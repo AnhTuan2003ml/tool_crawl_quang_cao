@@ -1692,10 +1692,10 @@ def fetch_and_save_cookie(profile_id: str) -> dict:
             pass
 
 
-@app.get("/data/latest-results")
-def get_latest_results_file() -> dict:
+@app.post("/data/latest-results")
+def get_latest_results_file(request: dict) -> dict:
     """
-    Tìm và trả về nội dung file JSON gần nhất (theo timestamp trong tên file) từ thư mục data/results/
+    Tìm và trả về nội dung file JSON theo filename hoặc gần nhất (theo timestamp trong tên file) từ thư mục data/results/
     """
     from pathlib import Path
     import re
@@ -1703,6 +1703,54 @@ def get_latest_results_file() -> dict:
     BASE_DIR = Path(__file__).resolve().parents[1]
     RESULTS_DIR = BASE_DIR / "data" / "results"
 
+    # Nếu có filename trong request, load file đó
+    filename_param = request.get("filename")
+    if filename_param:
+        file_path = RESULTS_DIR / filename_param
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail=f"File {filename_param} không tồn tại")
+
+        # Parse timestamp từ filename
+        pattern = re.compile(r'all_results_(\d{8})_(\d{6})\.json$')
+        match = pattern.match(filename_param)
+        if not match:
+            raise HTTPException(status_code=400, detail=f"Tên file {filename_param} không hợp lệ")
+
+        date_str, time_str = match.groups()
+        try:
+            from datetime import datetime
+            dt = datetime.strptime(f"{date_str} {time_str}", "%Y%m%d %H%M%S")
+            timestamp = dt.timestamp()
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Không thể parse timestamp từ {filename_param}")
+
+        try:
+            with file_path.open("r", encoding="utf-8") as f:
+                content = f.read().strip()
+
+            # Thử parse JSON
+            try:
+                data = json.loads(content)
+            except json.JSONDecodeError:
+                # Thử tìm object JSON chính
+                last_brace = content.rfind('}')
+                if last_brace > 0:
+                    try:
+                        data = json.loads(content[:last_brace + 1])
+                    except json.JSONDecodeError as exc:
+                        raise HTTPException(status_code=400, detail=f"File {filename_param} không phải JSON hợp lệ: {exc}") from exc
+                else:
+                    raise HTTPException(status_code=400, detail=f"File {filename_param} không phải JSON hợp lệ")
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Không đọc được file {filename_param}: {exc}")
+
+        return {
+            "filename": filename_param,
+            "timestamp": int(timestamp),
+            "data": data
+        }
+
+    # Nếu không có filename, tìm file gần nhất như cũ
     if not RESULTS_DIR.exists():
         raise HTTPException(status_code=404, detail=f"Thư mục results không tồn tại: {RESULTS_DIR}")
 
@@ -1763,4 +1811,152 @@ def get_latest_results_file() -> dict:
         "filename": filename,
         "timestamp": int(timestamp),
         "data": data
+    }
+
+@app.post("/data/by-date-range")
+def get_results_by_date_range(request: dict) -> dict:
+    """
+    Tìm và trả về file JSON có timestamp nằm trong khoảng thời gian được chỉ định
+    """
+    from pathlib import Path
+    import re
+
+    BASE_DIR = Path(__file__).resolve().parents[1]
+    RESULTS_DIR = BASE_DIR / "data" / "results"
+
+    from_timestamp = request.get("from_timestamp")
+    to_timestamp = request.get("to_timestamp")
+
+    if not from_timestamp or not to_timestamp:
+        raise HTTPException(status_code=400, detail="Thiếu from_timestamp hoặc to_timestamp")
+
+    try:
+        from_timestamp = int(from_timestamp)
+        to_timestamp = int(to_timestamp)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Timestamp phải là số nguyên")
+
+    if not RESULTS_DIR.exists():
+        raise HTTPException(status_code=404, detail=f"Thư mục results không tồn tại: {RESULTS_DIR}")
+
+    # Pattern để parse timestamp từ tên file
+    pattern = re.compile(r'all_results_(\d{8})_(\d{6})\.json$')
+
+    # Tìm tất cả file JSON và parse timestamp
+    matching_files = []
+    all_files = list(RESULTS_DIR.glob("*.json"))
+
+    for file_path in all_files:
+        match = pattern.match(file_path.name)
+        if match:
+            date_str, time_str = match.groups()
+            try:
+                from datetime import datetime
+                dt = datetime.strptime(f"{date_str} {time_str}", "%Y%m%d %H%M%S")
+                timestamp = dt.timestamp()
+
+                # Kiểm tra xem timestamp có nằm trong khoảng không
+                if from_timestamp <= timestamp <= to_timestamp:
+                    matching_files.append((file_path, timestamp, file_path.name))
+            except ValueError:
+                continue
+
+    if not matching_files:
+        raise HTTPException(status_code=404, detail=f"Không tìm thấy file JSON nào trong khoảng thời gian từ {from_timestamp} đến {to_timestamp}")
+
+    # Sắp xếp theo timestamp giảm dần (mới nhất trước)
+    matching_files.sort(key=lambda x: x[1], reverse=True)
+
+    # Lấy file gần nhất trong khoảng
+    latest_file, timestamp, filename = matching_files[0]
+
+    try:
+        with latest_file.open("r", encoding="utf-8") as f:
+            content = f.read().strip()
+
+        # Thử parse JSON
+        try:
+            data = json.loads(content)
+        except json.JSONDecodeError:
+            # Thử tìm object JSON chính
+            last_brace = content.rfind('}')
+            if last_brace > 0:
+                try:
+                    data = json.loads(content[:last_brace + 1])
+                except json.JSONDecodeError as exc:
+                    raise HTTPException(status_code=400, detail=f"File {filename} không phải JSON hợp lệ: {exc}") from exc
+            else:
+                raise HTTPException(status_code=400, detail=f"File {filename} không phải JSON hợp lệ")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Không đọc được file {filename}: {exc}")
+
+    return {
+        "filename": filename,
+        "timestamp": int(timestamp),
+        "data": data
+    }
+
+@app.post("/data/files-in-range")
+def get_files_in_date_range(request: dict) -> dict:
+    """
+    Trả về danh sách các file JSON có timestamp trong khoảng thời gian được chỉ định
+    """
+    from pathlib import Path
+    import re
+
+    BASE_DIR = Path(__file__).resolve().parents[1]
+    RESULTS_DIR = BASE_DIR / "data" / "results"
+
+    from_timestamp = request.get("from_timestamp")
+    to_timestamp = request.get("to_timestamp")
+
+    if not from_timestamp or not to_timestamp:
+        raise HTTPException(status_code=400, detail="Thiếu from_timestamp hoặc to_timestamp")
+
+    try:
+        from_timestamp = int(from_timestamp)
+        to_timestamp = int(to_timestamp)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Timestamp phải là số nguyên")
+
+    if not RESULTS_DIR.exists():
+        raise HTTPException(status_code=404, detail=f"Thư mục results không tồn tại: {RESULTS_DIR}")
+
+    # Pattern để parse timestamp từ tên file
+    pattern = re.compile(r'all_results_(\d{8})_(\d{6})\.json$')
+
+    # Tìm tất cả file JSON và parse timestamp
+    matching_files = []
+    all_files = list(RESULTS_DIR.glob("*.json"))
+
+    for file_path in all_files:
+        match = pattern.match(file_path.name)
+        if match:
+            date_str, time_str = match.groups()
+            try:
+                from datetime import datetime
+                dt = datetime.strptime(f"{date_str} {time_str}", "%Y%m%d %H%M%S")
+                timestamp = dt.timestamp()
+
+                # Kiểm tra xem timestamp có nằm trong khoảng không
+                if from_timestamp <= timestamp <= to_timestamp:
+                    matching_files.append({
+                        "filename": file_path.name,
+                        "timestamp": int(timestamp),
+                        "filepath": str(file_path),
+                        "date_formatted": dt.strftime("%d/%m/%Y %H:%M:%S")
+                    })
+            except ValueError:
+                continue
+
+    # Sắp xếp theo timestamp giảm dần (mới nhất trước)
+    matching_files.sort(key=lambda x: x["timestamp"], reverse=True)
+
+    return {
+        "files": matching_files,
+        "total_files": len(matching_files),
+        "range": {
+            "from_timestamp": from_timestamp,
+            "to_timestamp": to_timestamp
+        }
     }

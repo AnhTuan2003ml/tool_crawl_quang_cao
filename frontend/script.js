@@ -2058,6 +2058,28 @@ async function checkForNewData() {
         ...commentsByUser.keys(),
       ]);
 
+      // Nếu không có user nào interact, hiển thị post với thông tin owner
+      if (allUserIds.size === 0) {
+        const owner = post.owning_profile || {};
+        const ownerId = owner.id || 'unknown';
+        const ownerName = owner.name || 'Unknown User';
+        const uniqueKey = `${postId}_${ownerId}`;
+
+        if (!loadedPostIds.has(uniqueKey)) {
+          appendRow({
+            id: postId,
+            userId: ownerId,
+            name: ownerName,
+            react: false,
+            comment: '',
+            time: defaultTime,
+            type: type,
+          });
+          loadedPostIds.add(uniqueKey);
+          displayedCount++;
+        }
+      }
+
       allUserIds.forEach((uid) => {
         const reaction = reactionsByUser.get(uid);
         const comment = commentsByUser.get(uid);
@@ -2187,6 +2209,28 @@ async function loadInitialData() {
         ...reactionsByUser.keys(),
         ...commentsByUser.keys(),
       ]);
+
+      // Nếu không có user nào interact, hiển thị post với thông tin owner
+      if (allUserIds.size === 0) {
+        const owner = post.owning_profile || {};
+        const ownerId = owner.id || 'unknown';
+        const ownerName = owner.name || 'Unknown User';
+        const uniqueKey = `${postId}_${ownerId}`;
+
+        if (!loadedPostIds.has(uniqueKey)) {
+          appendRow({
+            id: postId,
+            userId: ownerId,
+            name: ownerName,
+            react: false,
+            comment: '',
+            time: defaultTime,
+            type: type,
+          });
+          loadedPostIds.add(uniqueKey);
+          displayedCount++;
+        }
+      }
 
       allUserIds.forEach((uid) => {
         const reaction = reactionsByUser.get(uid);
@@ -2645,6 +2689,18 @@ function handleAddGroupData() {
 
 const helpBtn = document.getElementById('helpBtn');
 const helpTooltip = document.getElementById('helpTooltip');
+
+// Date range buttons
+const todayBtn = document.getElementById('todayBtn');
+const threeDaysBtn = document.getElementById('threeDaysBtn');
+const fiveDaysBtn = document.getElementById('fiveDaysBtn');
+
+// File selector dropdown
+const fileSelectorContainer = document.getElementById('fileSelectorContainer');
+const closeFileSelector = document.getElementById('closeFileSelector');
+const fileSelectorTitle = document.getElementById('fileSelectorTitle');
+const fileList = document.getElementById('fileList');
+const cancelFileSelection = document.getElementById('cancelFileSelection');
 const tooltipClose = document.querySelector('.tooltip-close');
 
 function toggleHelpTooltip() {
@@ -3177,7 +3233,16 @@ async function runInfoCollector(mode = 'all') {
       msgParts.push(`posts: ${summary.total_posts_processed}`);
     }
     showToast(msgParts.join(' | '), 'success', 2200);
-    
+
+    // Tự động tải lại danh sách quét với dữ liệu mới nhất theo timestamp
+    try {
+      await loadInitialData();
+      showToast('Đã cập nhật danh sách quét với dữ liệu mới nhất', 'info', 1500);
+    } catch (loadErr) {
+      console.warn('Không thể tải lại danh sách quét:', loadErr);
+      // Không hiện lỗi cho user vì chức năng chính đã thành công
+    }
+
     // Reset flag sau khi hoàn thành thành công
     resetInfoCollectorState();
   } catch (e) {
@@ -3247,13 +3312,461 @@ function switchTab(key) {
   }
 }
 
-if (tabScanList) tabScanList.addEventListener('click', (e) => {
+if (tabScanList) tabScanList.addEventListener('click', async (e) => {
   // Chỉ chuyển tab khi người dùng thật sự bấm tab; không auto chuyển ở nơi khác
   e.preventDefault();
   switchTab('scan');
+
+  // Khi click vào tab danh sách quét, tự động load lại dữ liệu mới nhất theo timestamp
+  try {
+    await loadInitialData();
+  } catch (err) {
+    console.warn('Không thể load dữ liệu khi click tab danh sách quét:', err);
+  }
 });
 if (tabPostManager) tabPostManager.addEventListener('click', () => switchTab('post'));
 if (tabSettings) tabSettings.addEventListener('click', () => switchTab('settings'));
+
+// ============
+// Date Range Buttons Logic
+// ============
+
+// Function để load data từ file cụ thể
+async function loadDataFromFile(filename) {
+  console.log('Loading data from file:', filename);
+
+  try {
+    // Reset data
+    tbody.innerHTML = '';
+    counter = 1;
+    loadedPostIds.clear();
+    initialLoaded = false;
+
+    // Gọi API để lấy data từ file cụ thể
+    const res = await callBackend('/data/latest-results', {
+      method: 'POST',
+      body: JSON.stringify({
+        filename: filename
+      })
+    });
+
+    const data = res.data;
+    console.log(`Đã load data từ file: ${filename}`);
+
+    // Xử lý data giống như loadInitialData
+    const allPosts = [];
+    Object.values(data.results_by_file || {}).forEach(filePosts => {
+      if (Array.isArray(filePosts)) {
+        allPosts.push(...filePosts);
+      }
+    });
+
+    console.log(`Tổng số posts: ${allPosts.length}`);
+
+    let displayedCount = 0;
+    allPosts.forEach((post) => {
+      const postId = post.post_id || '';
+      if (!postId) return;
+
+      // Map flag
+      let type = 'type1';
+      const flag = (post.flag || '').toLowerCase();
+      if (flag === 'xanh') type = 'type1';
+      else if (flag === 'vàng' || flag === 'vang') type = 'type2';
+      else if (flag === 'đỏ' || flag === 'do') type = 'type3';
+
+      // Xử lý reactions và comments
+      const reactionsByUser = new Map();
+      const commentsByUser = new Map();
+
+      if (post.reactions && Array.isArray(post.reactions)) {
+        post.reactions.forEach((r) => {
+          const uid = r && r.id ? String(r.id) : '';
+          if (!uid) return;
+          reactionsByUser.set(uid, r);
+        });
+      }
+
+      if (post.comments && Array.isArray(post.comments)) {
+        post.comments.forEach((c) => {
+          const uid = c && c.id ? String(c.id) : '';
+          if (!uid) return;
+          const prev = commentsByUser.get(uid);
+          if (!prev) {
+            commentsByUser.set(uid, c);
+          } else {
+            const prevTime = new Date(prev.created_time_vn || 0);
+            const curTime = new Date(c.created_time_vn || 0);
+            if (curTime > prevTime) {
+              commentsByUser.set(uid, c);
+            }
+          }
+        });
+      }
+
+      // Thời gian mặc định
+      let defaultTime = new Date().toLocaleTimeString('vi-VN');
+
+      // Tập tất cả user
+      const allUserIds = new Set([
+        ...reactionsByUser.keys(),
+        ...commentsByUser.keys(),
+      ]);
+
+      // Nếu không có user nào interact, hiển thị post với thông tin owner
+      if (allUserIds.size === 0) {
+        const owner = post.owning_profile || {};
+        const ownerId = owner.id || 'unknown';
+        const ownerName = owner.name || 'Unknown User';
+        const uniqueKey = `${postId}_${ownerId}`;
+
+        if (!loadedPostIds.has(uniqueKey)) {
+          appendRow({
+            id: postId,
+            userId: ownerId,
+            name: ownerName,
+            react: false,
+            comment: '',
+            time: defaultTime,
+            type: type,
+          });
+          loadedPostIds.add(uniqueKey);
+          displayedCount++;
+        }
+      }
+
+      allUserIds.forEach((uid) => {
+        const reaction = reactionsByUser.get(uid);
+        const comment = commentsByUser.get(uid);
+
+        const userId = uid;
+        const name = (reaction && reaction.name) || (comment && comment.name) || '';
+
+        const hasReact = !!reaction;
+        const commentText = comment && comment.text ? comment.text : '';
+        const time = (comment && comment.created_time_vn) ? comment.created_time_vn : defaultTime;
+
+        const uniqueKey = `${postId}_${userId}`;
+        if (!loadedPostIds.has(uniqueKey)) {
+          appendRow({
+            id: postId,
+            userId: userId,
+            name: name,
+            react: hasReact,
+            comment: commentText,
+            time: time,
+            type: type,
+          });
+          loadedPostIds.add(uniqueKey);
+          displayedCount++;
+        }
+      });
+    });
+
+    console.log(`Đã hiển thị ${displayedCount} dòng dữ liệu từ file ${filename}`);
+    initialLoaded = true;
+
+    // Show empty state if no rows
+    if (tbody.children.length === 0) {
+      emptyState.classList.add('show');
+    } else {
+      emptyState.classList.remove('show');
+    }
+
+  } catch (err) {
+    console.error('Không tải được data từ file:', err);
+    showToast('Không thể tải dữ liệu từ file đã chọn', 'error', 4000);
+  }
+}
+
+// Function để show dropdown với danh sách files
+async function showFileSelector(rangeType, fromDate, toDate) {
+  console.log('Showing file selector for:', rangeType, 'from:', fromDate, 'to:', toDate);
+
+  try {
+    // Set title
+    let title = '';
+    if (rangeType === 'today') title = 'Chọn file data ngày hôm nay';
+    else if (rangeType === '3days') title = 'Chọn file data 3 ngày gần nhất';
+    else if (rangeType === '5days') title = 'Chọn file data 5 ngày gần nhất';
+    fileSelectorTitle.textContent = title;
+
+    // Gọi API để lấy danh sách files
+    const res = await callBackend('/data/files-in-range', {
+      method: 'POST',
+      body: JSON.stringify({
+        from_timestamp: Math.floor(fromDate.getTime() / 1000),
+        to_timestamp: Math.floor(toDate.getTime() / 1000)
+      })
+    });
+
+    const files = res.files || [];
+    console.log(`Tìm thấy ${files.length} file trong khoảng thời gian`);
+
+    // Populate file list
+    fileList.innerHTML = '';
+
+    if (files.length === 0) {
+      fileList.innerHTML = '<div style="padding: 20px; text-align: center; color: #6b7280;">Không tìm thấy file nào trong khoảng thời gian này</div>';
+    } else {
+      files.forEach((file, index) => {
+        const fileItem = document.createElement('button');
+        fileItem.className = 'file-item';
+        fileItem.innerHTML = `
+          <div class="file-name">${file.filename}</div>
+          <div class="file-info">${file.date_formatted}</div>
+        `;
+
+        fileItem.addEventListener('click', async () => {
+          // Load data from selected file
+          await loadDataFromFile(file.filename);
+          fileSelectorContainer.classList.add('hidden');
+
+          // Update active button
+          [todayBtn, threeDaysBtn, fiveDaysBtn].forEach(btn => btn.classList.remove('active'));
+          if (rangeType === 'today') todayBtn.classList.add('active');
+          else if (rangeType === '3days') threeDaysBtn.classList.add('active');
+          else if (rangeType === '5days') fiveDaysBtn.classList.add('active');
+        });
+
+        fileList.appendChild(fileItem);
+      });
+    }
+
+    // Show dropdown
+    fileSelectorContainer.classList.remove('hidden');
+
+  } catch (err) {
+    console.error('Không thể load danh sách files:', err);
+    showToast('Không thể tải danh sách files', 'error', 4000);
+  }
+}
+
+// Function để set khoảng thời gian cho các nút preset
+function setDateRange(days) {
+  const now = new Date();
+  const toDate = new Date(now);
+  const fromDate = new Date(now);
+
+  if (days === 'today') {
+    // Từ 00:00 hôm nay đến hiện tại
+    fromDate.setHours(0, 0, 0, 0);
+  } else {
+    // Từ N ngày trước đến hiện tại
+    fromDate.setDate(fromDate.getDate() - days);
+  }
+
+  return { fromDate, toDate };
+}
+
+// Function để load data theo khoảng thời gian (legacy - không dùng nữa)
+async function loadDataByDateRange(fromDate, toDate) {
+  console.log('Loading data from:', fromDate, 'to:', toDate);
+
+  try {
+    // Reset data
+    tbody.innerHTML = '';
+    counter = 1;
+    loadedPostIds.clear();
+    initialLoaded = false;
+
+    // Gọi API để lấy file JSON theo khoảng thời gian
+    const res = await callBackend('/data/by-date-range', {
+      method: 'POST',
+      body: JSON.stringify({
+        from_timestamp: Math.floor(fromDate.getTime() / 1000),
+        to_timestamp: Math.floor(toDate.getTime() / 1000)
+      })
+    });
+
+    const data = res.data;
+    console.log(`Đã load file JSON theo khoảng thời gian:`, data.total_files);
+
+    // Xử lý data giống như loadInitialData
+    const allPosts = [];
+    Object.values(data.results_by_file || {}).forEach(filePosts => {
+      if (Array.isArray(filePosts)) {
+        allPosts.push(...filePosts);
+      }
+    });
+
+    console.log(`Tổng số posts trong khoảng thời gian: ${allPosts.length}`);
+
+    let displayedCount = 0;
+    allPosts.forEach((post) => {
+      const postId = post.post_id || '';
+      if (!postId) return;
+
+      // Map flag
+      let type = 'type1';
+      const flag = (post.flag || '').toLowerCase();
+      if (flag === 'xanh') type = 'type1';
+      else if (flag === 'vàng' || flag === 'vang') type = 'type2';
+      else if (flag === 'đỏ' || flag === 'do') type = 'type3';
+
+      // Xử lý reactions và comments
+      const reactionsByUser = new Map();
+      const commentsByUser = new Map();
+
+      if (post.reactions && Array.isArray(post.reactions)) {
+        post.reactions.forEach((r) => {
+          const uid = r && r.id ? String(r.id) : '';
+          if (!uid) return;
+          reactionsByUser.set(uid, r);
+        });
+      }
+
+      if (post.comments && Array.isArray(post.comments)) {
+        post.comments.forEach((c) => {
+          const uid = c && c.id ? String(c.id) : '';
+          if (!uid) return;
+          const prev = commentsByUser.get(uid);
+          if (!prev) {
+            commentsByUser.set(uid, c);
+          } else {
+            const prevTime = new Date(prev.created_time_vn || 0);
+            const curTime = new Date(c.created_time_vn || 0);
+            if (curTime > prevTime) {
+              commentsByUser.set(uid, c);
+            }
+          }
+        });
+      }
+
+      // Thời gian mặc định
+      let defaultTime = new Date().toLocaleTimeString('vi-VN');
+
+      // Tập tất cả user
+      const allUserIds = new Set([
+        ...reactionsByUser.keys(),
+        ...commentsByUser.keys(),
+      ]);
+
+      // Nếu không có user nào interact, hiển thị post với thông tin owner
+      if (allUserIds.size === 0) {
+        const owner = post.owning_profile || {};
+        const ownerId = owner.id || 'unknown';
+        const ownerName = owner.name || 'Unknown User';
+        const uniqueKey = `${postId}_${ownerId}`;
+
+        if (!loadedPostIds.has(uniqueKey)) {
+          appendRow({
+            id: postId,
+            userId: ownerId,
+            name: ownerName,
+            react: false,
+            comment: '',
+            time: defaultTime,
+            type: type,
+          });
+          loadedPostIds.add(uniqueKey);
+          displayedCount++;
+        }
+      }
+
+      allUserIds.forEach((uid) => {
+        const reaction = reactionsByUser.get(uid);
+        const comment = commentsByUser.get(uid);
+
+        const userId = uid;
+        const name = (reaction && reaction.name) || (comment && comment.name) || '';
+
+        const hasReact = !!reaction;
+        const commentText = comment && comment.text ? comment.text : '';
+        const time = (comment && comment.created_time_vn) ? comment.created_time_vn : defaultTime;
+
+        const uniqueKey = `${postId}_${userId}`;
+        if (!loadedPostIds.has(uniqueKey)) {
+          appendRow({
+            id: postId,
+            userId: userId,
+            name: name,
+            react: hasReact,
+            comment: commentText,
+            time: time,
+            type: type,
+          });
+          loadedPostIds.add(uniqueKey);
+          displayedCount++;
+        }
+      });
+    });
+
+    console.log(`Đã hiển thị ${displayedCount} dòng dữ liệu theo khoảng thời gian`);
+    initialLoaded = true;
+
+    // Show empty state if no rows
+    if (tbody.children.length === 0) {
+      emptyState.classList.add('show');
+    } else {
+      emptyState.classList.remove('show');
+    }
+
+  } catch (err) {
+    console.error('Không tải được data theo khoảng thời gian:', err);
+    showToast('Không thể tải dữ liệu theo khoảng thời gian', 'error', 4000);
+  }
+}
+
+// Function để set khoảng thời gian cho các nút preset
+function setDateRange(days) {
+  const now = new Date();
+  const toDate = new Date(now);
+  const fromDate = new Date(now);
+
+  if (days === 'today') {
+    // Từ 00:00 hôm nay đến hiện tại
+    fromDate.setHours(0, 0, 0, 0);
+  } else {
+    // Từ N ngày trước đến hiện tại
+    fromDate.setDate(fromDate.getDate() - days);
+  }
+
+  return { fromDate, toDate };
+}
+
+// Event listeners cho date buttons
+if (todayBtn) {
+  todayBtn.addEventListener('click', async () => {
+    const { fromDate, toDate } = setDateRange('today');
+    await showFileSelector('today', fromDate, toDate);
+  });
+}
+
+if (threeDaysBtn) {
+  threeDaysBtn.addEventListener('click', async () => {
+    const { fromDate, toDate } = setDateRange(3);
+    await showFileSelector('3days', fromDate, toDate);
+  });
+}
+
+if (fiveDaysBtn) {
+  fiveDaysBtn.addEventListener('click', async () => {
+    const { fromDate, toDate } = setDateRange(5);
+    await showFileSelector('5days', fromDate, toDate);
+  });
+}
+
+// Event listeners cho file selector
+if (closeFileSelector) {
+  closeFileSelector.addEventListener('click', () => {
+    fileSelectorContainer.classList.add('hidden');
+  });
+}
+
+if (cancelFileSelection) {
+  cancelFileSelection.addEventListener('click', () => {
+    fileSelectorContainer.classList.add('hidden');
+  });
+}
+
+// Click outside để đóng file selector
+document.addEventListener('click', (e) => {
+  if (!fileSelectorContainer.contains(e.target) &&
+      !e.target.matches('.date-btn')) {
+    fileSelectorContainer.classList.add('hidden');
+  }
+});
 
 // Khởi tạo: luôn vào tab danh sách quét + load state profile
 let initialTab = 'scan';
@@ -3272,6 +3785,12 @@ switchTab(initialTab);
   try {
     await resyncUiFromBackendAfterReload();
   } catch (_) { }
+  try {
+    // Tự động load danh sách quét với JSON mới nhất theo timestamp
+    await loadInitialData();
+  } catch (err) {
+    console.warn('Không thể load danh sách quét lúc khởi tạo:', err);
+  }
 })();
 // Khởi tạo filter với trạng thái mặc định
 initializeFilters();

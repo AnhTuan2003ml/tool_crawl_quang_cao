@@ -58,7 +58,7 @@ def send_request(feedback_target_id, payload_dict, profile_id, cookies, cursor=N
         print(f"   🔄 Không có cursor (trang đầu tiên)")
     
     # Debug: In ra variables để kiểm tra
-    print(f"   📋 Variables: {json.dumps(variables, ensure_ascii=False)}")
+    print(f"   📋 Variables: {json.dumps(variables, ensure_ascii=True)}")
     
     # Sử dụng payload được truyền vào và thêm variables, doc_id, fb_api_req_friendly_name
     payload_dict = payload_dict.copy()
@@ -223,7 +223,7 @@ def get_all_users_by_fid(fid, payload_dict, profile_id, cookies):
                 if len(edges) == 0:
                     print(f"   ⚠️ Không có edges trong response!")
                     print(f"   🔍 Debug: Reactors keys: {list(reactors.keys()) if reactors else 'None'}")
-                    print(f"   🔍 Debug: Data structure: {json.dumps(response_json.get('data', {}), indent=2, ensure_ascii=False)[:500]}")
+                    print(f"   🔍 Debug: Data structure: {json.dumps(response_json.get('data', {}), indent=2, ensure_ascii=True)[:500]}")
                 elif len(edges) > 0:
                     # Debug: In ra node đầu tiên để kiểm tra
                     first_node = edges[0].get("node", {})
