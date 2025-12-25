@@ -29,9 +29,21 @@ def _import_get_payload_funcs():
 get_payload_by_profile_id, get_cookies_by_profile_id, get_access_token_by_profile_id = _import_get_payload_funcs()
 
 # ====== ĐƯỜNG DẪN THEO PROJECT ROOT ======
-BASE_DIR = Path(__file__).resolve().parents[2]  # Thư mục gốc project
-POST_IDS_DIR = BASE_DIR / "backend" / "data" / "post_ids"
-OUTPUT_DIR = BASE_DIR / "backend" / "data" / "results"
+# Sử dụng paths utility để xác định đúng đường dẫn khi chạy từ .exe
+try:
+    from core.paths import get_data_dir
+    DATA_DIR = get_data_dir()
+except ImportError:
+    # Fallback nếu không import được (khi chạy standalone)
+    if hasattr(__import__('sys'), 'frozen') and getattr(__import__('sys'), 'frozen', False):
+        import sys
+        DATA_DIR = Path(sys.executable).parent / "data"
+    else:
+        BASE_DIR = Path(__file__).resolve().parents[2]  # Thư mục gốc project
+        DATA_DIR = BASE_DIR / "backend" / "data"
+
+POST_IDS_DIR = DATA_DIR / "post_ids"
+OUTPUT_DIR = DATA_DIR / "results"
 # File all_results kèm timestamp cho mỗi lần chạy (chỉ một file duy nhất)
 RUN_TS = datetime.now().strftime("%Y%m%d_%H%M%S")
 ALL_RESULTS_FILE = OUTPUT_DIR / f"all_results_{RUN_TS}.json"

@@ -6,9 +6,23 @@ from urllib.parse import parse_qs, unquote_plus
 from pathlib import Path
 
 # ====== ĐƯỜNG DẪN THEO PROJECT ROOT ======
-BASE_DIR = Path(__file__).resolve().parents[2]  # Thư mục gốc project
-SETTINGS_JSON_FILE = BASE_DIR / "backend" / "config" / "settings.json"
-PAYLOAD_TXT_FILE = BASE_DIR / "backend" / "config" / "payload.txt"
+# Sử dụng paths utility để xác định đúng đường dẫn khi chạy từ .exe
+try:
+    from core.paths import get_config_dir, get_settings_path
+    CONFIG_DIR = get_config_dir()
+    SETTINGS_JSON_FILE = get_settings_path()
+except ImportError:
+    # Fallback nếu không import được (khi chạy standalone)
+    if hasattr(__import__('sys'), 'frozen') and getattr(__import__('sys'), 'frozen', False):
+        import sys
+        CONFIG_DIR = Path(sys.executable).parent / "config"
+        SETTINGS_JSON_FILE = CONFIG_DIR / "settings.json"
+    else:
+        BASE_DIR = Path(__file__).resolve().parents[2]  # Thư mục gốc project
+        CONFIG_DIR = BASE_DIR / "backend" / "config"
+        SETTINGS_JSON_FILE = CONFIG_DIR / "settings.json"
+
+PAYLOAD_TXT_FILE = CONFIG_DIR / "payload.txt"
 
 
 def _normalize_cookie(cookie: str | None) -> str | None:
@@ -764,7 +778,8 @@ def update_payload_file(payload_values):
     Returns:
         bool: True nếu thành công, False nếu lỗi
     """
-    PAYLOAD_FILE = "backend/config/payload.txt"
+    # Sử dụng PAYLOAD_TXT_FILE đã được định nghĩa ở đầu file
+    PAYLOAD_FILE = PAYLOAD_TXT_FILE
     
     try:
         # Đọc file payload hiện tại

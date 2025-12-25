@@ -42,6 +42,42 @@
 2. Nút “Chạy backend (FastAPI)”/“Bắt đầu quét” sẽ gọi API ở `http://localhost:8000`.
 3. Nút “Dừng quét” gửi lệnh dừng `/stop`.
 
+## Build thành file .exe
+
+Để build project thành file `.exe`:
+
+1. **Kích hoạt venv và cài PyInstaller (nếu chưa có):**
+
+   ```powershell
+   cd backend
+   .\venv\Scripts\Activate.ps1
+   python -m pip install pyinstaller
+   ```
+
+2. **Build .exe:**
+
+   ```powershell
+   .\build.ps1
+   ```
+
+   Hoặc nếu dùng Command Prompt:
+
+   ```cmd
+   build.bat
+   ```
+
+3. **Thư mục build sẽ nằm tại:** `backend\dist\ToolFacebookAds\`
+
+   - File .exe: `ToolFacebookAds.exe`
+   - Các thư mục: `config/`, `frontend/`, `data/`
+
+4. **Chạy .exe:**
+   - Double-click vào `ToolFacebookAds.exe`
+   - Trình duyệt sẽ tự động mở frontend sau khoảng 2 giây
+   - Hoặc mở thủ công file `frontend/index.html` bằng trình duyệt
+
+Xem chi tiết trong file `BUILD_GUIDE.md`.
+
 ## Lưu ý
 
 - Khi chạy backend từ IDE/terminal khác, vẫn cần kích hoạt đúng venv: `.\\venv\\Scripts\\Activate.ps1`.

@@ -2513,8 +2513,12 @@ exportExcelBtn.addEventListener('click', exportToExcel);
 // ==== FastAPI integration ====
 
 function setBackendStatus(message, isOnline = false) {
-  backendStatus.textContent = message;
-  statusDot.classList.toggle('online', isOnline);
+  if (backendStatus) {
+    backendStatus.textContent = message;
+  }
+  if (statusDot) {
+    statusDot.classList.toggle('online', isOnline);
+  }
 }
 
 async function callBackend(path, options = {}) {

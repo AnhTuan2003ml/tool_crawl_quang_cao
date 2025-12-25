@@ -308,9 +308,9 @@ def get_all_users_by_fid(fid, payload_dict, profile_id, cookies):
                 try:
                     updated = update_payload_file(payload_values)
                     if updated:
-                        print("✅ Đã cập nhật backend/config/payload.txt từ headless capture")
+                        print("✅ Đã cập nhật payload.txt từ headless capture")
                     else:
-                        print("⚠️ Không thể cập nhật backend/config/payload.txt từ headless capture")
+                        print("⚠️ Không thể cập nhật payload.txt từ headless capture")
                 except Exception as e_up:
                     print(f"⚠️ Lỗi khi cập nhật payload.txt: {e_up}")
 

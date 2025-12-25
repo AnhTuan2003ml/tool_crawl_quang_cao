@@ -6,9 +6,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+from core.paths import get_data_dir
 
-BASE_DIR = Path(__file__).resolve().parents[1]  # backend/
-CONTROL_STATE_PATH = BASE_DIR / "data" / "runtime_control.json"
+CONTROL_STATE_PATH = get_data_dir() / "runtime_control.json"
 
 _lock = threading.Lock()
 

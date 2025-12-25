@@ -27,7 +27,13 @@ except Exception:
         get_id_from_url = None
 
 # Lưu mapping group -> page_id theo profile_id
-GROUPS_JSON_PATH = Path(parent_dir) / "config" / "groups.json"
+try:
+    from core.paths import get_config_dir
+    GROUPS_JSON_PATH = get_config_dir() / "groups.json"
+except ImportError:
+    # Fallback nếu không import được
+    GROUPS_JSON_PATH = Path(parent_dir) / "config" / "groups.json"
+
 GROUPS_LOCK_PATH = Path(str(GROUPS_JSON_PATH) + ".lock")
 
 

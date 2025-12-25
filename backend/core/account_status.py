@@ -3,10 +3,9 @@ from pathlib import Path
 import json
 
 from core.browser import FBController
+from core.paths import get_data_dir
 
-
-BASE_DIR = Path(__file__).resolve().parents[1]
-STATUS_FILE = BASE_DIR / "data" / "account_status.json"
+STATUS_FILE = get_data_dir() / "account_status.json"
 
 
 def check_account_status_brutal(fb: FBController) -> Dict[str, Any]:

@@ -1,11 +1,16 @@
 import json
+import sys
+import os
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import List, Any, Dict
 
+from core.paths import get_settings_path
+
 # Đường dẫn cố định để đọc cấu hình
-SETTINGS_PATH = Path(__file__).resolve().parent.parent / "config" / "settings.json"
+# Luôn đọc từ cùng cấp với .exe (hoặc backend/config khi chạy từ script)
+SETTINGS_PATH = get_settings_path()
 
 
 def _parse_bool(value: Any) -> bool:
