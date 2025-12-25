@@ -113,10 +113,11 @@ function setPauseAllButtonLabel(paused) {
 }
 
 // stopBtn đã bị xóa khỏi left-panel, các nút stop được xử lý trong settings tab
-// Mặc định: chưa biết backend có chạy gì => disable STOP/PAUSE ALL trước, lát sẽ resync theo /jobs/status
+// Nút dừng luôn enable để có thể dừng bất cứ lúc nào
 try {
   if (pauseAllBtn) pauseAllBtn.disabled = true;
-  if (stopAllSettingBtn) stopAllSettingBtn.disabled = true;
+  // stopAllSettingBtn luôn enable
+  if (stopAllSettingBtn) stopAllSettingBtn.disabled = false;
   if (stopSelectedProfilesBtn) stopSelectedProfilesBtn.disabled = true;
   if (pauseSelectedProfilesBtn) pauseSelectedProfilesBtn.disabled = true;
 } catch (_) { }
@@ -320,7 +321,8 @@ function updateStopPauseButtonsByJobs() {
   }
 
   // stopBtn đã bị xóa khỏi left-panel, chỉ còn stopAllSettingBtn
-  setButtonState(stopAllSettingBtn, shouldEnableButtons);
+  // Nút dừng luôn enable để có thể dừng bất cứ lúc nào
+  setButtonState(stopAllSettingBtn, true);
 
   // PAUSE ALL button
   setButtonState(pauseAllBtn, shouldEnableButtons);
@@ -2513,8 +2515,12 @@ exportExcelBtn.addEventListener('click', exportToExcel);
 // ==== FastAPI integration ====
 
 function setBackendStatus(message, isOnline = false) {
-  backendStatus.textContent = message;
-  statusDot.classList.toggle('online', isOnline);
+  if (backendStatus) {
+    backendStatus.textContent = message;
+  }
+  if (statusDot) {
+    statusDot.classList.toggle('online', isOnline);
+  }
 }
 
 async function callBackend(path, options = {}) {

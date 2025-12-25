@@ -217,13 +217,35 @@ def connect_profile(profile_id: str):
         if data.get("err"):
             # Trả lỗi rõ hơn để debug (profile không tồn tại / api key sai / NST chưa sẵn sàng)
             # NST thường trả key: {err: true, msg: "...", code: ...}
-            msg = data.get("msg") or data.get("message") or data.get("error") or data.get("err")
-            raise Exception(f"❌ NST Error: {msg} | raw={data}")
+            msg = data.get("msg") or data.get("message") or data.get("error") or str(data.get("err"))
+            code = data.get("code", "unknown")
+            
+            # Xử lý đặc biệt cho lỗi 400 (profile không tồn tại)
+            if code == 400:
+                error_msg = f"❌ NST Error: Profile '{profile_id}' không tồn tại trong NST. Vui lòng kiểm tra lại profile_id hoặc tạo profile mới trong NST. | code={code}, msg={msg}"
+            else:
+                error_msg = f"❌ NST Error: {msg} | code={code}, raw={data}"
+            
+            raise Exception(error_msg)
 
         ws = data["data"]["webSocketDebuggerUrl"]
         print(f"🔌 WebSocket: {ws}")
         return ws
         
+    except requests.exceptions.RequestException as e:
+        error_msg = f"❌ Lỗi kết nối NST: Không thể kết nối đến NST server (http://127.0.0.1:8848). Vui lòng kiểm tra NST đã chạy chưa. | {str(e)}"
+        print(error_msg)
+        raise Exception(error_msg)
+    except KeyError as e:
+        error_msg = f"❌ Lỗi response từ NST: Response không có đầy đủ dữ liệu. | {str(e)}"
+        print(error_msg)
+        raise Exception(error_msg)
     except Exception as e:
-        print(f"❌ Lỗi kết nối: {e}")
-        raise e
+        # Nếu đã là Exception với message rõ ràng thì giữ nguyên
+        if "❌ NST Error:" in str(e):
+            print(f"❌ Lỗi kết nối: {e}")
+            raise e
+        # Nếu là exception khác thì wrap lại
+        error_msg = f"❌ Lỗi kết nối profile '{profile_id}': {str(e)}"
+        print(error_msg)
+        raise Exception(error_msg) from e

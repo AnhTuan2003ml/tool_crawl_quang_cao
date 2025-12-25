@@ -258,7 +258,7 @@ class HumanLikeBot(SimpleBot):
                 if post:
                     self.fb.process_post(post, post_type)
 
-                    delay = random.uniform(5.0, 8.0)
+                    delay = random.uniform(12.0, 20.0)
                     print(f"😴 Nghỉ sau khi xử lý bài {delay:.1f}s")
                     try:
                         smart_sleep(delay, self.fb.profile_id)
@@ -377,10 +377,10 @@ class SearchBotController(FBController):
 
             print("✅ Bài đạt điều kiện (keyword mặc định + text nhập)!")
 
-            # Like theo xác suất giống người dùng:
-            # - Với mỗi bài "đúng", random 1 tỉ lệ trong khoảng 40%..60%
+            # Like theo xác suất để đảm bảo khoảng cách 45-90 giây giữa các lần like:
+            # - Với nghỉ 12-20s sau mỗi bài, để có khoảng cách 45-90s cần like 20-30% bài
             # - Sau đó roll để quyết định có Like hay không
-            p = random.uniform(0.40, 0.60)
+            p = random.uniform(0.20, 0.30)
             roll = random.random()
             should_like = roll < p
             print(f"🎲 [LikeProb] p={p:.2f} roll={roll:.2f} -> {'LIKE' if should_like else 'SKIP'}")

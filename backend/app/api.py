@@ -261,11 +261,26 @@ def _run_bot_profile_loop(
                     return
                 raise
             except Exception as e:
-                print(f"❌ Lỗi ở profile {pid}: {e}")
+                error_str = str(e)
+                print(f"❌ Lỗi ở profile {pid}: {error_str}")
+                
+                # Nếu là lỗi nghiêm trọng (profile không tồn tại, NST không chạy), dừng ngay
+                is_critical_error = (
+                    "không tồn tại" in error_str.lower() or
+                    "profile" in error_str.lower() and "not found" in error_str.lower() or
+                    "không thể kết nối đến nst" in error_str.lower() or
+                    "nst server" in error_str.lower()
+                )
+                
                 try:
                     control_state.set_profile_state(pid, "ERROR")
                 except Exception:
                     pass
+                
+                # Nếu là lỗi nghiêm trọng, dừng loop ngay
+                if is_critical_error:
+                    print(f"🛑 [{pid}] Dừng loop do lỗi nghiêm trọng: {error_str}")
+                    return
             finally:
                 # đóng playwright + NST profile best-effort
                 try:

@@ -319,11 +319,11 @@ class FBController:
             if not share_btn:
                 print("⚠️ Không tìm thấy nút Share")
                 self.scroll_past_post(post_handle)
-                smart_sleep(random.uniform(0.12, 0.13), profile_id)
+                time.sleep(random.uniform(0.12, 0.13))
                 return False
 
             self.bring_element_into_view_smooth(share_btn)
-            smart_sleep(0.3, profile_id)  # 300ms = 0.3s
+            self.page.wait_for_timeout(300)
             share_btn.click()
 
             # Đợi bắt được payload URL
@@ -348,7 +348,7 @@ class FBController:
                                 raise
                             print(f"❌ Lỗi khi gọi get_id_from_url: {e}")
                     break
-                smart_sleep(0.15, profile_id)  # 150ms = 0.15s
+                self.page.wait_for_timeout(150)
 
             print("⚠️ Không lấy được Payload URL")
             self.page.keyboard.press("Escape")
@@ -441,8 +441,7 @@ class FBController:
                 if not post:
                     # đang đứng trên ref / kết bạn / module rác
                     self.control_checkpoint("before_escape_wheel")
-                    self.page.mouse.wheel(0, escape_step)
-                    smart_sleep(random.uniform(0.12, 0.13), self.profile_id)
+                    self.smooth_scroll(escape_step)
                     continue
 
                 # =========================
@@ -451,13 +450,12 @@ class FBController:
                 if self.check_post_is_processed(post):
                     try:
                         self.control_checkpoint("before_normal_wheel")
-                        self.page.mouse.wheel(0, normal_step)
+                        self.smooth_scroll(normal_step)
                     except Exception as e:
                         error_msg = str(e).lower()
                         if any(keyword in error_msg for keyword in ["closed", "disconnected", "target page", "context or browser"]):
                             raise RuntimeError("BROWSER_CLOSED") from e
                         raise
-                    smart_sleep(random.uniform(0.08, 0.15), self.profile_id)
                     continue
 
                 # =========================
@@ -492,10 +490,10 @@ class FBController:
                 print("⚠️ Bài này đã Like rồi -> Bỏ qua.")
                 return False
             
-            # Like theo xác suất giống người dùng (giống search_worker.py):
-            # - Với mỗi bài "đúng", random 1 tỉ lệ trong khoảng 40%..60%
+            # Like theo xác suất để đảm bảo khoảng cách 45-90 giây giữa các lần like:
+            # - Với nghỉ 12-20s sau mỗi bài, để có khoảng cách 45-90s cần like 20-30% bài
             # - Sau đó roll để quyết định có Like hay không
-            p = random.uniform(0.40, 0.60)
+            p = random.uniform(0.20, 0.30)
             roll = random.random()
             should_like = roll < p
             print(f"🎲 [LikeProb] p={p:.2f} roll={roll:.2f} -> {'LIKE' if should_like else 'SKIP'}")
@@ -722,7 +720,7 @@ class FBController:
                 try:
                     viewport = self.page.viewport_size
                     height = viewport['height'] if viewport else 800
-                    self.page.mouse.wheel(0, height * 0.4)
+                    self.smooth_scroll(height * 0.4)
                 except Exception as e:
                     error_msg = str(e).lower()
                     if any(keyword in error_msg for keyword in ["closed", "disconnected", "target page", "context or browser"]):
@@ -751,7 +749,7 @@ class FBController:
                     try:
                         viewport = self.page.viewport_size
                         height = viewport['height'] if viewport else 800
-                        self.page.mouse.wheel(0, height * 0.4)
+                        self.smooth_scroll(height * 0.4)
                     except Exception as e:
                         error_msg = str(e).lower()
                         if any(keyword in error_msg for keyword in ["closed", "disconnected", "target page", "context or browser"]):
@@ -766,10 +764,42 @@ class FBController:
             # 4. Share để bắt ID
             ok = self.share_center_ad(post_handle, post_type)
             self.control_checkpoint("after_share")
+            
+            # Nếu share_center_ad return False, đợi thêm một chút và kiểm tra lại URL
+            # (vì URL có thể được bắt bất đồng bộ sau khi hàm đã return)
             if not ok:
-                self.mark_post_as_processed(post_handle)
-                print("⚠️ Không bắt được ID -> skip")
-                return False
+                print("⏳ Đợi thêm 2 giây để kiểm tra lại URL...")
+                for _ in range(20):  # 20 lần x 0.1s = 2 giây
+                    self.control_checkpoint("wait_for_url_after_share")
+                    if self.captured_payload_url:
+                        print(f"✅ Phát hiện URL sau khi share_center_ad return: {self.captured_payload_url}")
+                        if get_id_from_url:
+                            try:
+                                print(f"📥 Đang gọi get_id_from_url với URL: {self.captured_payload_url}")
+                                details = get_id_from_url(self.captured_payload_url, self.profile_id)
+                                if details and details.get("post_id"):
+                                    self.save_post_id_from_details(details, post_type)
+                                    # Đảm bảo đóng modal nếu chưa đóng
+                                    try:
+                                        self.page.keyboard.press("Escape")
+                                    except:
+                                        pass
+                                    ok = True
+                                    break
+                                else:
+                                    print("⚠️ Không lấy được post_id từ get_id_from_url")
+                            except Exception as e:
+                                if isinstance(e, RuntimeError) and ("EMERGENCY_STOP" in str(e) or "BROWSER_CLOSED" in str(e)):
+                                    raise
+                                print(f"❌ Lỗi khi gọi get_id_from_url: {e}")
+                        else:
+                            print("⚠️ get_id_from_url không khả dụng (import failed)")
+                    self.page.wait_for_timeout(100)
+                
+                if not ok:
+                    self.mark_post_as_processed(post_handle)
+                    print("⚠️ Không bắt được ID -> skip")
+                    return False
             # 5. Lưu ID + flag
 
             # 6. Mark processed
@@ -790,6 +820,27 @@ class FBController:
             return post_handle.evaluate("(post) => post.getAttribute('data-bot-processed') === 'true'")
         except:
             return False
+    
+    def smooth_scroll(self, distance):
+        """
+        Cuộn mượt mà với nhiều step nhỏ để giống người dùng thật.
+        - Chia thành 15-25 step ngẫu nhiên
+        - Mỗi step nghỉ 0.01-0.05s
+        """
+        try:
+            num_steps = random.randint(15, 25)
+            step_distance = distance / num_steps
+            
+            for _ in range(num_steps):
+                self.page.mouse.wheel(0, step_distance)
+                sleep_time = random.uniform(0.01, 0.05)
+                self.page.wait_for_timeout(int(sleep_time * 1000))
+        except Exception as e:
+            # Fallback: scroll một lần nếu lỗi
+            try:
+                self.page.mouse.wheel(0, distance)
+            except:
+                pass
     
     def bring_element_into_view_smooth(self, element):
         """
@@ -833,8 +884,7 @@ class FBController:
                 print(f"    -> 🔽 Nút Share bị che, cuộn xuống {int(scroll_distance)}px")
                 
                 # Cuộn mượt
-                self.page.mouse.wheel(0, scroll_distance)
-                smart_sleep(0.5, self.profile_id)  # Chờ render lại
+                self.smooth_scroll(scroll_distance)
                 return True
             
             return True
@@ -864,18 +914,10 @@ class FBController:
             # Cộng thêm 50px padding để tách biệt bài sau
             scroll_distance = post_y + post_height + 50
             
-            # Nếu khoảng cách quá lớn (bài siêu dài), chia nhỏ ra cuộn cho đỡ sốc
-            if scroll_distance > 2000:
-                steps = 3
-                step_dist = scroll_distance / steps
-                for _ in range(steps):
-                    self.page.mouse.wheel(0, step_dist)
-                    smart_sleep(0.1, self.profile_id)
-            else:
-                self.page.mouse.wheel(0, scroll_distance)
+            # Cuộn mượt với nhiều step
+            self.smooth_scroll(scroll_distance)
                 
             print(f"    -> 📉 Đã cuộn qua bài (height={int(post_height)}px)")
-            smart_sleep(1.0, self.profile_id)  # Chờ bài mới load
 
         except Exception as e:
             print(f"⚠️ Lỗi scroll_past_post: {e}")

@@ -109,7 +109,7 @@ class SimpleBot:
                 if post:
                     self.fb.process_post(post, post_type)
 
-                    delay = random.uniform(5.0, 8.0)
+                    delay = random.uniform(12.0, 20.0)
                     print(f"😴 Nghỉ sau khi xử lý bài {delay:.1f}s")
                     # Sleep với pause check: chỉ tính thời gian không pause vào active_time
                     self._sleep_with_pause_check(delay, profile_id, active_time_list, last_check_time_list)
