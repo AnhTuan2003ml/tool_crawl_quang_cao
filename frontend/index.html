@@ -350,48 +350,54 @@ https://www.facebook.com/groups/abc123"></textarea>
   </div>
 
   <!-- Help button với tooltip -->
-  <button id="helpBtn" class="help-button" title="Xem giải thích màu sắc">
+  <button id="helpBtn" class="help-button" title="Xem hướng dẫn sử dụng đầy đủ">
     <span>?</span>
   </button>
   <div id="helpTooltip" class="help-tooltip">
-    
+
     <div class="tooltip-header">
-      <h4>📋 Giải thích màu sắc</h4>
+      <h4>📖 HƯỚNG DẪN SỬ DỤNG</h4>
       <button class="tooltip-close">&times;</button>
     </div>
     <div class="tooltip-body">
-      <div class="tooltip-item">
-        <span class="tooltip-dot tooltip-green"></span>
-        <div>
-          <strong>Xanh (type1):</strong> data ưu tiên , data đối thủ
-        </div>
-      </div>
-      <div class="tooltip-item">
-        <span class="tooltip-dot tooltip-yellow"></span>
-        <div>
-          <strong>Vàng (type2):</strong> data ưu tiên , data đối thủ
-        </div>
-      </div>
-      <div class="tooltip-item">
-        <span class="tooltip-dot tooltip-red"></span>
-        <div>
-          <strong>Đỏ (type3):</strong>data khách tìm kiếm trên facebook
-        </div>
-      </div>
+      <div class="help-content">
 
-      <div class="setting-card">
-        <div class="setting-card-header">
+        <h3>📋 Các Trang/Chức Năng Chính</h3>
+
+        <h4>1. 📋 Trang Kết Quả (Scan Results)</h4>
+        <ul>
+          <li><strong>Chức năng:</strong> Hiển thị dữ liệu đã quét được từ Facebook</li>
+          <li><strong>Các bộ lọc:</strong>
+            <ul>
+              <li><strong>🔍 Lọc theo màu:</strong> Phân loại dữ liệu theo độ ưu tiên
+                <ul>
+                  <li>🟢 <strong>Xanh (type1):</strong> Dữ liệu ưu tiên cao, dữ liệu đối thủ</li>
+                  <li>🟡 <strong>Vàng (type2):</strong> Dữ liệu ưu tiên trung bình</li>
+                  <li>🔴 <strong>Đỏ (type3):</strong> Dữ liệu từ tìm kiếm khách hàng</li>
+                </ul>
+              </li>
+              <li><strong>📊 Lọc theo tương tác:</strong> Có/Không có React, Comment</li>
+              <li><strong>⏰ Lọc theo thời gian:</strong> Chọn khoảng thời gian cụ thể</li>
+            </ul>
+          </li>
+        </ul>
+
+
+ 
+        <h3>🔄 Quy trình sử dụng</h3>
+        <ol>
+          <li><strong>Khởi động:</strong> Mở trang web và chờ backend sẵn sàng</li>
+          <li><strong>Cài đặt:</strong> Nhập API Key và thêm profile</li>
+          <li><strong>Cấu hình:</strong> Setting thời gian và điều kiện quét</li>
+          <li><strong>Chạy:</strong> Bắt đầu quét và theo dõi kết quả</li>
+          <li><strong>Xuất dữ liệu:</strong> Export Excel khi cần phân tích</li>
+        </ol>
+
+        <div class="tooltip-item">
+          <span class="tooltip-dot tooltip-green"></span>
           <div>
-            <h4>Dọn dẹp file cũ</h4>
-            <p class="muted">Tự động xóa file dữ liệu cũ quá 3 ngày</p>
+            <strong>Mẹo:</strong> Click vào dấu ? bất cứ lúc nào để xem hướng dẫn này!
           </div>
-          <div class="setting-card-actions">
-            <button id="cleanupFilesBtn" class="btn-danger" type="button">🗑️ Dọn dẹp ngay</button>
-          </div>
-        </div>
-        <div class="cleanup-info">
-          <p class="hint">Hệ thống sẽ tự động dọn dẹp file cũ khi tạo file mới. Bạn cũng có thể dọn dẹp thủ công bằng nút trên.</p>
-          <div id="cleanupStatus" class="cleanup-status" style="display: none;"></div>
         </div>
       </div>
     </div>

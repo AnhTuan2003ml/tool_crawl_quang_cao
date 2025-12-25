@@ -40,14 +40,6 @@ Hệ thống này giúp tự động hóa việc quét và quản lý dữ liệ
 - Cài đặt số lượng bài viết và khoảng thời gian
 - Nhập URL nhóm (mỗi dòng một URL)
 
-## 📊 Giải thích màu sắc dữ liệu
-
-| Màu sắc | Ý nghĩa | Độ ưu tiên |
-|---------|---------|------------|
-| 🟢 Xanh | Dữ liệu đối thủ, ưu tiên cao | Cao |
-| 🟡 Vàng | Dữ liệu tiềm năng | Trung bình |
-| 🔴 Đỏ | Dữ liệu từ tìm kiếm | Thấp |
-
 ## 🔄 Quy trình sử dụng
 
 1. **Khởi động**: Mở trang web và chờ backend sẵn sàng
