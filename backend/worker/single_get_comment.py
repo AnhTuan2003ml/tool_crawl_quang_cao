@@ -150,7 +150,7 @@ def send_request(post_id, payload_dict, profile_id, cookies, commentsAfterCursor
         print(f"   🔄 Không có commentsAfterCursor (trang đầu tiên)")
     
     # Debug: In ra variables để kiểm tra
-    print(f"   📋 Variables: {json.dumps(variables, ensure_ascii=False)}")
+    print(f"   📋 Variables: {json.dumps(variables, ensure_ascii=True)}")
     
     # Sử dụng payload được truyền vào và thêm variables, doc_id, fb_api_req_friendly_name, __crn
     payload_dict = payload_dict.copy()
@@ -273,7 +273,7 @@ def get_all_comments_by_post_id(post_id, payload_dict, profile_id, cookies):
             try:
                 error_json = response.json()
                 if "errors" in error_json:
-                    print(f"   ❌ Errors từ response: {json.dumps(error_json.get('errors'), indent=2, ensure_ascii=False)}")
+                    print(f"   ❌ Errors từ response: {json.dumps(error_json.get('errors'), indent=2, ensure_ascii=True)}")
                 else:
                     print(f"   📋 Response JSON: {json.dumps(error_json, indent=2, ensure_ascii=False)[:1000]}")
             except:

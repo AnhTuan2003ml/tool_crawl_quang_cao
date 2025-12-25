@@ -182,6 +182,37 @@
                 </div>
               </div>
             </div>
+
+            <!-- Date Range Buttons -->
+            <div class="date-range-container">
+              <div class="date-range-buttons">
+                <button id="todayBtn" class="date-btn" title="Chọn file data ngày hôm nay">
+                  📅 Ngày hôm nay
+                </button>
+                <button id="threeDaysBtn" class="date-btn" title="Chọn file data 3 ngày gần nhất">
+                  📊 3 ngày
+                </button>
+                <button id="fiveDaysBtn" class="date-btn" title="Chọn file data 5 ngày gần nhất">
+                  📈 5 ngày
+                </button>
+              </div>
+
+              <!-- File Selector Dropdown -->
+              <div id="fileSelectorContainer" class="file-selector-container hidden">
+                <div class="file-selector-header">
+                  <span id="fileSelectorTitle">Chọn file data</span>
+                  <button id="closeFileSelector" class="close-btn">✕</button>
+                </div>
+                <div class="file-selector-content">
+                  <div id="fileList" class="file-list">
+                    <!-- Files will be populated here -->
+                  </div>
+                  <div class="file-selector-actions">
+                    <button id="cancelFileSelection" class="btn-secondary">Hủy</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="table-container">
             <table id="listTable">
