@@ -1680,7 +1680,6 @@ def get_scan_stats() -> dict:
     import json
     import os
     
-    BASE_DIR = Path(__file__).resolve().parents[1]
     POST_IDS_DIR = get_data_dir() / "post_ids"
     
     stats = {}
@@ -1692,7 +1691,7 @@ def get_scan_stats() -> dict:
     for file_path in json_files:
         profile_id = file_path.stem  # Lấy tên file không có extension
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with file_path.open("r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, list):
                     count = len(data)
@@ -1962,7 +1961,6 @@ def _get_latest_results_file_logic(filename_param: Optional[str] = None) -> dict
     from pathlib import Path
     import re
 
-    BASE_DIR = Path(__file__).resolve().parents[1]
     RESULTS_DIR = get_data_dir() / "results"
 
     # Nếu có filename, load file đó
@@ -2091,7 +2089,6 @@ def get_post_ids_list() -> dict:
     from pathlib import Path
     import json
 
-    BASE_DIR = Path(__file__).resolve().parents[1]
     POST_IDS_DIR = get_data_dir() / "post_ids"
 
     if not POST_IDS_DIR.exists():
@@ -2146,7 +2143,6 @@ def cleanup_old_files(max_days: int = 3) -> dict:
     import re
     from datetime import datetime, timedelta
 
-    BASE_DIR = Path(__file__).resolve().parents[1]
     RESULTS_DIR = get_data_dir() / "results"
 
     if not RESULTS_DIR.exists():
@@ -2214,7 +2210,6 @@ def get_results_by_date_range(request: dict) -> dict:
     from pathlib import Path
     import re
 
-    BASE_DIR = Path(__file__).resolve().parents[1]
     RESULTS_DIR = get_data_dir() / "results"
 
     from_timestamp = request.get("from_timestamp")
@@ -2297,7 +2292,6 @@ def get_files_in_date_range(request: dict) -> dict:
     from pathlib import Path
     import re
 
-    BASE_DIR = Path(__file__).resolve().parents[1]
     RESULTS_DIR = get_data_dir() / "results"
 
     from_timestamp = request.get("from_timestamp")
@@ -2385,6 +2379,17 @@ App package cho FastAPI endpoints.
   "TARGET_URL": "https://facebook.com",
   "PROFILE_IDS": {
     "b77da63d-af55-43c2-ab7f-364250b20e30": {
+      "cookie": "sb=acBIaQQgqAGBTmbz93PPTcnU; ps_l=1; ps_n=1; datr=acBIabhUTCuJxOkmdTYz8XW-; c_user=100044138143352; fr=1VMWQQuenYceehdsZ.AWfGfB9qmBtvmuDdeO81J0dTos4jVxL0x5pHYhV1thuLhAjmW7E.BpSUdY..AAA.0.0.BpSUeS.AWfu06UAzWOUNEhJL1ZIELO2A04; xs=44%3Aaj597WlM7O7beg%3A2%3A1766410069%3A-1%3A-1%3A%3AAcx_3Kz36a3z318o8wuDUtGUsdWuBNAFeGxishIR9g; wd=929x883;",
+      "access_token": "EAAGNO4a7r2wBQbl2ozjrGQSIzSGOVgZAcoj86vjZCqZC1FCurCX5PaGbzqHdRMUFgJ6CGBhlGusZAOXm4gGxpm5q80y89Y1MNzNYOttxin0b3DhBZCCuZBLqsxjaeltCjsDBPTEP29ZAzz7oKp5Lk6yVVFZAlhBiP4p3JFcEE125EyZAPHaAEdH0JjZA3LkhtbpLWA0AZDZD",
+      "fb_dtsg": "NAfu29YJvi_1RzbzZWrSlZ3JOPAtlb2YrVQWjwmitp5kE0FtpiCo0gg:44:1766410069",
+      "lsd": "JxUArcF13Kgs6kRC1Z8iwU",
+      "spin_r": "1031381813",
+      "spin_t": "1766339451",
+      "groups": [
+        "https://www.facebook.com/groups/tuyendungkisuIT"
+      ]
+    },
+    "ed3bd3bf-d906-42cf-9503-b73dfcfce117": {
       "cookie": "sb=acBIaQQgqAGBTmbz93PPTcnU; ps_l=1; ps_n=1; datr=acBIabhUTCuJxOkmdTYz8XW-; c_user=100044138143352; fr=1VMWQQuenYceehdsZ.AWfGfB9qmBtvmuDdeO81J0dTos4jVxL0x5pHYhV1thuLhAjmW7E.BpSUdY..AAA.0.0.BpSUeS.AWfu06UAzWOUNEhJL1ZIELO2A04; xs=44%3Aaj597WlM7O7beg%3A2%3A1766410069%3A-1%3A-1%3A%3AAcx_3Kz36a3z318o8wuDUtGUsdWuBNAFeGxishIR9g; wd=929x883;",
       "access_token": "EAAGNO4a7r2wBQbl2ozjrGQSIzSGOVgZAcoj86vjZCqZC1FCurCX5PaGbzqHdRMUFgJ6CGBhlGusZAOXm4gGxpm5q80y89Y1MNzNYOttxin0b3DhBZCCuZBLqsxjaeltCjsDBPTEP29ZAzz7oKp5Lk6yVVFZAlhBiP4p3JFcEE125EyZAPHaAEdH0JjZA3LkhtbpLWA0AZDZD",
       "fb_dtsg": "NAfu29YJvi_1RzbzZWrSlZ3JOPAtlb2YrVQWjwmitp5kE0FtpiCo0gg:44:1766410069",
@@ -2619,6 +2624,7 @@ import sys
 from core.settings import get_settings, SETTINGS_PATH
 from core import control as control_state
 from core.control import smart_sleep
+from core.paths import get_data_dir
 # ==============================================================================
 # JS TOOLS & HELPER FUNCTIONS
 # ==============================================================================
@@ -2984,14 +2990,14 @@ class FBController:
                 print("⚠️ Không có post_id trong details")
                 return False
                 
-            folder = "data/post_ids"
-            os.makedirs(folder, exist_ok=True)
-            filepath = f"{folder}/{self.profile_id}.json"
+            folder = get_data_dir() / "post_ids"
+            folder.mkdir(parents=True, exist_ok=True)
+            filepath = folder / f"{self.profile_id}.json"
 
             data = []
-            if os.path.exists(filepath):
+            if filepath.exists():
                 try:
-                    with open(filepath, "r", encoding="utf8") as f:
+                    with filepath.open("r", encoding="utf8") as f:
                         data = json.load(f)
                 except:
                     data = []
@@ -3020,7 +3026,7 @@ class FBController:
 
             data.append(record)
 
-            with open(filepath, "w", encoding="utf8") as f:
+            with filepath.open("w", encoding="utf8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
 
             print(f"💾 Đã lưu Post {post_id} | Chủ bài: {owning_profile.get('name', 'N/A')}")
@@ -3917,7 +3923,7 @@ from core.nst import stop_profile
 from core.browser import FBController
 from core import control as control_state
 from core.control import smart_sleep
-from core.paths import get_config_dir
+from core.paths import get_config_dir, get_data_dir
 GROUPS_JSON_PATH = get_config_dir() / "groups.json"
 # Worker lấy page_id/post_id từ URL (dùng cookie theo profile_id trong settings.json)
 try:
@@ -4273,8 +4279,10 @@ def run_batch_join_from_list(profile_id, group_ids):
 
 def run_batch_join(profile_id, json_file_path):
     # 1. Đọc file JSON
+    # Chuyển đổi thành Path nếu là string
+    json_file_path = Path(json_file_path) if not isinstance(json_file_path, Path) else json_file_path
     try:
-        with open(json_file_path, "r", encoding="utf-8") as f:
+        with json_file_path.open("r", encoding="utf-8") as f:
             group_ids = json.load(f)
         
         if not group_ids:
@@ -4292,9 +4300,9 @@ def run_batch_join(profile_id, json_file_path):
 if __name__ == "__main__":
     # --- CẤU HÌNH ---
     MY_PROFILE_ID = "621e1f5d-0c42-481e-9ddd-7abaafce68ed" 
-    JSON_PATH = os.path.join(parent_dir, "data", "groups.json")
+    JSON_PATH = get_config_dir() / "groups.json"
     
-    run_batch_join(MY_PROFILE_ID, JSON_PATH)
+    run_batch_join(MY_PROFILE_ID, str(JSON_PATH))
 --- END FILE: backend\core\join_groups.py ---
 
 --- START FILE: backend\core\nst.py ---
@@ -4485,70 +4493,75 @@ def stop_all_browsers() -> bool:
     return False
 
 def connect_profile(profile_id: str):
+    """
+    Hàm này "trá hình": 
+    Bên ngoài vẫn gọi là connect_profile như cũ.
+    Nhưng bên trong dùng POST /api/v2/browsers (Cách 1 - Cách Sếp xác nhận chạy ngon) 
+    thay vì dùng GET connect (đang bị lỗi).
+    """
     cfg = _get_runtime_settings()
     api_key = str(getattr(cfg, "api_key", "") or "").strip()
     headless = bool(getattr(cfg, "headless", False))
-    # Cấu hình chuẩn theo JS mẫu: Dùng fingerprint để fake User-Agent
-    # KHÔNG dùng 'args' để tránh bị hiện UI
-    config = {
-        "headless": headless,
-        "autoClose": True,
-        "fingerprint": {
-            # User-Agent xịn để qua mặt Facebook
-            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "hardwareConcurrency": 8,
-            "deviceMemory": 8
-        }
+    
+    # Dùng Endpoint POST (Cách 1)
+    url = "http://127.0.0.1:8848/api/v2/browsers"
+    
+    headers = {
+        "x-api-key": api_key,
+        "Content-Type": "application/json"
     }
 
-    # Mã hóa config thành chuỗi an toàn cho URL (vì User-Agent có dấu cách)
-    encoded_config = urllib.parse.quote(json.dumps(config))
+    # Body chuẩn cho POST: Array các ID
+    payload = [profile_id]
 
-    # Connect vẫn ưu tiên v2 vì đang dùng ổn định
-    url = f"http://127.0.0.1:8848/api/v2/connect/{profile_id}?x-api-key={api_key}&config={encoded_config}"
+    print(f"🚀 [POST Wrapper] Đang mở profile {profile_id}...")
 
-    print(f"🚀 Mở profile {profile_id} (headless={headless})")
-
-    # Thử kết nối
     try:
-        resp = requests.get(url, timeout=20)
+        # 1. Gọi lệnh MỞ (Start)
+        resp = requests.post(url, headers=headers, json=payload, timeout=45)
         data = resp.json()
-
-        if data.get("err"):
-            # Trả lỗi rõ hơn để debug (profile không tồn tại / api key sai / NST chưa sẵn sàng)
-            # NST thường trả key: {err: true, msg: "...", code: ...}
-            msg = data.get("msg") or data.get("message") or data.get("error") or str(data.get("err"))
-            code = data.get("code", "unknown")
-            
-            # Xử lý đặc biệt cho lỗi 400 (profile không tồn tại)
-            if code == 400:
-                error_msg = f"❌ NST Error: Profile '{profile_id}' không tồn tại trong NST. Vui lòng kiểm tra lại profile_id hoặc tạo profile mới trong NST. | code={code}, msg={msg}"
-            else:
-                error_msg = f"❌ NST Error: {msg} | code={code}, raw={data}"
-            
-            raise Exception(error_msg)
-
-        ws = data["data"]["webSocketDebuggerUrl"]
-        print(f"🔌 WebSocket: {ws}")
-        return ws
         
-    except requests.exceptions.RequestException as e:
-        error_msg = f"❌ Lỗi kết nối NST: Không thể kết nối đến NST server (http://127.0.0.1:8848). Vui lòng kiểm tra NST đã chạy chưa. | {str(e)}"
-        print(error_msg)
-        raise Exception(error_msg)
-    except KeyError as e:
-        error_msg = f"❌ Lỗi response từ NST: Response không có đầy đủ dữ liệu. | {str(e)}"
-        print(error_msg)
-        raise Exception(error_msg)
+        # 2. Kiểm tra xem lệnh Mở có thành công không
+        # Lưu ý: NST có thể trả về code 200 nhưng báo lỗi trong body nếu profile đang chạy rồi
+        # Chúng ta bỏ qua lỗi "already running" để tiếp tục lấy WS
+        if resp.status_code != 200:
+             if data.get("err") and "running" not in str(data.get("msg", "")).lower():
+                 msg = data.get("msg") or data.get("message") or "Unknown Error"
+                 raise Exception(f"NST Start Failed: {msg}")
+
+        # 3. LẤY WEBSOCKET URL
+        ws_url = None
+        
+        # Parse data trả về từ POST (nếu nó trả về danh sách vừa start)
+        started_browsers = data.get("data")
+        if isinstance(started_browsers, list):
+            for b in started_browsers:
+                if b.get("profileId") == profile_id:
+                    ws_url = b.get("webSocketDebuggerUrl")
+                    break
+        
+        # 4. Fallback: Nếu response POST không trả WS (hoặc do profile đã chạy từ trước)
+        # Thì gọi GET /browsers để quét danh sách đang chạy
+        if not ws_url:
+            print(" ⚠️ Profile đã chạy hoặc không thấy WS trong response, đang quét lại danh sách...")
+            list_resp = requests.get(url, headers=headers, timeout=15)
+            list_data = list_resp.json()
+            
+            running_browsers = list_data.get("data", [])
+            for b in running_browsers:
+                if b.get("profileId") == profile_id:
+                    ws_url = b.get("webSocketDebuggerUrl")
+                    break
+        
+        if ws_url:
+            print(f"🔌 WebSocket: {ws_url}")
+            return ws_url
+        else:
+            raise Exception(f"Đã mở profile {profile_id} nhưng không tìm thấy WebSocket URL.")
+
     except Exception as e:
-        # Nếu đã là Exception với message rõ ràng thì giữ nguyên
-        if "❌ NST Error:" in str(e):
-            print(f"❌ Lỗi kết nối: {e}")
-            raise e
-        # Nếu là exception khác thì wrap lại
-        error_msg = f"❌ Lỗi kết nối profile '{profile_id}': {str(e)}"
-        print(error_msg)
-        raise Exception(error_msg) from e
+        print(f"❌ Lỗi connect_profile (POST Wrapper): {e}")
+        raise e
 --- END FILE: backend\core\nst.py ---
 
 --- START FILE: backend\core\paths.py ---
@@ -5709,9 +5722,10 @@ def clean_profile_list(raw):
   "paused_profiles": [],
   "stopped_profiles": [],
   "profile_states": {
-    "b77da63d-af55-43c2-ab7f-364250b20e30": "RUNNING"
+    "b77da63d-af55-43c2-ab7f-364250b20e30": "ERROR",
+    "ed3bd3bf-d906-42cf-9503-b73dfcfce117": "ERROR"
   },
-  "updated_at": "2025-12-25T20:21:36.342739+00:00"
+  "updated_at": "2025-12-26T07:38:05.799981+00:00"
 }
 
 --- END FILE: backend\data\runtime_control.json ---
@@ -16476,7 +16490,7 @@ def check_cookie_by_title(profile_id: str) -> dict:
     url = "https://www.facebook.com/"
     headers = {
         "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-        "accept-encoding": "gzip, deflate, br",
+        "accept-encoding": "gzip, deflate",
         "accept-language": "en,vi;q=0.9,en-US;q=0.8",
         "referer": "https://www.facebook.com/",
         "sec-ch-ua": '"Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
@@ -16551,9 +16565,9 @@ def _import_get_payload_funcs():
 get_payload_by_profile_id, get_cookies_by_profile_id, get_access_token_by_profile_id = _import_get_payload_funcs()
 
 # ====== ĐƯỜNG DẪN THEO PROJECT ROOT ======
-BASE_DIR = Path(__file__).resolve().parents[2]  # Thư mục gốc project
 POST_IDS_DIR = get_data_dir() / "post_ids"
 RESULTS_DIR = get_data_dir() / "results"
+OUTPUT_DIR = RESULTS_DIR  # Alias cho RESULTS_DIR để tương thích
 # File all_results kèm timestamp cho mỗi lần chạy (chỉ một file duy nhất)
 RUN_TS = datetime.now().strftime("%Y%m%d_%H%M%S")
 ALL_RESULTS_FILE = OUTPUT_DIR / f"all_results_{RUN_TS}.json"
@@ -16623,7 +16637,7 @@ INFO_PROGRESS = {
 }
 
 # Tạo thư mục output nếu chưa có
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ====== PROFILE ID ======
 # Profile ID mặc định, có thể thay đổi
@@ -16817,7 +16831,7 @@ def append_to_all_results(file_name: str, result: dict):
         cleanup_old_result_files(3)
 
         # Ghi file NGAY LẬP TỨC và flush để đảm bảo dữ liệu được ghi ngay
-        with open(ALL_RESULTS_FILE, "w", encoding="utf-8") as f:
+        with ALL_RESULTS_FILE.open("w", encoding="utf-8") as f:
             json.dump(ALL_RESULTS_DATA, f, ensure_ascii=False, indent=2)
             f.flush()  # Đảm bảo dữ liệu được ghi ngay vào disk
             os.fsync(f.fileno())  # Force write to disk (nếu hệ thống hỗ trợ)
@@ -16865,12 +16879,14 @@ def process_post_ids_file(file_path):
     Xử lý một file JSON chứa danh sách post_ids
     
     Args:
-        file_path (str): Đường dẫn đến file JSON
+        file_path (str | Path): Đường dẫn đến file JSON
         
     Returns:
         list: Danh sách kết quả của tất cả post_ids trong file
     """
-    file_name = os.path.basename(file_path)
+    # Chuyển đổi thành Path nếu là string
+    file_path = Path(file_path) if not isinstance(file_path, Path) else file_path
+    file_name = file_path.name
     
     # Tự động tách profile_id từ tên file
     profile_id = extract_profile_id_from_filename(file_name)
@@ -16888,7 +16904,7 @@ def process_post_ids_file(file_path):
     print("="*70)
     
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with file_path.open("r", encoding="utf-8") as f:
             post_ids = json.load(f)
         
         if not isinstance(post_ids, list):
@@ -16967,7 +16983,7 @@ def process_post_ids_file(file_path):
                 # Xóa post_id đã xử lý khỏi file nguồn
                 post_ids.pop(idx)
                 try:
-                    with open(file_path, "w", encoding="utf-8") as f:
+                    with file_path.open("w", encoding="utf-8") as f:
                         json.dump(post_ids, f, ensure_ascii=False, indent=2)
                     print(f"🗑️ Đã xóa post_id {post_id} khỏi {file_name}")
                 except Exception as e:
@@ -17034,7 +17050,7 @@ def get_all_info_from_post_ids_dir():
     total_posts = 0
     for file_path in json_files:
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with file_path.open("r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, list):
                     total_posts += len(data)
@@ -17142,7 +17158,7 @@ def get_info_for_profile_ids(profile_ids):
     total_posts = 0
     for file_path in json_files:
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with file_path.open("r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, list):
                     total_posts += len(data)
@@ -17811,9 +17827,9 @@ from urllib.parse import parse_qs, unquote_plus
 from pathlib import Path
 
 # ====== ĐƯỜNG DẪN THEO PROJECT ROOT ======
-BASE_DIR = Path(__file__).resolve().parents[2]  # Thư mục gốc project
-SETTINGS_JSON_FILE = BASE_DIR / "backend" / "config" / "settings.json"
-PAYLOAD_TXT_FILE = BASE_DIR / "backend" / "config" / "payload.txt"
+from core.paths import get_config_dir, get_settings_path
+SETTINGS_JSON_FILE = get_settings_path()  # backend/config/settings.json
+PAYLOAD_TXT_FILE = get_config_dir() / "payload.txt"
 
 
 def _normalize_cookie(cookie: str | None) -> str | None:
@@ -17834,7 +17850,7 @@ def _read_settings_profile_config(profile_id: str) -> dict | None:
     try:
         if not SETTINGS_JSON_FILE.exists():
             return None
-        with open(SETTINGS_JSON_FILE, "r", encoding="utf-8") as f:
+        with SETTINGS_JSON_FILE.open("r", encoding="utf-8") as f:
             raw = json.load(f)
         profiles = raw.get("PROFILE_IDS")
         if not isinstance(profiles, dict):
@@ -18307,7 +18323,7 @@ def get_all_payload_values(cookie, profile_id: str | None = None):
                 if profile_id:
                     try:
                         if SETTINGS_JSON_FILE.exists():
-                            with open(SETTINGS_JSON_FILE, "r", encoding="utf-8") as sf:
+                            with SETTINGS_JSON_FILE.open("r", encoding="utf-8") as sf:
                                 sdata = json.load(sf)
                         else:
                             sdata = {}
@@ -18320,7 +18336,7 @@ def get_all_payload_values(cookie, profile_id: str | None = None):
                         profile_cfg["fb_dtsg"] = fb_dtsg
                         profiles[profile_id] = profile_cfg
                         sdata["PROFILE_IDS"] = profiles
-                        with open(SETTINGS_JSON_FILE, "w", encoding="utf-8") as sf:
+                        with SETTINGS_JSON_FILE.open("w", encoding="utf-8") as sf:
                             json.dump(sdata, sf, ensure_ascii=False, indent=2)
                         print(f"✅ Đã ghi fb_dtsg vào {SETTINGS_JSON_FILE} cho profile_id={profile_id}")
                     except Exception as e:
@@ -18479,7 +18495,7 @@ def create_payload_dict(payload_values):
     """
     try:
         # Đọc file payload.txt
-        with open(PAYLOAD_TXT_FILE, "r", encoding="utf-8") as f:
+        with PAYLOAD_TXT_FILE.open("r", encoding="utf-8") as f:
             content = f.read().strip()
         
         # Parse từng dòng key: value
@@ -18569,11 +18585,15 @@ def update_payload_file(payload_values):
     Returns:
         bool: True nếu thành công, False nếu lỗi
     """
-    PAYLOAD_FILE = "backend/config/payload.txt"
+    PAYLOAD_FILE = get_config_dir() / "payload.txt"
     
     try:
         # Đọc file payload hiện tại
-        with open(PAYLOAD_FILE, "r", encoding="utf-8") as f:
+        if not PAYLOAD_FILE.exists():
+            print(f"⚠️ File {PAYLOAD_FILE} không tồn tại")
+            return False
+            
+        with PAYLOAD_FILE.open("r", encoding="utf-8") as f:
             lines = f.readlines()
         
         # Cập nhật các giá trị
@@ -18611,7 +18631,7 @@ def update_payload_file(payload_values):
             updated_lines.append(line)
         
         # Ghi lại file
-        with open(PAYLOAD_FILE, "w", encoding="utf-8") as f:
+        with PAYLOAD_FILE.open("w", encoding="utf-8") as f:
             f.writelines(updated_lines)
         
         print(f"✅ Đã cập nhật file {PAYLOAD_FILE}")
@@ -18704,7 +18724,7 @@ def ensure_payload_from_bad_response(profile_id: str | None, cookie: str | None,
         if profile_id and (fb_dtsg or lsd):
             try:
                 if SETTINGS_JSON_FILE.exists():
-                    with open(SETTINGS_JSON_FILE, "r", encoding="utf-8") as sf:
+                    with SETTINGS_JSON_FILE.open("r", encoding="utf-8") as sf:
                         sdata = json.load(sf)
                 else:
                     sdata = {}
@@ -18720,7 +18740,7 @@ def ensure_payload_from_bad_response(profile_id: str | None, cookie: str | None,
                     profile_cfg["lsd"] = lsd
                 profiles[profile_id] = profile_cfg
                 sdata["PROFILE_IDS"] = profiles
-                with open(SETTINGS_JSON_FILE, "w", encoding="utf-8") as sf:
+                with SETTINGS_JSON_FILE.open("w", encoding="utf-8") as sf:
                     json.dump(sdata, sf, ensure_ascii=False, indent=2)
                 print(f"✅ Đã ghi payload values vào {SETTINGS_JSON_FILE} cho profile_id={profile_id}")
             except Exception as e:
@@ -19130,10 +19150,10 @@ if __name__ == "__main__":
         for post in posts[:5]:
             print(f"      - {post['id']} (created: {post['created_time']})")
     
-    # Lưu ra file JSON (theo project root)
-    base_dir = Path(__file__).resolve().parents[2]
-    output_dir = base_dir / "backend" / "data"
-    os.makedirs(output_dir, exist_ok=True)
+    # Lưu ra file JSON (dùng get_data_dir để đúng cả khi chạy .exe)
+    from core.paths import get_data_dir
+    output_dir = get_data_dir()
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # Tạo tên file dựa trên page_id và ngày
     filename = f"{page_id}_posts_{start_date.replace('/', '-')}_to_{end_date.replace('/', '-')}.json"
@@ -19150,7 +19170,7 @@ if __name__ == "__main__":
     }
     
     # Lưu file JSON
-    with open(filepath, "w", encoding="utf-8") as f:
+    with filepath.open("w", encoding="utf-8") as f:
         json.dump(output_data, f, ensure_ascii=False, indent=2)
     
     print(f"\n💾 Đã lưu kết quả vào: {filepath}")
@@ -20134,6 +20154,8 @@ if __name__ == "__main__":
 --- END FILE: backend\worker\single_get_reactions.py ---
 
 --- START FILE: backend\worker\__init__.py ---
+
+
 
 --- END FILE: backend\worker\__init__.py ---
 
