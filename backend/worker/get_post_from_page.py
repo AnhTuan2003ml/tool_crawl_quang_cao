@@ -336,7 +336,7 @@ def get_posts_from_page(page_id, profile_id, start_date=None, end_date=None, lim
     if cookies:
         headers = {
             "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-            "accept-encoding": "gzip, deflate, br, zstd",
+            "accept-encoding": "gzip, deflate",
             "accept-language": "en,vi;q=0.9,en-US;q=0.8",
             "cookie": cookies,
             "referer": "https://developers.facebook.com/",
