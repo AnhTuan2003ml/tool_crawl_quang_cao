@@ -77,6 +77,11 @@ def send_request(feedback_target_id, payload_dict, profile_id, cookies, cursor=N
     payload = urlencode(payload_dict)
 
     # Tạo headers với cookies
+    # Lấy lsd từ payload_dict (quan trọng để tránh lỗi 1357004)
+    lsd_value = payload_dict.get("lsd", "")
+    if not lsd_value:
+        print(f"   ⚠️ WARNING: lsd không có trong payload_dict! Keys: {list(payload_dict.keys())}")
+    
     headers = {
         "accept": "*/*",
         "accept-encoding": "gzip, deflate",
@@ -94,9 +99,15 @@ def send_request(feedback_target_id, payload_dict, profile_id, cookies, cursor=N
         "sec-fetch-site": "same-origin",
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
         "x-asbd-id": "359341",
-        "x-fb-friendly-name": "CommentListComponentsRootQuery",
-        "x-fb-lsd": payload_dict.get("lsd", "")
+        "x-fb-friendly-name": "CometUFIReactionsDialogTabContentRefetchQuery",
+        "x-fb-lsd": lsd_value
     }
+    
+    # Debug: Kiểm tra cookies và headers quan trọng
+    if not cookies or len(cookies.strip()) < 50:
+        print(f"   ⚠️ WARNING: Cookies có vẻ không hợp lệ (length: {len(cookies) if cookies else 0})")
+    if not lsd_value:
+        print(f"   ⚠️ WARNING: x-fb-lsd rỗng - có thể gây lỗi 1357004!")
 
     url = "https://www.facebook.com/api/graphql/"
     
@@ -205,11 +216,28 @@ def get_all_users_by_fid(fid, payload_dict, profile_id, cookies):
         try:
             response_json = response.json()
             
+            # Kiểm tra và parse lỗi Facebook API
+            if "errors" in response_json:
+                errors = response_json.get("errors", [])
+                if errors and isinstance(errors, list) and len(errors) > 0:
+                    error = errors[0]
+                    error_code = error.get("code")
+                    error_message = error.get("message", "Unknown error")
+                    error_type = error.get("error_type", "")
+                    
+                    # Tạo thông báo lỗi chi tiết
+                    error_msg = f"Facebook API Error: {error_message}"
+                    if error_code:
+                        error_msg += f" (Code: {error_code})"
+                    if error_type:
+                        error_msg += f" (Type: {error_type})"
+                    
+                    print(f"   ❌ Response có errors: {errors}")
+                    raise ValueError(error_msg)
+            
             # Debug: Kiểm tra cấu trúc response
             if "data" not in response_json:
                 print(f"   ⚠️ Response không có 'data': {list(response_json.keys())}")
-            if "errors" in response_json:
-                print(f"   ❌ Response có errors: {response_json.get('errors')}")
             
             # Trích xuất id và name từ mỗi node
             try:

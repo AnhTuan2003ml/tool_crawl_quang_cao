@@ -2,13 +2,34 @@ import requests
 import re
 import json
 import time
+import sys
+import os
 from urllib.parse import parse_qs, unquote_plus
 from pathlib import Path
 
+# ====== FIX IMPORT PATH KHI CHẠY TRỰC TIẾP ======
+# Nếu chạy trực tiếp từ thư mục worker, thêm parent directory vào sys.path
+if __name__ == "__main__" or not any("core" in str(p) for p in sys.path):
+    current_file = Path(__file__).resolve()
+    # Tìm backend directory (parent của worker)
+    backend_dir = current_file.parent.parent
+    if backend_dir.exists() and backend_dir.name == "backend":
+        backend_path = str(backend_dir)
+        if backend_path not in sys.path:
+            sys.path.insert(0, backend_path)
+
 # ====== ĐƯỜNG DẪN THEO PROJECT ROOT ======
-from core.paths import get_config_dir, get_settings_path
-SETTINGS_JSON_FILE = get_settings_path()  # backend/config/settings.json
-PAYLOAD_TXT_FILE = get_config_dir() / "payload.txt"
+try:
+    from core.paths import get_config_dir, get_settings_path
+    SETTINGS_JSON_FILE = get_settings_path()  # backend/config/settings.json
+    PAYLOAD_TXT_FILE = get_config_dir() / "payload.txt"
+except ImportError:
+    # Fallback nếu không import được core.paths
+    current_file = Path(__file__).resolve()
+    backend_dir = current_file.parent.parent
+    config_dir = backend_dir / "config"
+    SETTINGS_JSON_FILE = config_dir / "settings.json"
+    PAYLOAD_TXT_FILE = config_dir / "payload.txt"
 
 
 def _normalize_cookie(cookie: str | None) -> str | None:

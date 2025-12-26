@@ -1,8 +1,21 @@
 import requests
 import json
+import sys
+import os
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from urllib.parse import urlparse, parse_qs
+
+# ====== FIX IMPORT PATH KHI CHẠY TRỰC TIẾP ======
+# Nếu chạy trực tiếp từ thư mục worker, thêm parent directory vào sys.path
+if __name__ == "__main__" or not any("core" in str(p) for p in sys.path):
+    current_file = Path(__file__).resolve()
+    # Tìm backend directory (parent của worker)
+    backend_dir = current_file.parent.parent
+    if backend_dir.exists() and backend_dir.name == "backend":
+        backend_path = str(backend_dir)
+        if backend_path not in sys.path:
+            sys.path.insert(0, backend_path)
 
 # ====== LƯU Ý ======
 # Lấy access_token từ cookies.json thông qua profile_id
@@ -207,7 +220,15 @@ def get_posts_from_page(page_id, profile_id, start_date=None, end_date=None, lim
     access_token = get_access_token_by_profile_id(profile_id)
     if not access_token:
         print(f"❌ Không thể lấy access_token từ profile_id: {profile_id}")
+        print(f"   💡 Hãy kiểm tra cookies.json có chứa access_token cho profile này không")
         return []
+    
+    # Kiểm tra access_token có hợp lệ không (ít nhất phải có độ dài hợp lý)
+    if len(access_token.strip()) < 20:
+        print(f"❌ Access token có vẻ không hợp lệ (quá ngắn: {len(access_token)} ký tự)")
+        return []
+    
+    print(f"   🔑 Access token: {access_token[:20]}... (length: {len(access_token)})")
     
     # Parse ngày tháng năm theo múi giờ Việt Nam và chuyển sang UTC
     start_dt, start_timestamp = parse_vietnam_datetime(start_date, is_end_of_day=False)
@@ -249,31 +270,58 @@ def get_posts_from_page(page_id, profile_id, start_date=None, end_date=None, lim
     print(f"   📅 Ngày bắt đầu (VN): {start_date} → UTC: {start_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     print(f"   📅 Ngày kết thúc (VN): {end_date} → UTC: {end_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
     
+    # Tạo session với timeout và retry
+    session = requests.Session()
+    timeout = 30  # 30 giây timeout
+    
     while True:
-        # Gửi request
-        if next_url:
-            # Sử dụng URL pagination từ response trước
-            url = next_url
-            response = requests.get(url)
-        else:
-            # Request đầu tiên
-            url = base_url
-            response = requests.get(url, params=params)
-        
-        page_count += 1
-        print(f"\n📄 Trang {page_count}: {url[:100]}...")
-        
-        if response.status_code != 200:
-            print(f"❌ Lỗi: Status code {response.status_code}")
-            print(f"Response: {response.text[:500]}")
-            break
-        
         try:
-            data = response.json()
+            # Gửi request
+            if next_url:
+                # Sử dụng URL pagination từ response trước
+                url = next_url
+                response = session.get(url, timeout=timeout)
+            else:
+                # Request đầu tiên
+                url = base_url
+                response = session.get(url, params=params, timeout=timeout)
+            
+            page_count += 1
+            print(f"\n📄 Trang {page_count}: {url[:100]}...")
+            
+            if response.status_code != 200:
+                print(f"❌ Lỗi: Status code {response.status_code}")
+                print(f"Response: {response.text[:500]}")
+                break
+            
+            try:
+                data = response.json()
+            except json.JSONDecodeError as e:
+                print(f"❌ Lỗi: Response không phải JSON hợp lệ")
+                print(f"Response text: {response.text[:500]}")
+                break
             
             # Kiểm tra lỗi từ API
             if "error" in data:
-                print(f"❌ Lỗi từ API: {data['error']}")
+                error_info = data['error']
+                error_code = error_info.get('code')
+                error_message = error_info.get('message', 'Unknown error')
+                error_type = error_info.get('type', 'Unknown')
+                
+                print(f"❌ Lỗi từ API: {error_info}")
+                
+                # Xử lý các lỗi cụ thể
+                if error_code == 190:
+                    print(f"   ⚠️ OAuthException (190): Access token không hợp lệ hoặc đã hết hạn")
+                    print(f"   💡 Giải pháp:")
+                    print(f"      1. Kiểm tra access_token trong cookies.json")
+                    print(f"      2. Lấy lại access_token mới từ Facebook")
+                    print(f"      3. Đảm bảo access_token chưa hết hạn")
+                elif error_code == 4:
+                    print(f"   ⚠️ Application request limit reached")
+                elif error_code == 17:
+                    print(f"   ⚠️ User request limit reached")
+                
                 break
             
             # Lấy feed data
@@ -328,6 +376,15 @@ def get_posts_from_page(page_id, profile_id, start_date=None, end_date=None, lim
                 print(f"   ℹ️ Không còn trang tiếp theo")
                 break
                 
+        except requests.exceptions.Timeout as e:
+            print(f"❌ Lỗi: Request timeout sau {timeout} giây")
+            print(f"   💡 Có thể do mạng chậm hoặc Facebook API không phản hồi")
+            print(f"   💡 Thử lại sau hoặc kiểm tra kết nối internet")
+            break
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Lỗi kết nối: {e}")
+            print(f"   💡 Kiểm tra kết nối internet và thử lại sau")
+            break
         except json.JSONDecodeError as e:
             print(f"❌ Lỗi: Response không phải JSON hợp lệ")
             print(f"Response text (500 ký tự đầu): {response.text[:500]}")
@@ -382,8 +439,14 @@ if __name__ == "__main__":
             print(f"      - {post['id']} (created: {post['created_time']})")
     
     # Lưu ra file JSON (dùng get_data_dir để đúng cả khi chạy .exe)
-    from core.paths import get_data_dir
-    output_dir = get_data_dir()
+    try:
+        from core.paths import get_data_dir
+        output_dir = get_data_dir()
+    except ImportError:
+        # Fallback nếu không import được core.paths
+        current_file = Path(__file__).resolve()
+        backend_dir = current_file.parent.parent
+        output_dir = backend_dir / "data"
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Tạo tên file dựa trên page_id và ngày
