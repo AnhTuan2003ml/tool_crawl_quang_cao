@@ -92,6 +92,7 @@ let profileState = {
 let addRowEl = null; // Row tạm để nhập profile mới
 let joinGroupPollTimer = null;
 let feedPollTimer = null;
+let groupScanPollTimer = null;
 let scanBackendPollTimer = null; // Poll trạng thái bot runner để sync UI sau F5
 let isScanning = false; // Trạng thái đang quét
 let isPausedAll = false; // Trạng thái pause all (UI)
@@ -215,6 +216,15 @@ function syncRunningLabelsWithPauseState() {
         autoJoinGroupBtn.textContent = isPausedAll ? 'Đang tạm dừng...' : 'Đang auto join...';
       }
     }
+
+    if (groupScanPollTimer) {
+      if (scanGroupSettingBtn && scanGroupSettingBtn.classList.contains('btn-loading')) {
+        scanGroupSettingBtn.textContent = isPausedAll ? 'Đang tạm dừng...' : 'Đang quét group...';
+      }
+      if (groupScanStartBtn && groupScanStartBtn.classList.contains('btn-loading')) {
+        groupScanStartBtn.textContent = isPausedAll ? 'Đang tạm dừng...' : 'Đang quét group...';
+      }
+    }
   } catch (_) { }
 }
 
@@ -234,43 +244,7 @@ function applyControlStateToProfileRows(st) {
     || feedRunning.size > 0
   );
 
-  const rows = document.querySelectorAll('.profile-row-wrap');
-  rows.forEach((wrap) => {
-    const pid = String(wrap.dataset.profileId || '').trim();
-    if (!pid) return;
-    const badge = wrap.querySelector('.profile-state-badge');
-
-    // --- Effective state ---
-    // Default: READY (mới vào / chưa có job)
-    let eff = 'READY';
-    // Nếu không có session nào chạy -> luôn READY
-    if (sessionRunning) {
-      // Nếu đang pause (global hoặc profile) -> PAUSED
-      if (pausedAll || pausedProfiles.has(pid)) {
-        eff = 'PAUSED';
-      } else {
-        // RUNNING nếu profile đang có feed/join hoặc runner đang chạy và profile_state RUNNING
-        if (feedRunning.has(pid) || joinRunning.has(pid)) {
-          eff = 'RUNNING';
-        } else if (botRunning) {
-          const ps = String(profileStates[pid] || '').toUpperCase();
-          // Ưu tiên list từ backend: bot_profile_ids
-          const inBot = botProfileIds.size > 0 ? botProfileIds.has(pid) : false;
-          eff = (ps === 'RUNNING' || inBot) ? 'RUNNING' : 'READY';
-        } else {
-          eff = 'READY';
-        }
-      }
-    }
-
-    if (badge) {
-      badge.classList.remove('state-running', 'state-paused', 'state-ready', 'state-idle', 'state-unknown', 'state-stopping', 'state-stopped', 'state-error');
-      if (eff === 'PAUSED') badge.classList.add('state-paused');
-      else if (eff === 'RUNNING') badge.classList.add('state-running');
-      else badge.classList.add('state-ready');
-      badge.textContent = (eff === 'READY') ? 'SẴN SÀNG' : (eff === 'RUNNING') ? 'ĐANG CHẠY' : 'ĐANG TẠM DỪNG';
-    }
-  });
+  // Badge logic đã được xóa
 }
 
 /**
@@ -491,33 +465,16 @@ function showToast(message, type = 'success', ms = 1600) {
 function setButtonLoading(btn, isLoading, loadingText) {
   if (!btn) return;
   if (isLoading) {
-    // Lưu HTML gốc nếu chưa có (bao gồm cả icon)
-    if (!btn.dataset.origHTML) {
-      btn.dataset.origHTML = btn.innerHTML || btn.textContent || '';
-    }
     if (!btn.dataset.origText) {
       btn.dataset.origText = btn.textContent || '';
     }
     btn.disabled = true;
     btn.classList.add('btn-loading');
-    // Giữ nguyên cấu trúc HTML nếu có, chỉ thêm spinner
-    if (loadingText) {
-      // Nếu button có icon, giữ icon và thêm spinner
-      const hasIcon = btn.querySelector('.btn-icon');
-      if (hasIcon) {
-        btn.innerHTML = `<span class="btn-icon">${hasIcon.textContent}</span><span>${loadingText}</span>`;
-      } else {
-        btn.textContent = loadingText;
-      }
-    }
+    if (loadingText) btn.textContent = loadingText;
   } else {
     btn.disabled = false;
     btn.classList.remove('btn-loading');
-    // Khôi phục HTML gốc (bao gồm cả icon)
-    if (btn.dataset.origHTML) {
-      btn.innerHTML = btn.dataset.origHTML;
-      delete btn.dataset.origHTML;
-    } else if (btn.dataset.origText) {
+    if (btn.dataset.origText) {
       btn.textContent = btn.dataset.origText;
       delete btn.dataset.origText;
     }
@@ -592,11 +549,6 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
   groupBtn.type = 'button';
   groupBtn.className = 'btn-primary';
   groupBtn.textContent = 'Thêm Groups';
-
-  // Badge hiển thị trạng thái profile (RUNNING/PAUSED/STOPPED)
-  const stateBadge = document.createElement('span');
-  stateBadge.className = isNew ? 'profile-state-badge state-ready' : 'profile-state-badge state-idle';
-  stateBadge.textContent = isNew ? 'SẴN SÀNG' : 'IDLE';
 
   // ===== Group editor panel (div) =====
   const groupPanel = document.createElement('div');
@@ -1014,7 +966,6 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
     }
   });
 
-  actions.appendChild(stateBadge);
   actions.appendChild(saveBtn);
   actions.appendChild(removeBtn);
   actions.appendChild(groupBtn);
@@ -1443,8 +1394,9 @@ if (groupScanStartBtn) {
       return;
     }
 
-    // Disable button và hiển thị loading với spinner
-    setButtonLoading(groupScanStartBtn, true, 'Đang xử lý...');
+    // Disable button và hiển thị loading
+    setButtonLoading(groupScanStartBtn, true, 'Đang quét group...');
+    setButtonLoading(scanGroupSettingBtn, true, 'Đang quét group...');
     
     try {
       const response = await fetch('http://localhost:8000/scan-groups', {
@@ -1476,13 +1428,38 @@ if (groupScanStartBtn) {
       if (groupScanPanel) {
         groupScanPanel.style.display = 'none';
       }
+
+      // Poll trạng thái quét group để biết khi nào hoàn thành
+      if (groupScanPollTimer) clearInterval(groupScanPollTimer);
+      groupScanPollTimer = setInterval(async () => {
+        try {
+          const st = await callBackendNoAlert('/scan-groups/status', { method: 'GET' });
+          const processing = st && typeof st.processing === 'boolean' ? st.processing : false;
+          const queueLength = st && typeof st.queue_length === 'number' ? st.queue_length : 0;
+          
+          // Nếu không còn đang xử lý và queue rỗng thì hoàn thành
+          if (!processing && queueLength === 0) {
+            clearInterval(groupScanPollTimer);
+            groupScanPollTimer = null;
+            setButtonLoading(groupScanStartBtn, false);
+            setButtonLoading(scanGroupSettingBtn, false);
+            showToast('✅ Quét group: Hoàn thành', 'success', 2000);
+          }
+        } catch (e) {
+          // Nếu lỗi poll thì dừng poll để không spam
+          clearInterval(groupScanPollTimer);
+          groupScanPollTimer = null;
+          setButtonLoading(groupScanStartBtn, false);
+          setButtonLoading(scanGroupSettingBtn, false);
+          showToast('Không lấy được trạng thái quét group (kiểm tra FastAPI).', 'error');
+        }
+      }, 4000);
       
     } catch (error) {
       console.error('Lỗi khi quét group:', error);
       showToast(`❌ Lỗi: ${error.message}`, 'error', 4000);
-    } finally {
-      // Restore button
       setButtonLoading(groupScanStartBtn, false);
+      setButtonLoading(scanGroupSettingBtn, false);
     }
   });
 }
@@ -1607,9 +1584,15 @@ async function handleStopAll() {
       clearInterval(feedPollTimer);
       feedPollTimer = null;
     }
+    if (groupScanPollTimer) {
+      clearInterval(groupScanPollTimer);
+      groupScanPollTimer = null;
+    }
     setButtonLoading(autoJoinGroupBtn, false);
     setButtonLoading(feedAccountSettingBtn, false);
     setButtonLoading(feedStartBtn, false);
+    setButtonLoading(scanGroupSettingBtn, false);
+    setButtonLoading(groupScanStartBtn, false);
     if (feedConfigPanel) feedConfigPanel.style.display = 'none';
     
     // Refresh state và update buttons
