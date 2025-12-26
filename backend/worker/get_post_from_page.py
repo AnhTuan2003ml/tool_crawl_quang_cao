@@ -25,15 +25,64 @@ if __name__ == "__main__" or not any("core" in str(p) for p in sys.path):
 def get_access_token_by_profile_id(profile_id):
     """
     Lấy access_token từ cookies.json dựa trên profile_id
-    
+
     Args:
         profile_id (str): Profile ID (ví dụ: "031ca13d-e8fa-400c-a603-df57a2806788")
-    
+
     Returns:
         str: Access token hoặc None nếu không tìm thấy
     """
     from get_payload import get_access_token_by_profile_id as get_token
     return get_token(profile_id)
+
+
+def get_cookies_by_profile_id(profile_id):
+    """
+    Lấy cookies từ settings.json dựa trên profile_id
+
+    Args:
+        profile_id (str): Profile ID (ví dụ: "b77da63d-af55-43c2-ab7f-364250b20e30")
+
+    Returns:
+        str: Cookie string hoặc None nếu không tìm thấy
+    """
+    # Tìm đường dẫn settings.json từ vị trí hiện tại của file này
+    # Bất kể script được chạy từ đâu, luôn tìm từ thư mục backend/config
+    current_file = Path(__file__).resolve()
+
+    # Tìm thư mục backend (parent của worker)
+    backend_dir = current_file.parent.parent
+
+    # Đường dẫn settings.json
+    settings_file = backend_dir / "config" / "settings.json"
+
+    print(f"DEBUG: current_file = {current_file}")
+    print(f"DEBUG: backend_dir = {backend_dir}")
+    print(f"DEBUG: settings_file = {settings_file}")
+
+    try:
+        with open(settings_file, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+
+        # Kiểm tra cấu trúc settings.json
+        profile_ids = settings.get('PROFILE_IDS', {})
+        if profile_id in profile_ids:
+            cookie_data = profile_ids[profile_id].get('cookie', '')
+            if cookie_data and cookie_data.strip():
+                return cookie_data.strip()
+
+        print(f"⚠️ Không tìm thấy cookies cho profile_id: {profile_id}")
+        return None
+
+    except FileNotFoundError:
+        print(f"❌ File settings.json không tồn tại: {settings_file}")
+        return None
+    except json.JSONDecodeError as e:
+        print(f"❌ Lỗi parse settings.json: {e}")
+        return None
+    except Exception as e:
+        print(f"❌ Lỗi khi đọc cookies từ settings.json: {e}")
+        return None
 
 
 def parse_datetime_string(dt_string):
@@ -222,6 +271,14 @@ def get_posts_from_page(page_id, profile_id, start_date=None, end_date=None, lim
         print(f"❌ Không thể lấy access_token từ profile_id: {profile_id}")
         print(f"   💡 Hãy kiểm tra cookies.json có chứa access_token cho profile này không")
         return []
+
+    # Lấy cookies
+    cookies = get_cookies_by_profile_id(profile_id)
+    if cookies:
+        print(f"   🍪 Cookies: {cookies[:50]}... (length: {len(cookies)})")
+    else:
+        print(f"⚠️ Không có cookies cho profile_id: {profile_id}")
+        print(f"   💡 Graph API có thể bị rate limit hoặc block nếu không có cookies")
     
     # Kiểm tra access_token có hợp lệ không (ít nhất phải có độ dài hợp lý)
     if len(access_token.strip()) < 20:
@@ -273,6 +330,24 @@ def get_posts_from_page(page_id, profile_id, start_date=None, end_date=None, lim
     # Tạo session với timeout và retry
     session = requests.Session()
     timeout = 30  # 30 giây timeout
+
+    # Headers để giả lập browser (nếu có cookies)
+    headers = {}
+    if cookies:
+        headers = {
+            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "accept-encoding": "gzip, deflate, br, zstd",
+            "accept-language": "en,vi;q=0.9,en-US;q=0.8",
+            "cookie": cookies,
+            "referer": "https://developers.facebook.com/",
+            "sec-ch-ua": '"Google Chrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"Windows"',
+            "sec-fetch-dest": "document",
+            "sec-fetch-mode": "navigate",
+            "sec-fetch-site": "cross-site",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+        }
     
     while True:
         try:
@@ -280,11 +355,11 @@ def get_posts_from_page(page_id, profile_id, start_date=None, end_date=None, lim
             if next_url:
                 # Sử dụng URL pagination từ response trước
                 url = next_url
-                response = session.get(url, timeout=timeout)
+                response = session.get(url, headers=headers, timeout=timeout)
             else:
                 # Request đầu tiên
                 url = base_url
-                response = session.get(url, params=params, timeout=timeout)
+                response = session.get(url, params=params, headers=headers, timeout=timeout)
             
             page_count += 1
             print(f"\n📄 Trang {page_count}: {url[:100]}...")
