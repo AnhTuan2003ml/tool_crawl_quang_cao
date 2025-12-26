@@ -58,7 +58,6 @@ const runSelectedInfoBtn = document.getElementById('runSelectedInfoBtn');
 const feedConfigPanel = document.getElementById('feedConfigPanel');
 const scanConfigPanel = document.getElementById('scanConfigPanel');
 const groupScanPanel = document.getElementById('groupScanPanel');
-const groupScanUrlInput = document.getElementById('groupScanUrlInput');
 const groupScanPostCountInput = document.getElementById('groupScanPostCountInput');
 const groupScanStartDateInput = document.getElementById('groupScanStartDateInput');
 const groupScanEndDateInput = document.getElementById('groupScanEndDateInput');
@@ -492,16 +491,33 @@ function showToast(message, type = 'success', ms = 1600) {
 function setButtonLoading(btn, isLoading, loadingText) {
   if (!btn) return;
   if (isLoading) {
+    // Lưu HTML gốc nếu chưa có (bao gồm cả icon)
+    if (!btn.dataset.origHTML) {
+      btn.dataset.origHTML = btn.innerHTML || btn.textContent || '';
+    }
     if (!btn.dataset.origText) {
       btn.dataset.origText = btn.textContent || '';
     }
     btn.disabled = true;
     btn.classList.add('btn-loading');
-    if (loadingText) btn.textContent = loadingText;
+    // Giữ nguyên cấu trúc HTML nếu có, chỉ thêm spinner
+    if (loadingText) {
+      // Nếu button có icon, giữ icon và thêm spinner
+      const hasIcon = btn.querySelector('.btn-icon');
+      if (hasIcon) {
+        btn.innerHTML = `<span class="btn-icon">${hasIcon.textContent}</span><span>${loadingText}</span>`;
+      } else {
+        btn.textContent = loadingText;
+      }
+    }
   } else {
     btn.disabled = false;
     btn.classList.remove('btn-loading');
-    if (btn.dataset.origText) {
+    // Khôi phục HTML gốc (bao gồm cả icon)
+    if (btn.dataset.origHTML) {
+      btn.innerHTML = btn.dataset.origHTML;
+      delete btn.dataset.origHTML;
+    } else if (btn.dataset.origText) {
       btn.textContent = btn.dataset.origText;
       delete btn.dataset.origText;
     }
@@ -1385,7 +1401,6 @@ if (scanGroupSettingBtn) {
 
     const isOpen = groupScanPanel.style.display !== 'none';
     groupScanPanel.style.display = isOpen ? 'none' : 'block';
-    if (!isOpen && groupScanUrlInput) groupScanUrlInput.focus();
   });
 }
 
@@ -1397,48 +1412,78 @@ if (groupScanCancelBtn && groupScanPanel) {
 
 // UI only: bấm "Chạy" thì chỉ validate + toast (chưa gọi API)
 if (groupScanStartBtn) {
-  groupScanStartBtn.addEventListener('click', () => {
+  groupScanStartBtn.addEventListener('click', async () => {
     const selected = Object.keys(profileState.selected || {}).filter((pid) => profileState.selected[pid]);
     if (selected.length === 0) {
       showToast('Chọn (tick) ít nhất 1 profile trước.', 'error');
       return;
     }
-    const raw = String(groupScanUrlInput?.value || '');
-    const urls = raw
-      .split(/\r?\n/)
-      .map((s) => String(s || '').trim())
-      .filter(Boolean);
     const postCount = parseInt(String(groupScanPostCountInput?.value || '0').trim(), 10);
     const startDate = String(groupScanStartDateInput?.value || '').trim();
     const endDate = String(groupScanEndDateInput?.value || '').trim();
-    if (urls.length === 0) {
-      showToast('Nhập ít nhất 1 URL group (mỗi dòng 1 URL).', 'error');
-      return;
-    }
-    if (!Number.isFinite(postCount) || postCount < 0) {
-      showToast('Số bài viết theo dõi không hợp lệ.', 'error');
+    
+    if (!Number.isFinite(postCount) || postCount <= 0) {
+      showToast('Số bài viết theo dõi phải lớn hơn 0.', 'error');
       return;
     }
     if (!startDate || !endDate) {
-      showToast('Nhập đủ thời gian bắt đầu và kết thúc.', 'error');
+      showToast('Nhập đủ ngày bắt đầu và ngày kết thúc.', 'error');
       return;
     }
-    const startTs = Date.parse(startDate);
-    const endTs = Date.parse(endDate);
+    
+    // Parse date (YYYY-MM-DD format)
+    const startTs = Date.parse(startDate + 'T00:00:00');
+    const endTs = Date.parse(endDate + 'T23:59:59');
     if (!Number.isFinite(startTs) || !Number.isFinite(endTs)) {
-      showToast('Thời gian không hợp lệ.', 'error');
+      showToast('Ngày không hợp lệ.', 'error');
       return;
     }
     if (startTs > endTs) {
-      showToast('Thời gian bắt đầu phải ≤ thời gian kết thúc.', 'error');
+      showToast('Ngày bắt đầu phải ≤ ngày kết thúc.', 'error');
       return;
     }
 
-    showToast(
-      `✅ Đã nhận ${urls.length} group URL, số bài: ${postCount}, từ ${startDate} đến ${endDate}`,
-      'success',
-      2400
-    );
+    // Disable button và hiển thị loading với spinner
+    setButtonLoading(groupScanStartBtn, true, 'Đang xử lý...');
+    
+    try {
+      const response = await fetch('http://localhost:8000/scan-groups', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          profile_ids: selected,
+          post_count: postCount,
+          start_date: startDate,
+          end_date: endDate
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || 'Lỗi không xác định');
+      }
+
+      showToast(
+        `✅ Đã thêm ${selected.length} profile vào hàng chờ quét group. Số bài: ${postCount}, từ ${startDate} đến ${endDate}`,
+        'success',
+        4000
+      );
+      
+      // Đóng panel sau khi thành công
+      if (groupScanPanel) {
+        groupScanPanel.style.display = 'none';
+      }
+      
+    } catch (error) {
+      console.error('Lỗi khi quét group:', error);
+      showToast(`❌ Lỗi: ${error.message}`, 'error', 4000);
+    } finally {
+      // Restore button
+      setButtonLoading(groupScanStartBtn, false);
+    }
   });
 }
 

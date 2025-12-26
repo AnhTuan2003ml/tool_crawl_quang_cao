@@ -24,7 +24,7 @@ from core.control import smart_sleep
 from core.scraper import SimpleBot
 from core.settings import get_settings
 from worker.get_all_info import get_all_info_from_post_ids_dir, get_info_for_profile_ids
-from core.paths import get_data_dir, get_settings_path
+from core.paths import get_data_dir, get_settings_path, get_config_dir
 app = FastAPI(title="NST Tool API", version="1.0.0")
 class InfoRunRequest(BaseModel):
     mode: str = "all"  # "all" hoặc "selected"
@@ -2099,3 +2099,185 @@ def get_files_in_date_range(request: dict) -> dict:
             "to_timestamp": to_timestamp
         }
     }
+
+class ScanGroupsRequest(BaseModel):
+    profile_ids: list[str]
+    post_count: int
+    start_date: str  # Format: YYYY-MM-DD
+    end_date: str    # Format: YYYY-MM-DD
+
+# Queue để xử lý quét group lần lượt
+_group_scan_queue = []
+_group_scan_lock = threading.Lock()
+_group_scan_processing = False
+
+def _process_group_scan_queue():
+    """Xử lý queue quét group lần lượt"""
+    global _group_scan_processing
+    
+    with _group_scan_lock:
+        if _group_scan_processing or len(_group_scan_queue) == 0:
+            return
+        _group_scan_processing = True
+    
+    try:
+        while True:
+            with _group_scan_lock:
+                if len(_group_scan_queue) == 0:
+                    break
+                task = _group_scan_queue.pop(0)
+            
+            # Xử lý task
+            profile_id = task["profile_id"]
+            post_count = task["post_count"]
+            start_date = task["start_date"]
+            end_date = task["end_date"]
+            
+            print(f"\n{'='*60}")
+            print(f"🚀 Bắt đầu quét group cho profile: {profile_id}")
+            print(f"   Số bài viết: {post_count}")
+            print(f"   Từ ngày: {start_date} đến {end_date}")
+            print(f"{'='*60}\n")
+            
+            try:
+                # Đọc groups.json
+                groups_file = get_config_dir() / "groups.json"
+                if not groups_file.exists():
+                    print(f"❌ File groups.json không tồn tại: {groups_file}")
+                    continue
+                
+                with groups_file.open("r", encoding="utf-8") as f:
+                    groups_data = json.load(f)
+                
+                # Lấy danh sách groups cho profile này
+                profile_groups = groups_data.get(profile_id, [])
+                if not profile_groups:
+                    print(f"⚠️ Không có group nào cho profile {profile_id}")
+                    continue
+                
+                print(f"📋 Tìm thấy {len(profile_groups)} group(s) cho profile {profile_id}")
+                
+                # Import function
+                from worker.get_post_from_page import get_posts_from_page
+                
+                # Quét từng group
+                total_posts_scanned = 0
+                for group_info in profile_groups:
+                    page_id = group_info.get("page_id")
+                    url_page = group_info.get("url_page", "")
+                    
+                    if not page_id:
+                        print(f"⚠️ Bỏ qua group không có page_id: {group_info}")
+                        continue
+                    
+                    print(f"\n📌 Xử lý group: {page_id}")
+                    if url_page:
+                        print(f"   URL: {url_page}")
+                    
+                    try:
+                        # Gọi get_posts_from_page với limit = post_count
+                        # Hàm này sẽ tự động:
+                        # 1. Lấy posts từ Graph API
+                        # 2. Gọi get_id_from_url cho mỗi post để lấy chi tiết
+                        # 3. Lưu vào data/post_ids/{profile_id}.json
+                        posts = get_posts_from_page(
+                            page_id=page_id,
+                            profile_id=profile_id,
+                            start_date=start_date,
+                            end_date=end_date,
+                            limit=post_count
+                        )
+                        
+                        if posts:
+                            total_posts_scanned += len(posts)
+                            print(f"   ✅ Đã quét {len(posts)} posts từ group {page_id}")
+                        else:
+                            print(f"   ⚠️ Không lấy được posts nào từ group {page_id}")
+                        
+                    except Exception as e:
+                        print(f"   ❌ Lỗi khi quét group {page_id}: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        continue
+                
+                print(f"\n✅ Hoàn thành quét {len(profile_groups)} group(s), tổng cộng {total_posts_scanned} posts")
+                
+                print(f"\n✅ Hoàn thành quét group cho profile: {profile_id}\n")
+                
+            except Exception as e:
+                print(f"❌ Lỗi khi xử lý profile {profile_id}: {e}")
+                import traceback
+                traceback.print_exc()
+    
+    finally:
+        with _group_scan_lock:
+            _group_scan_processing = False
+        
+        # Kiểm tra xem còn task nào không
+        with _group_scan_lock:
+            if len(_group_scan_queue) > 0:
+                # Tiếp tục xử lý queue
+                threading.Thread(target=_process_group_scan_queue, daemon=True).start()
+
+@app.post("/scan-groups")
+def scan_groups(request: ScanGroupsRequest) -> dict:
+    """
+    Quét bài viết từ các group đã cấu hình trong groups.json
+    
+    - Đọc groups.json để lấy danh sách groups cho mỗi profile
+    - Với mỗi group, quét số lượng bài viết trong khoảng thời gian
+    - Lưu kết quả vào data/post_ids/{profile_id}.json
+    - Xử lý lần lượt nếu có nhiều profile
+    """
+    profile_ids = request.profile_ids
+    post_count = request.post_count
+    start_date = request.start_date
+    end_date = request.end_date
+    
+    if not profile_ids:
+        raise HTTPException(status_code=400, detail="Chưa chọn profile nào")
+    
+    if post_count <= 0:
+        raise HTTPException(status_code=400, detail="Số bài viết phải lớn hơn 0")
+    
+    if not start_date or not end_date:
+        raise HTTPException(status_code=400, detail="Chưa nhập đủ ngày bắt đầu và ngày kết thúc")
+    
+    # Validate date format (YYYY-MM-DD)
+    try:
+        from datetime import datetime
+        datetime.strptime(start_date, "%Y-%m-%d")
+        datetime.strptime(end_date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Định dạng ngày không hợp lệ. Phải là YYYY-MM-DD")
+    
+    # Thêm các task vào queue
+    with _group_scan_lock:
+        for profile_id in profile_ids:
+            task = {
+                "profile_id": profile_id,
+                "post_count": post_count,
+                "start_date": start_date,
+                "end_date": end_date
+            }
+            _group_scan_queue.append(task)
+    
+    # Bắt đầu xử lý queue (nếu chưa đang xử lý)
+    threading.Thread(target=_process_group_scan_queue, daemon=True).start()
+    
+    return {
+        "status": "ok",
+        "message": f"Đã thêm {len(profile_ids)} profile vào hàng chờ quét group",
+        "queue_length": len(_group_scan_queue),
+        "profiles": profile_ids
+    }
+
+@app.get("/scan-groups/status")
+def get_scan_groups_status() -> dict:
+    """Lấy trạng thái queue quét group"""
+    with _group_scan_lock:
+        return {
+            "processing": _group_scan_processing,
+            "queue_length": len(_group_scan_queue),
+            "queue": _group_scan_queue.copy()
+        }

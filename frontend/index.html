@@ -306,33 +306,50 @@
                 </p>
               </div>
 
-              <!-- Panel: Quét theo group (UI only - chưa nối API) -->
+              <!-- Panel: Quét theo group -->
               <div id="groupScanPanel" class="feed-panel" style="display:none;">
-                <div class="feed-panel-row">
-                  <div class="feed-duration feed-duration-left">
-                    <span class="feed-label">Số bài viết theo dõi</span>
-                    <input id="groupScanPostCountInput" type="number" min="0" value="0" placeholder="VD: 100" />
+                <div class="group-scan-form">
+                  <div class="form-group">
+                    <label for="groupScanPostCountInput" class="form-label">
+                      <span class="label-icon">📊</span>
+                      <span>Số bài viết theo dõi</span>
+                    </label>
+                    <input id="groupScanPostCountInput" type="number" min="0" value="0" placeholder="VD: 100" class="form-input" />
                   </div>
-                  <div class="feed-duration">
-                    <span class="feed-label">Từ (ngày/giờ)</span>
-                    <input id="groupScanStartDateInput" type="datetime-local" />
+                  
+                  <div class="form-group-row">
+                    <div class="form-group">
+                      <label for="groupScanStartDateInput" class="form-label">
+                        <span class="label-icon">📅</span>
+                        <span>Từ ngày</span>
+                      </label>
+                      <input id="groupScanStartDateInput" type="date" class="form-input form-input-date" />
+                    </div>
+                    
+                    <div class="form-group">
+                      <label for="groupScanEndDateInput" class="form-label">
+                        <span class="label-icon">📅</span>
+                        <span>Đến ngày</span>
+                      </label>
+                      <input id="groupScanEndDateInput" type="date" class="form-input form-input-date" />
+                    </div>
                   </div>
-                  <div class="feed-duration">
-                    <span class="feed-label">Đến (ngày/giờ)</span>
-                    <input id="groupScanEndDateInput" type="datetime-local" />
+                  
+                  <div class="form-actions">
+                    <button id="groupScanStartBtn" class="btn-success btn-primary-action" type="button">
+                      <span class="btn-icon">▶️</span>
+                      <span>Bắt đầu quét</span>
+                    </button>
+                    <button id="groupScanCancelBtn" class="btn-secondary" type="button">
+                      <span>Đóng</span>
+                    </button>
                   </div>
+                  
+                  <p class="hint">
+                    <span class="hint-icon">💡</span>
+                    Nhập số bài viết theo dõi và khoảng thời gian để quét bài viết từ các group đã cấu hình.
+                  </p>
                 </div>
-                <div class="feed-panel-row">
-                  <textarea id="groupScanUrlInput"
-                    placeholder="Nhập URL group (mỗi dòng 1 URL). VD:
-https://www.facebook.com/groups/tuyendungkisuIT
-https://www.facebook.com/groups/abc123"></textarea>
-                </div>
-                <div class="feed-panel-row feed-panel-actions">
-                  <button id="groupScanStartBtn" class="btn-success" type="button">Chạy</button>
-                  <button id="groupScanCancelBtn" class="btn-secondary" type="button">Đóng</button>
-                </div>
-                <p class="hint">Chỉ UI để nhập URL + khoảng thời gian (chưa nối API).</p>
               </div>
 
               <div id="profileList" class="profile-list empty-state-box">

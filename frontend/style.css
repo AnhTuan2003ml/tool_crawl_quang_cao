@@ -386,18 +386,55 @@ button {
 
 /* Loading state (spinner) */
 .btn-loading {
-  opacity: 0.9;
-  cursor : not-allowed;
+  opacity: 0.85;
+  cursor : not-allowed !important;
+  position: relative;
+  pointer-events: none;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
-.btn-loading::after {
+/* Spinner hiển thị trước text */
+.btn-loading::before {
   content         : "";
-  width           : 14px;
-  height          : 14px;
+  display         : inline-block;
+  width           : 18px;
+  height          : 18px;
   border-radius   : 50%;
-  border          : 2px solid rgba(255, 255, 255, 0.55);
+  border          : 3px solid rgba(255, 255, 255, 0.25);
   border-top-color: rgba(255, 255, 255, 1);
-  animation       : btnSpin 0.9s linear infinite;
+  border-right-color: rgba(255, 255, 255, 0.9);
+  animation       : btnSpin 0.7s linear infinite;
+  flex-shrink     : 0;
+  order           : -1; /* Đặt spinner lên trước text */
+  margin-right    : 0; /* Gap sẽ được xử lý bởi gap của button */
+  box-shadow      : 0 0 8px rgba(255, 255, 255, 0.3);
+}
+
+/* Spinner cho button secondary (màu khác) */
+.btn-secondary.btn-loading::before {
+  border          : 3px solid rgba(107, 114, 128, 0.25);
+  border-top-color: rgba(107, 114, 128, 1);
+  border-right-color: rgba(107, 114, 128, 0.9);
+  box-shadow      : 0 0 8px rgba(107, 114, 128, 0.3);
+}
+
+/* Spinner cho button danger */
+.btn-danger.btn-loading::before {
+  border          : 3px solid rgba(239, 68, 68, 0.25);
+  border-top-color: rgba(239, 68, 68, 1);
+  border-right-color: rgba(239, 68, 68, 0.9);
+  box-shadow      : 0 0 8px rgba(239, 68, 68, 0.3);
+}
+
+/* Spinner cho button orange */
+.btn-orange.btn-loading::before {
+  border          : 3px solid rgba(249, 115, 22, 0.25);
+  border-top-color: rgba(249, 115, 22, 1);
+  border-right-color: rgba(249, 115, 22, 0.9);
+  box-shadow      : 0 0 8px rgba(249, 115, 22, 0.3);
 }
 
 @keyframes btnSpin {
@@ -408,6 +445,13 @@ button {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* Đảm bảo button có flex layout khi loading */
+button.btn-loading {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
 }
 
 button::before {
@@ -957,6 +1001,142 @@ tbody tr.filtered-out {
   height   : 32px;
   padding  : 6px 12px;
   font-size: 13px;
+}
+
+/* Group Scan Form Styles */
+.group-scan-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 4px 0;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.form-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.label-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.form-input {
+  width: 100%;
+  height: 40px;
+  padding: 10px 14px;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--card-bg);
+  transition: all 0.2s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.form-input:hover {
+  border-color: #d1d5db;
+}
+
+.form-input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.form-input-date {
+  cursor: pointer;
+}
+
+.form-input-date::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.form-input-date::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.btn-primary-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  font-weight: 600;
+  min-width: 140px;
+  justify-content: center;
+}
+
+.btn-primary-action .btn-icon {
+  font-size: 14px;
+}
+
+.hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-top: 4px;
+  padding: 10px 12px;
+  background: rgba(99, 102, 241, 0.05);
+  border-radius: 8px;
+  border-left: 3px solid var(--primary);
+}
+
+.hint-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Responsive cho form-group-row */
+@media (max-width: 600px) {
+  .form-group-row {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .form-actions {
+    flex-direction: column;
+  }
+  
+  .btn-primary-action,
+  .form-actions button {
+    width: 100%;
+  }
 }
 
 .setting-card-header {

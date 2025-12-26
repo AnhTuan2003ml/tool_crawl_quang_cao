@@ -336,11 +336,7 @@ def get_posts_from_page(page_id, profile_id, start_date=None, end_date=None, lim
     if cookies:
         headers = {
             "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-<<<<<<< HEAD
             "accept-encoding": "gzip, deflate",
-=======
-            "accept-encoding": "gzip",
->>>>>>> 47548db80926848e9113abc40e4cadc1ef0cb3b6
             "accept-language": "en,vi;q=0.9,en-US;q=0.8",
             "cookie": cookies,
             "referer": "https://developers.facebook.com/",
@@ -488,8 +484,15 @@ def get_posts_from_page(page_id, profile_id, start_date=None, end_date=None, lim
             print(f"❌ Không thể import get_id_from_url từ get_id.py: {e}")
             return all_posts
 
-        # Tạo thư mục lưu trữ nếu chưa có
-        post_ids_dir = backend_dir / "data" / "post_ids"
+        # Tạo thư mục lưu trữ nếu chưa có (dùng get_data_dir để đúng cả khi chạy .exe)
+        try:
+            from core.paths import get_data_dir
+            post_ids_dir = get_data_dir() / "post_ids"
+        except ImportError:
+            # Fallback nếu không import được core.paths
+            current_file = Path(__file__).resolve()
+            backend_dir = current_file.parent.parent
+            post_ids_dir = backend_dir / "data" / "post_ids"
         post_ids_dir.mkdir(parents=True, exist_ok=True)
 
         # File để lưu kết quả cho profile này
