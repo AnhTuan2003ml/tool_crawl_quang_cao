@@ -2493,6 +2493,11 @@ function exportToExcel() {
           v: userId,
           l: { Target: profileUrl, Tooltip: `Xem profile Facebook của ${userId}` }
         });
+      }
+      // Cột thứ 5 (index 4) là Comment - lấy nội dung thực tế thay vì icon mắt
+      else if (colIndex === 4) {
+        const commentContent = td.dataset.comment || '';
+        row.push(commentContent);
       } else {
         row.push(td.textContent);
       }
@@ -2506,14 +2511,38 @@ function exportToExcel() {
 
   // Đặt độ rộng cột
   ws['!cols'] = [
-    { wch: 18 }, // ID Bài Post
+    { wch: 20 }, // ID Bài Post
     { wch: 18 }, // ID User
     { wch: 20 }, // Name
     { wch: 12 }, // React
-    { wch: 12 }, // Comment
+    { wch: 40 }, // Comment - tăng độ rộng cho nội dung comment
     { wch: 20 }, // Time
     { wch: 15 }  // Type
   ];
+
+  // Thiết lập wrap text cho cột Comment (cột E, index 4)
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let row = range.s.r; row <= range.e.r; row++) {
+    const cellAddress = XLSX.utils.encode_cell({ r: row, c: 4 }); // Cột 4 là Comment
+    if (ws[cellAddress]) {
+      if (!ws[cellAddress].s) ws[cellAddress].s = {};
+      ws[cellAddress].s.alignment = { wrapText: true, vertical: 'top' };
+    }
+  }
+
+  // Đặt chiều cao hàng tự động cho comments dài
+  const rowsHeight = [];
+  data.forEach((row, index) => {
+    if (index > 0 && row[4]) { // Bỏ qua header và kiểm tra cột comment
+      const commentText = row[4];
+      const lines = commentText.split('\n').length;
+      const estimatedHeight = Math.max(15, lines * 12); // Chiều cao tối thiểu 15, mỗi dòng 12
+      rowsHeight.push({ hpt: estimatedHeight });
+    } else {
+      rowsHeight.push({ hpt: 15 }); // Chiều cao mặc định
+    }
+  });
+  ws['!rows'] = rowsHeight;
 
   // Thêm worksheet vào workbook
   XLSX.utils.book_append_sheet(wb, ws, 'Danh sách quét');
