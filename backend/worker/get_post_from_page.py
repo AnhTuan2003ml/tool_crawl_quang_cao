@@ -336,7 +336,11 @@ def get_posts_from_page(page_id, profile_id, start_date=None, end_date=None, lim
     if cookies:
         headers = {
             "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+<<<<<<< HEAD
             "accept-encoding": "gzip, deflate",
+=======
+            "accept-encoding": "gzip",
+>>>>>>> 47548db80926848e9113abc40e4cadc1ef0cb3b6
             "accept-language": "en,vi;q=0.9,en-US;q=0.8",
             "cookie": cookies,
             "referer": "https://developers.facebook.com/",
@@ -471,6 +475,105 @@ def get_posts_from_page(page_id, profile_id, start_date=None, end_date=None, lim
             break
     
     print(f"\n✅ Hoàn thành! Tổng cộng lấy được {len(all_posts)} posts phù hợp điều kiện")
+
+    # Tự động gọi get_id.py cho từng post_id và lưu kết quả
+    if all_posts:
+        print(f"\n🔍 Bắt đầu lấy chi tiết cho {len(all_posts)} posts...")
+
+        # Import function từ get_id.py
+        try:
+            from get_id import get_id_from_url
+            print("✅ Đã import get_id_from_url thành công")
+        except ImportError as e:
+            print(f"❌ Không thể import get_id_from_url từ get_id.py: {e}")
+            return all_posts
+
+        # Tạo thư mục lưu trữ nếu chưa có
+        post_ids_dir = backend_dir / "data" / "post_ids"
+        post_ids_dir.mkdir(parents=True, exist_ok=True)
+
+        # File để lưu kết quả cho profile này
+        post_ids_file = post_ids_dir / f"{profile_id}.json"
+        print(f"📁 Sẽ lưu vào file: {post_ids_file}")
+
+        # Load dữ liệu hiện có (nếu file đã tồn tại)
+        existing_data = []
+        if post_ids_file.exists():
+            try:
+                with open(post_ids_file, 'r', encoding='utf-8') as f:
+                    existing_data = json.load(f)
+                print(f"📂 Đã load {len(existing_data)} posts hiện có từ {post_ids_file}")
+            except Exception as e:
+                print(f"⚠️ Không thể đọc file hiện có: {e}")
+
+        # Dictionary để track posts đã xử lý
+        existing_post_ids = {item.get('id') for item in existing_data if item.get('id')}
+
+        processed_count = 0
+        new_posts = []
+
+        for post in all_posts:
+            post_id = post.get('id')
+            if not post_id:
+                continue
+
+            # Bỏ qua nếu đã xử lý rồi
+            if post_id in existing_post_ids:
+                print(f"⏭️ Bỏ qua post_id {post_id} (đã xử lý)")
+                continue
+
+            # Tạo URL từ post_id
+            # Format: https://www.facebook.com/{page_id}/posts/{post_id_split}
+            if '_' in post_id:
+                page_part, post_part = post_id.split('_', 1)
+                post_url = f"https://www.facebook.com/{page_part}/posts/{post_part}"
+            else:
+                # Fallback: dùng URL generic
+                post_url = f"https://www.facebook.com/{post_id}"
+
+            print(f"🔍 Đang xử lý post_id: {post_id}")
+            print(f"   URL: {post_url}")
+
+            try:
+                # Gọi get_id_from_url
+                print(f"   🔍 Gọi get_id_from_url với URL: {post_url}")
+                result = get_id_from_url(post_url, profile_id)
+                print(f"   📋 Kết quả từ get_id_from_url: {result}")
+
+                if result and result.get('post_id'):
+                    # Tạo object theo định dạng yêu cầu
+                    post_data = {
+                        "id": result['post_id'],
+                        "flag": "vàng",  # Mặc định là "vàng" theo yêu cầu
+                        "text": result.get('post_text', ''),
+                        "owning_profile": result.get('owning_profile')
+                    }
+
+                    new_posts.append(post_data)
+                    processed_count += 1
+                    print(f"   ✅ Đã xử lý thành công - tạo post_data: {post_data}")
+
+                else:
+                    print(f"   ❌ Không thể lấy thông tin cho post_id: {post_id} - result: {result}")
+
+            except Exception as e:
+                import traceback
+                print(f"   ❌ Lỗi khi xử lý post_id {post_id}: {e}")
+                print(f"   🔍 Traceback: {traceback.format_exc()}")
+
+        # Gộp dữ liệu mới với dữ liệu hiện có
+        all_post_data = existing_data + new_posts
+
+        # Lưu file JSON
+        if new_posts:
+            with open(post_ids_file, 'w', encoding='utf-8') as f:
+                json.dump(all_post_data, f, ensure_ascii=False, indent=2)
+
+            print(f"\n💾 Đã lưu {len(new_posts)} posts mới vào: {post_ids_file}")
+            print(f"   Tổng cộng: {len(all_post_data)} posts")
+        else:
+            print(f"\n📋 Không có posts mới để lưu")
+
     return all_posts
 
 
@@ -513,37 +616,37 @@ if __name__ == "__main__":
         for post in posts[:5]:
             print(f"      - {post['id']} (created: {post['created_time']})")
     
-    # Lưu ra file JSON (dùng get_data_dir để đúng cả khi chạy .exe)
-    try:
-        from core.paths import get_data_dir
-        output_dir = get_data_dir()
-    except ImportError:
-        # Fallback nếu không import được core.paths
-        current_file = Path(__file__).resolve()
-        backend_dir = current_file.parent.parent
-        output_dir = backend_dir / "data"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Tạo tên file dựa trên page_id và ngày
-    filename = f"{page_id}_posts_{start_date.replace('/', '-')}_to_{end_date.replace('/', '-')}.json"
-    filepath = output_dir / filename
-    
-    # Tạo dữ liệu để lưu
-    output_data = {
-        "page_id": page_id,
-        "profile_id": profile_id,
-        "start_date": start_date,
-        "end_date": end_date,
-        "total_posts": len(posts),
-        "posts": posts
-    }
-    
-    # Lưu file JSON
-    with filepath.open("w", encoding="utf-8") as f:
-        json.dump(output_data, f, ensure_ascii=False, indent=2)
-    
-    print(f"\n💾 Đã lưu kết quả vào: {filepath}")
-    print(f"   Tổng số posts: {len(posts)}")
+    # # Lưu ra file JSON (dùng get_data_dir để đúng cả khi chạy .exe)
+    # try:
+    #     from core.paths import get_data_dir
+    #     output_dir = get_data_dir()
+    # except ImportError:
+    #     # Fallback nếu không import được core.paths
+    #     current_file = Path(__file__).resolve()
+    #     backend_dir = current_file.parent.parent
+    #     output_dir = backend_dir / "data"
+    # output_dir.mkdir(parents=True, exist_ok=True)
+    #
+    # # Tạo tên file dựa trên page_id và ngày
+    # filename = f"{page_id}_posts_{start_date.replace('/', '-')}_to_{end_date.replace('/', '-')}.json"
+    # filepath = output_dir / filename
+    #
+    # # Tạo dữ liệu để lưu
+    # output_data = {
+    #     "page_id": page_id,
+    #     "profile_id": profile_id,
+    #     "start_date": start_date,
+    #     "end_date": end_date,
+    #     "total_posts": len(posts),
+    #     "posts": posts
+    # }
+    #
+    # # Lưu file JSON
+    # with filepath.open("w", encoding="utf-8") as f:
+    #     json.dump(output_data, f, ensure_ascii=False, indent=2)
+    #
+    # print(f"\n💾 Đã lưu kết quả vào: {filepath}")
+    # print(f"   Tổng số posts: {len(posts)}")
     
     # Lấy chỉ post IDs
     post_ids = get_post_ids_from_page(page_id, profile_id, start_date, end_date)

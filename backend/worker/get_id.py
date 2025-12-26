@@ -577,13 +577,13 @@ def get_id_from_url(url, profile_id):
 
 if __name__ == "__main__":
     # Ví dụ sử dụng hàm get_id_from_url (tổng hợp)
-    profile_id = "621e1f5d-0c42-481e-9ddd-7abaafce68ed"
+    profile_id = "b77da63d-af55-43c2-ab7f-364250b20e30"
     
     # Test với group URL
     # group_url = "https://www.facebook.com/groups/987870664956102/"
     # result = get_id_from_url(group_url, profile_id)
     
     # Test với video/post URL
-    url = "https://www.facebook.com/share/p/18AKfiXuZM/"
+    url = "https://www.facebook.com/445142479459290_1856605311646326"
     result = get_id_from_url(url, profile_id)
     print("heLLO" ,result)
