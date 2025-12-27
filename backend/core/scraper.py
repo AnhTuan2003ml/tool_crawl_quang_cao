@@ -62,7 +62,13 @@ class SimpleBot:
         # Dùng list để pass by reference cho helper function
         active_time_list = [0.0]
         last_check_time_list = [time.time()]
+        wall_time_start = time.time()  # Thời gian bắt đầu thực tế (wall clock)
+        last_log_time = wall_time_start  # Thời gian in log cuối cùng
         profile_id = getattr(self.fb, 'profile_id', None)
+        
+        # 🔍 DEBUG: Log thời gian nhận được
+        if duration:
+            print(f"⏱️ [SCRAPER] {profile_id} Bắt đầu chạy với duration={duration}s ({duration/60:.2f} phút)")
         
         while True:
             try:
@@ -76,46 +82,66 @@ class SimpleBot:
                         break
                     raise
 
-                # Chỉ bắt đầu đo elapsed SAU checkpoint (vì checkpoint có thể wait khi pause)
-                now = time.time()
-                elapsed_since_last_check = now - last_check_time_list[0]
-                last_check_time_list[0] = now
-
-                # Check pause: nếu không pause thì cộng thời gian đã trôi qua vào active_time
+                # Check pause/stop trước khi xử lý
                 stop, paused, _reason = control_state.check_flags(profile_id)
                 if stop:
                     print("🛑 Dừng bot do STOP flag")
                     break
                 
-                # Chỉ tăng active_time khi KHÔNG pause (đóng băng timer khi pause)
+                # Nếu đang pause thì đợi và không tính thời gian
                 if paused:
-                    # Nếu vẫn đang pause (hiếm), reset mốc thời gian để không cộng dồn
-                    last_check_time_list[0] = time.time()
+                    control_state.wait_if_paused(profile_id, sleep_seconds=0.5)
                     continue
-                active_time_list[0] += elapsed_since_last_check
+                
+                # 🔍 DEBUG: In bộ đếm thời gian mỗi 10 giây
+                now_wall = time.time()
+                if now_wall - last_log_time >= 10.0:  # In mỗi 10 giây
+                    wall_time_elapsed = now_wall - wall_time_start
+                    if duration:
+                        remaining = max(0, duration - active_time_list[0])
+                        print(f"⏱️ [SCRAPER] {profile_id} Đang chạy: active_time={active_time_list[0]:.1f}s/{duration}s (còn {remaining:.1f}s), wall_time={wall_time_elapsed:.1f}s")
+                    else:
+                        print(f"⏱️ [SCRAPER] {profile_id} Đang chạy: active_time={active_time_list[0]:.1f}s, wall_time={wall_time_elapsed:.1f}s")
+                    last_log_time = now_wall
                 
                 # 1. Kiểm tra thời gian chạy (dùng active_time thay vì wall clock)
+                # active_time bao gồm: thời gian xử lý bài + thời gian nghỉ giữa các bài (12-20s)
                 if duration and active_time_list[0] >= duration:
-                    print(f"⏳ Hết giờ chạy (đã chạy {active_time_list[0]:.1f}s / {duration}s).")
+                    wall_time_elapsed = time.time() - wall_time_start
+                    print(f"⏳ Hết giờ chạy (đã chạy {active_time_list[0]:.1f}s / {duration}s, wall_time={wall_time_elapsed:.1f}s).")
                     break
                 
                 # ============================================================
                 # CHIẾN THUẬT: SCAN & SCROLL (ĐỒNG BỘ)
                 # ============================================================
                 
+                # Đo thời gian xử lý bài (scan + process) để tính vào active_time
+                process_start = time.time()
+                
                 # Bot cuộn và trả về bài viết (nếu có) cùng loại (green/yellow)
                 post, post_type = self.fb.scan_while_scrolling()
 
                 if post:
                     self.fb.process_post(post, post_type)
+                    process_end = time.time()
+                    process_time = process_end - process_start
+                    # Tính thời gian xử lý bài vào active_time
+                    active_time_list[0] += process_time
+                    last_check_time_list[0] = process_end
 
                     delay = random.uniform(12.0, 20.0)
-                    print(f"😴 Nghỉ sau khi xử lý bài {delay:.1f}s")
+                    print(f"😴 Nghỉ sau khi xử lý bài {delay:.1f}s (đã xử lý {process_time:.1f}s)")
                     # Sleep với pause check: chỉ tính thời gian không pause vào active_time
                     self._sleep_with_pause_check(delay, profile_id, active_time_list, last_check_time_list)
                 else:
+                    process_end = time.time()
+                    process_time = process_end - process_start
+                    # Tính thời gian scan (dù không có bài) vào active_time
+                    active_time_list[0] += process_time
+                    last_check_time_list[0] = process_end
+
                     delay = random.uniform(3.0, 5.0)
-                    print(f"😴 Không có bài – nghỉ {delay:.1f}s")
+                    print(f"😴 Không có bài – nghỉ {delay:.1f}s (đã scan {process_time:.1f}s)")
                     # Sleep với pause check
                     self._sleep_with_pause_check(delay, profile_id, active_time_list, last_check_time_list)
 

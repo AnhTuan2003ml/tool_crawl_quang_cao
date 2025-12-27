@@ -125,7 +125,7 @@
                     <span>✗</span>
                   </button>
                 <!-- Export Button - Bên phải trong hàng lọc thời gian -->
-                <button id="exportExcelBtn" class="btn-success export-btn-inline-time">
+                <button id="exportExcelBtn" class="btn-primary export-btn-inline-time">
                   <span class="btn-icon">📊</span>
                   <span>Xuất Excel</span>
                 </button>
@@ -155,7 +155,7 @@
                     <!-- Files will be populated here -->
                   </div>
                   <div class="file-selector-actions">
-                    <button id="cancelFileSelection" class="btn-secondary">Hủy</button>
+                    <button id="cancelFileSelection" class="btn-primary">Hủy</button>
                   </div>
                 </div>
               </div>
@@ -230,11 +230,11 @@
                 </div>
                 <div class="setting-card-actions">
                   <button id="runAllInfoBtn" class="btn-primary" type="button">Lấy thông tin toàn bộ</button>
-                  <button id="runSelectedInfoBtn" class="btn-secondary" type="button">Lấy thông tin profile đã chọn</button>
-                  <button id="scanPostsSettingBtn" class="btn-success" type="button">Quét bài viết</button>
-                  <button id="scanGroupSettingBtn" class="btn-yellow" type="button">Quét theo group</button>
+                  <button id="runSelectedInfoBtn" class="btn-primary" type="button">Lấy thông tin profile đã chọn</button>
+                  <button id="scanPostsSettingBtn" class="btn-primary" type="button">Quét bài viết</button>
+                  <button id="scanGroupSettingBtn" class="btn-primary" type="button">Quét theo group</button>
                   <button id="autoJoinGroupBtn" class="btn-primary" type="button">Tự động tham gia group</button>
-                  <button id="feedAccountSettingBtn" class="btn-nuoiacc" type="button">Nuôi acc</button>
+                  <button id="feedAccountSettingBtn" class="btn-primary" type="button">Nuôi acc</button>
                   <button id="stopAllSettingBtn" class="btn-danger" type="button">Dừng tất cả</button>
                 </div>
               </div>
@@ -248,13 +248,9 @@
                     <input type="radio" name="feedMode" value="search" />
                     <span>Search</span>
                   </label>
-                  <label class="feed-radio">
-                    <input type="radio" name="feedMode" value="feed+search" />
-                    <span>Feed+search</span>
-                  </label>
                   <div class="feed-duration">
                     <span class="feed-label">Chạy (phút)</span>
-                    <input id="feedRunMinutesInput" type="number" min="1" value="30" />
+                    <input id="feedRunMinutesInput" type="number" min="0.1" step="0.1" value="30" />
                   </div>
                   <div class="feed-duration">
                     <span class="feed-label">Thời gian lặp lại (phút)</span>
@@ -266,8 +262,8 @@
                     placeholder="Nhập text. VD: bắc ninh , bắc giang  |  hoặc: tuyển dụng bắc ninh , bắc giang"></textarea>
                 </div>
                 <div class="feed-panel-row feed-panel-actions">
-                  <button id="feedStartBtn" class="btn-success" type="button">Chạy</button>
-                  <button id="feedCancelBtn" class="btn-secondary" type="button">Hủy</button>
+                  <button id="feedStartBtn" class="btn-primary" type="button">Chạy</button>
+                  <button id="feedCancelBtn" class="btn-primary" type="button">Hủy</button>
                 </div>
                 <p class="hint">
                   Rule like: bài phải có (tuyển dụng/tuyển gấp/tuyển nhân viên) <b>và</b> có (bắc ninh <b>hoặc</b> bắc
@@ -288,7 +284,7 @@
                   </label>
                   <div class="feed-duration">
                     <span class="feed-label">Chạy (phút)</span>
-                    <input id="scanRunMinutesInput" type="number" min="1" value="30" />
+                    <input id="scanRunMinutesInput" type="number" min="0.1" step="0.1" value="30" />
                   </div>
                   <div class="feed-duration">
                     <span class="feed-label">Thời gian lặp lại (phút)</span>
@@ -300,8 +296,8 @@
                     placeholder="Nhập text. VD: bắc ninh , bắc giang  |  hoặc: tuyển dụng bắc ninh , bắc giang"></textarea>
                 </div>
                 <div class="feed-panel-row feed-panel-actions">
-                  <button id="scanStartBtn" class="btn-success" type="button">Chạy</button>
-                  <button id="scanCancelBtn" class="btn-secondary" type="button">Hủy</button>
+                  <button id="scanStartBtn" class="btn-primary" type="button">Chạy</button>
+                  <button id="scanCancelBtn" class="btn-primary" type="button">Hủy</button>
                 </div>
                 <p class="hint">
                   Rule scan: bài phải có keyword mặc định (tuyển dụng/lương/...) <b>và</b> có ít nhất 1 cụm từ trong
@@ -340,11 +336,11 @@
                   </div>
                   
                   <div class="form-actions">
-                    <button id="groupScanStartBtn" class="btn-success btn-primary-action" type="button">
+                    <button id="groupScanStartBtn" class="btn-primary btn-primary-action" type="button">
                       <span class="btn-icon">▶️</span>
                       <span>Bắt đầu quét</span>
                     </button>
-                    <button id="groupScanCancelBtn" class="btn-secondary" type="button">
+                    <button id="groupScanCancelBtn" class="btn-primary" type="button">
                       <span>Đóng</span>
                     </button>
                   </div>
@@ -361,7 +357,7 @@
               </div>
 
               <div class="add-profile-row">
-                <button id="addProfileRowBtn" class="btn-success" type="button">+ Thêm profile</button>
+                <button id="addProfileRowBtn" class="btn-primary" type="button">+ Thêm profile</button>
               </div>
             </div>
           </div>

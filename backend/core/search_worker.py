@@ -243,23 +243,51 @@ class HumanLikeBot(SimpleBot):
                 print(f"⚠️ [ACCOUNT_STATUS] Không kiểm tra được trạng thái account: {e}")
 
         # ACTIVE TIME tracking (chỉ tăng khi không pause)
+        # active_time bao gồm: thời gian xử lý bài + thời gian nghỉ giữa các bài (12-20s)
         active_time = 0.0
+        wall_time_start = time.time()  # Thời gian bắt đầu thực tế (wall clock)
+        last_log_time = wall_time_start  # Thời gian in log cuối cùng
         next_notify_active_time = _random_notification_interval_seconds()
+        profile_id = getattr(self.fb, 'profile_id', None)
+
+        # 🔍 DEBUG: Log thời gian nhận được
+        if duration:
+            print(f"⏱️ [SEARCH_WORKER] {profile_id} Bắt đầu chạy với duration={duration}s ({duration/60:.2f} phút)")
 
         while True:
             try:
+                # 🔍 DEBUG: In bộ đếm thời gian mỗi 10 giây
+                now_wall = time.time()
+                if now_wall - last_log_time >= 10.0:  # In mỗi 10 giây
+                    wall_time_elapsed = now_wall - wall_time_start
+                    if duration:
+                        remaining = max(0, duration - active_time)
+                        print(f"⏱️ [SEARCH_WORKER] {profile_id} Đang chạy: active_time={active_time:.1f}s/{duration}s (còn {remaining:.1f}s), wall_time={wall_time_elapsed:.1f}s")
+                    else:
+                        print(f"⏱️ [SEARCH_WORKER] {profile_id} Đang chạy: active_time={active_time:.1f}s, wall_time={wall_time_elapsed:.1f}s")
+                    last_log_time = now_wall
+
                 # Check duration bằng ACTIVE TIME
+                # active_time bao gồm cả thời gian nghỉ giữa các bài viết
                 if duration and active_time >= duration:
-                    print("⏳ Hết giờ chạy.")
+                    wall_time_elapsed = time.time() - wall_time_start
+                    print(f"⏳ Hết giờ chạy (đã chạy {active_time:.1f}s / {duration}s, wall_time={wall_time_elapsed:.1f}s).")
                     break
+
+                # Đo thời gian xử lý bài (scan + process) để tính vào active_time
+                process_start = time.time()
 
                 post, post_type = self.fb.scan_while_scrolling()
 
                 if post:
                     self.fb.process_post(post, post_type)
+                    process_end = time.time()
+                    process_time = process_end - process_start
+                    # Tính thời gian xử lý bài vào active_time
+                    active_time += process_time
 
                     delay = random.uniform(12.0, 20.0)
-                    print(f"😴 Nghỉ sau khi xử lý bài {delay:.1f}s")
+                    print(f"😴 Nghỉ sau khi xử lý bài {delay:.1f}s (đã xử lý {process_time:.1f}s)")
                     try:
                         smart_sleep(delay, self.fb.profile_id)
                         # Chỉ tăng active_time khi smart_sleep return bình thường (không pause)
@@ -280,8 +308,13 @@ class HumanLikeBot(SimpleBot):
                             if "EMERGENCY_STOP" in str(e):
                                 raise
                 else:
+                    process_end = time.time()
+                    process_time = process_end - process_start
+                    # Tính thời gian scan (dù không có bài) vào active_time
+                    active_time += process_time
+
                     delay = random.uniform(3.0, 5.0)
-                    print(f"😴 Không có bài – nghỉ {delay:.1f}s")
+                    print(f"😴 Không có bài – nghỉ {delay:.1f}s (đã scan {process_time:.1f}s)")
                     try:
                         smart_sleep(delay, self.fb.profile_id)
                         # Chỉ tăng active_time khi smart_sleep return bình thường (không pause)
@@ -412,7 +445,7 @@ def search_and_like(profile_id: str, search_text: str, duration_minutes: int = 3
     try:
         # 1. Tạo URL Tìm kiếm
         encoded_query = urllib.parse.quote_plus(search_text)
-        target_url = f"https://www.facebook.com/search/posts?q={encoded_query}"
+        target_url = f"https://www.facebook.com/search/top?q={encoded_query}"
         
         print(f"🔍 [Search] Từ khóa: '{search_text}'")
         print(f"🔗 Link: {target_url}")

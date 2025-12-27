@@ -34,7 +34,7 @@ class AppRunner:
         # Vẫn dùng core/browser.py để scan/like/share/bắt id.
         if self.mode == "search" and self.text:
             q = quote_plus(self.text)
-            self.target_url = f"https://www.facebook.com/search/posts/?q={q}"
+            self.target_url = f"https://www.facebook.com/search/top/?q={q}"
 
         # Ưu tiên giá trị truyền từ API; fallback cấu hình; cuối cùng là default.
         self.RUN_MINUTES = self._coerce_positive_int(

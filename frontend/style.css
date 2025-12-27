@@ -2362,7 +2362,7 @@ td:nth-child(5) {
   font-size      : 16px;
   font-weight    : 500;
   border-radius  : 6px;
-  background     : linear-gradient(135deg, var(--success) 0%, #059669 100%);
+  background     : linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
   color          : white;
   transition     : all 0.2s ease;
   cursor         : pointer;
@@ -2372,12 +2372,12 @@ td:nth-child(5) {
   width          : 200px;
   justify-content: center;
   margin-left    : auto;
-  box-shadow     : 0 2px 6px rgba(16, 185, 129, 0.15);
+  box-shadow     : 0 2px 6px rgba(99, 102, 241, 0.15);
   border         : none;
 }
 
 .export-btn-inline-time:hover {
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
   transform : translateY(-1px);
 }
 

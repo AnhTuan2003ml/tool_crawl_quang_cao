@@ -163,8 +163,8 @@ def _prune_bot_processes() -> None:
 
 def _run_bot_profile_loop(
     profile_id: str,
-    run_minutes: int,
-    rest_minutes: int,
+    run_minutes: float,  # Hỗ trợ số thập phân
+    rest_minutes: float,  # Hỗ trợ số thập phân
     text: str,
     mode: str,
 ) -> None:
@@ -186,17 +186,22 @@ def _run_bot_profile_loop(
     t = str(text or "").strip()
     if m == "search" and t:
         q = quote_plus(t)
-        target_url = f"https://www.facebook.com/search/posts/?q={q}"
+        target_url = f"https://www.facebook.com/search/top/?q={q}"
 
-    run_m = int(run_minutes or 0)
-    rest_m = int(rest_minutes or 0)
+    # Hỗ trợ số thập phân (0.5 phút = 30 giây)
+    run_m = float(run_minutes or 0)
+    rest_m = float(rest_minutes or 0)
     if run_m <= 0:
-        run_m = int(getattr(cfg, "run_minutes", 30) or 30)
+        run_m = float(getattr(cfg, "run_minutes", 30) or 30)
     if rest_m <= 0:
-        rest_m = int(getattr(cfg, "rest_minutes", 120) or 120)
+        rest_m = float(getattr(cfg, "rest_minutes", 120) or 120)
 
-    duration_seconds = max(1, run_m * 60)
-    rest_seconds = max(1, rest_m * 60)
+    duration_seconds = max(1, int(run_m * 60))
+    rest_seconds = max(1, int(rest_m * 60))
+
+    # 🔍 DEBUG: Log thời gian đã parse
+    print(f"⏱️ [{pid}] Worker nhận: run_minutes={run_minutes} -> run_m={run_m} phút -> duration_seconds={duration_seconds}s")
+    print(f"⏱️ [{pid}] Worker nhận: rest_minutes={rest_minutes} -> rest_m={rest_m} phút -> rest_seconds={rest_seconds}s")
 
     try:
         while True:
@@ -367,8 +372,8 @@ def _run_feed_worker(
     profile_id: str,
     mode: str,
     text: str,
-    run_minutes: int,
-    rest_minutes: int,
+    run_minutes: float,  # Hỗ trợ số thập phân
+    rest_minutes: float,  # Hỗ trợ số thập phân
     all_profile_ids: Optional[list[str]] = None,
 ) -> None:
     """
@@ -379,10 +384,16 @@ def _run_feed_worker(
     try:
         from core.search_worker import feed_and_like, search_and_like
         m = str(mode or "feed").strip().lower()
-        run_m = int(run_minutes or 0)
-        rest_m = int(rest_minutes or 0)
+        # Hỗ trợ số thập phân (0.5 phút = 30 giây)
+        run_m = float(run_minutes or 0)
+        rest_m = float(rest_minutes or 0)
         if run_m <= 0:
-            run_m = 30
+            run_m = 30.0
+
+        # 🔍 DEBUG: Log thời gian đã parse
+        print(f"⏱️ [FEED] {profile_id} Worker nhận: run_minutes={run_minutes} (raw) -> run_m={run_m} phút = {run_m * 60} giây")
+        print(f"⏱️ [FEED] {profile_id} Worker nhận: rest_minutes={rest_minutes} (raw) -> rest_m={rest_m} phút = {rest_m * 60} giây")
+        print(f"⏱️ [FEED] {profile_id} Mode: {m}, Text: '{text}'")
 
         try:
             while True:
@@ -502,8 +513,8 @@ def _norm_profile_id(value: str) -> str:
 
 
 class RunRequest(BaseModel):
-    run_minutes: Optional[int] = None
-    rest_minutes: Optional[int] = None
+    run_minutes: Optional[float] = None  # Hỗ trợ số thập phân (0.5 phút = 30 giây)
+    rest_minutes: Optional[float] = None  # Hỗ trợ số thập phân
     profile_ids: Optional[list[str]] = None
     # text filter cho scan bài viết (dùng trong core/browser.py)
     text: Optional[str] = None
@@ -584,10 +595,16 @@ def run_bot(payload: Optional[RunRequest] = Body(None)) -> dict:
 
     started: list[str] = []
     skipped: list[dict] = []
-    run_m = int(run_minutes or 0) if payload else 0
-    rest_m = int(rest_minutes or 0) if payload else 0
+    # Hỗ trợ số thập phân (0.5 phút = 30 giây)
+    run_m = float(run_minutes or 0) if payload else 0.0
+    rest_m = float(rest_minutes or 0) if payload else 0.0
     txt = str(text or "")
     md = str(m or "feed")
+
+    # 🔍 DEBUG: Log thời gian nhận từ frontend
+    print(f"📥 [API /run] Nhận từ frontend: run_minutes={run_minutes} (raw), run_m={run_m} (parsed), rest_minutes={rest_minutes} (raw), rest_m={rest_m} (parsed)")
+    print(f"📥 [API /run] Thời gian chạy: {run_m} phút = {run_m * 60} giây, Thời gian nghỉ: {rest_m} phút = {rest_m * 60} giây")
+    print(f"📥 [API /run] Mode: {md}, Text: {txt}, Profiles: {pids}")
 
     with _bot_lock:
         _prune_bot_processes()
@@ -798,8 +815,8 @@ class FeedStartRequest(BaseModel):
     text: str = ""      # input text (địa điểm, hoặc query search)
     # backward-compat: giữ field cũ nếu frontend cũ còn gọi
     filter_text: str = ""
-    run_minutes: int = 30
-    rest_minutes: int = 0
+    run_minutes: float = 30.0  # Hỗ trợ số thập phân (0.5 phút = 30 giây)
+    rest_minutes: float = 0.0  # Hỗ trợ số thập phân
 
 
 class FeedStopRequest(BaseModel):
@@ -1262,12 +1279,17 @@ def feed_start(payload: FeedStartRequest) -> dict:
     # ✅ Cho phép chạy ngay cả khi thiếu cookie/access_token (không bắt buộc)
     _validate_profiles_requirements(pids, require_cookie=False, require_access_token=False)
 
-    run_minutes = int(payload.run_minutes or 0)
+    # Hỗ trợ số thập phân (0.5 phút = 30 giây)
+    run_minutes = float(payload.run_minutes or 0)
     if run_minutes <= 0:
         raise HTTPException(status_code=400, detail="run_minutes phải > 0")
-    rest_minutes = int(payload.rest_minutes or 0)
+    rest_minutes = float(payload.rest_minutes or 0)
     if rest_minutes < 0:
         raise HTTPException(status_code=400, detail="rest_minutes phải >= 0")
+
+    # 🔍 DEBUG: Log thời gian nhận từ frontend
+    print(f"📥 [API /feed/start] Nhận từ frontend: run_minutes={payload.run_minutes} (raw), run_minutes={run_minutes} (parsed), rest_minutes={payload.rest_minutes} (raw), rest_minutes={rest_minutes} (parsed)")
+    print(f"📥 [API /feed/start] Thời gian chạy: {run_minutes} phút = {run_minutes * 60} giây, Thời gian nghỉ: {rest_minutes} phút = {rest_minutes * 60} giây")
 
     started: list[str] = []
     skipped: list[dict] = []
@@ -1381,12 +1403,12 @@ class FrontendStateRequest(BaseModel):
     selected_profiles: Optional[Dict[str, bool]] = None
     feed_mode: Optional[str] = None
     feed_text: Optional[str] = None
-    feed_run_minutes: Optional[int] = None
-    feed_rest_minutes: Optional[int] = None
+    feed_run_minutes: Optional[float] = None  # Hỗ trợ số thập phân
+    feed_rest_minutes: Optional[float] = None  # Hỗ trợ số thập phân
     scan_mode: Optional[str] = None
     scan_text: Optional[str] = None
-    scan_run_minutes: Optional[int] = None
-    scan_rest_minutes: Optional[int] = None
+    scan_run_minutes: Optional[float] = None  # Hỗ trợ số thập phân
+    scan_rest_minutes: Optional[float] = None  # Hỗ trợ số thập phân
     group_scan_post_count: Optional[int] = None
     group_scan_start_date: Optional[str] = None
     group_scan_end_date: Optional[str] = None
@@ -2387,3 +2409,4 @@ def get_scan_groups_status() -> dict:
             "queue_length": len(_group_scan_queue),
             "queue": _group_scan_queue.copy()
         }
+

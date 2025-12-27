@@ -93,7 +93,6 @@ let addRowEl = null; // Row tạm để nhập profile mới
 let joinGroupPollTimer = null;
 let feedPollTimer = null;
 let groupScanPollTimer = null;
-let feedSearchLoopRunning = false; // Trạng thái đang chạy feed+search loop
 let scanBackendPollTimer = null; // Poll trạng thái bot runner để sync UI sau F5
 let isScanning = false; // Trạng thái đang quét
 let isPausedAll = false; // Trạng thái pause all (UI)
@@ -424,12 +423,12 @@ async function saveFrontendState() {
       selected_profiles: profileState.selected || {},
       feed_mode: document.querySelector('input[name="feedMode"]:checked')?.value || 'feed',
       feed_text: feedTextInput?.value || '',
-      feed_run_minutes: parseInt(feedRunMinutesInput?.value || '30', 10),
-      feed_rest_minutes: parseInt(feedRestMinutesInput?.value || '120', 10),
+      feed_run_minutes: parseFloat(feedRunMinutesInput?.value || '30') || 30,
+      feed_rest_minutes: parseFloat(feedRestMinutesInput?.value || '120') || 120,
       scan_mode: document.querySelector('input[name="scanMode"]:checked')?.value || 'feed',
       scan_text: scanTextInput?.value || '',
-      scan_run_minutes: parseInt(scanRunMinutesInput?.value || '30', 10),
-      scan_rest_minutes: parseInt(scanRestMinutesInput?.value || '120', 10),
+      scan_run_minutes: parseFloat(scanRunMinutesInput?.value || '30') || 30,
+      scan_rest_minutes: parseFloat(scanRestMinutesInput?.value || '120') || 120,
       group_scan_post_count: parseInt(groupScanPostCountInput?.value || '0', 10),
       group_scan_start_date: groupScanStartDateInput?.value || '',
       group_scan_end_date: groupScanEndDateInput?.value || '',
@@ -681,7 +680,7 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
 
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
-  saveBtn.className = 'btn-success';
+  saveBtn.className = 'btn-primary';
   saveBtn.textContent = 'Lưu';
 
   const removeBtn = document.createElement('button');
@@ -712,7 +711,7 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
 
   const groupSaveBtn = document.createElement('button');
   groupSaveBtn.type = 'button';
-  groupSaveBtn.className = 'btn-success';
+  groupSaveBtn.className = 'btn-primary';
   groupSaveBtn.textContent = 'Lưu groups';
 
   const groupCloseBtn = document.createElement('button');
@@ -775,7 +774,7 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
 
   const tokenSaveBtn = document.createElement('button');
   tokenSaveBtn.type = 'button';
-  tokenSaveBtn.className = 'btn-success';
+  tokenSaveBtn.className = 'btn-primary';
   tokenSaveBtn.textContent = 'Lưu token';
 
   const tokenCloseBtn = document.createElement('button');
@@ -840,7 +839,7 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
 
   const tokenBtn = document.createElement('button');
   tokenBtn.type = 'button';
-  tokenBtn.className = 'btn-success';
+  tokenBtn.className = 'btn-primary';
   tokenBtn.textContent = 'Cập nhật token' ;
 
   groupBtn.addEventListener('click', async () => {
@@ -1165,7 +1164,7 @@ function showAddProfileRow() {
 
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
-  saveBtn.className = 'btn-success';
+  saveBtn.className = 'btn-primary';
   saveBtn.textContent = 'Lưu';
   saveBtn.addEventListener('click', () => {
     const value = (input.value || '').trim();
@@ -1342,21 +1341,35 @@ async function runFeedAndWait(selected, text, runMinutes) {
         const skipped = res && Array.isArray(res.skipped) ? res.skipped.length : 0;
         showToast(`Đã chạy nuôi acc (feed): started=${started}, skipped=${skipped}`, 'success', 2000);
 
-        // Poll status để đợi feed hoàn thành
-        const pollTimer = setInterval(async () => {
-          try {
-            const st = await callBackendNoAlert('/feed/status', { method: 'GET' });
-            const running = (st && Array.isArray(st.running)) ? st.running : [];
-            const still = selected.filter((pid) => running.includes(pid));
-            if (still.length === 0) {
+        // Đợi một chút để backend kịp start
+        setTimeout(() => {
+          // Poll status để đợi feed hoàn thành
+          let pollCount = 0;
+          const maxPolls = Math.ceil((runMinutes * 60 + 60) / 4); // Tối đa = thời gian chạy + 1 phút buffer, poll mỗi 4 giây
+          const pollTimer = setInterval(async () => {
+            pollCount++;
+            if (pollCount > maxPolls) {
               clearInterval(pollTimer);
-              resolve();
+              reject(new Error('Feed quá lâu, đã timeout'));
+              return;
             }
-          } catch (e) {
-            clearInterval(pollTimer);
-            reject(new Error('Không lấy được trạng thái feed (kiểm tra FastAPI).'));
-          }
-        }, 4000);
+            
+            try {
+              const st = await callBackendNoAlert('/feed/status', { method: 'GET' });
+              if (st) {
+                const running = Array.isArray(st.running) ? st.running : [];
+                const still = selected.filter((pid) => running.includes(pid));
+                if (still.length === 0) {
+                  clearInterval(pollTimer);
+                  resolve();
+                }
+              }
+            } catch (e) {
+              clearInterval(pollTimer);
+              reject(new Error('Không lấy được trạng thái feed (kiểm tra FastAPI).'));
+            }
+          }, 4000);
+        }, 2000); // Đợi 2 giây trước khi bắt đầu poll
       })
       .catch((e) => {
         reject(new Error('Không chạy được feed (kiểm tra FastAPI).'));
@@ -1382,21 +1395,35 @@ async function runSearchAndWait(selected, text, runMinutes) {
         const skipped = res && Array.isArray(res.skipped) ? res.skipped.length : 0;
         showToast(`Đã chạy nuôi acc (search): started=${started}, skipped=${skipped}`, 'success', 2000);
 
-        // Poll status để đợi search hoàn thành
-        const pollTimer = setInterval(async () => {
-          try {
-            const st = await callBackendNoAlert('/feed/status', { method: 'GET' });
-            const running = (st && Array.isArray(st.running)) ? st.running : [];
-            const still = selected.filter((pid) => running.includes(pid));
-            if (still.length === 0) {
+        // Đợi một chút để backend kịp start
+        setTimeout(() => {
+          // Poll status để đợi search hoàn thành
+          let pollCount = 0;
+          const maxPolls = Math.ceil((runMinutes * 60 + 60) / 4); // Tối đa = thời gian chạy + 1 phút buffer, poll mỗi 4 giây
+          const pollTimer = setInterval(async () => {
+            pollCount++;
+            if (pollCount > maxPolls) {
               clearInterval(pollTimer);
-              resolve();
+              reject(new Error('Search quá lâu, đã timeout'));
+              return;
             }
-          } catch (e) {
-            clearInterval(pollTimer);
-            reject(new Error('Không lấy được trạng thái search (kiểm tra FastAPI).'));
-          }
-        }, 4000);
+            
+            try {
+              const st = await callBackendNoAlert('/feed/status', { method: 'GET' });
+              if (st) {
+                const running = Array.isArray(st.running) ? st.running : [];
+                const still = selected.filter((pid) => running.includes(pid));
+                if (still.length === 0) {
+                  clearInterval(pollTimer);
+                  resolve();
+                }
+              }
+            } catch (e) {
+              clearInterval(pollTimer);
+              reject(new Error('Không lấy được trạng thái search (kiểm tra FastAPI).'));
+            }
+          }, 4000);
+        }, 2000); // Đợi 2 giây trước khi bắt đầu poll
       })
       .catch((e) => {
         reject(new Error('Không chạy được search (kiểm tra FastAPI).'));
@@ -1409,47 +1436,6 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Hàm helper để chạy feed+search với loop
-async function runFeedSearchLoop(selected, text, runMinutes, restMinutes) {
-  feedSearchLoopRunning = true;
-  const halfRunMinutes = Math.floor(runMinutes / 2); // Chia đôi thời gian chạy
-  
-  try {
-    while (feedSearchLoopRunning) {
-      // Bước 1: Chạy feed (một nửa thời gian)
-      showToast(`🔄 Feed+Search: Bắt đầu Feed (${halfRunMinutes} phút)...`, 'info', 2000);
-      await runFeedAndWait(selected, text, halfRunMinutes);
-      showToast('✅ Feed: Hoàn thành, đang chuyển sang Search...', 'success', 2000);
-      
-      // Bước 2: Chạy search (một nửa thời gian)
-      showToast(`🔄 Feed+Search: Bắt đầu Search (${halfRunMinutes} phút)...`, 'info', 2000);
-      await runSearchAndWait(selected, text, halfRunMinutes);
-      showToast('✅ Search: Hoàn thành', 'success', 2000);
-      
-      // Bước 3: Nghỉ nếu có restMinutes
-      if (restMinutes > 0 && feedSearchLoopRunning) {
-        showToast(`⏸️ Feed+Search: Nghỉ ${restMinutes} phút trước khi loop lại...`, 'info', 2000);
-        await sleep(restMinutes * 60 * 1000); // Chuyển phút sang milliseconds
-      } else {
-        // Nếu không có restMinutes, chỉ chạy một lần rồi dừng
-        break;
-      }
-    }
-    
-    setButtonLoading(feedStartBtn, false);
-    setButtonLoading(feedAccountSettingBtn, false);
-    if (restMinutes > 0) {
-      showToast('✅ Nuôi acc (Feed+Search): Hoàn thành tất cả các loop', 'success', 2000);
-    } else {
-      showToast('✅ Nuôi acc (Feed+Search): Hoàn thành', 'success', 2000);
-    }
-  } catch (e) {
-    feedSearchLoopRunning = false;
-    setButtonLoading(feedStartBtn, false);
-    setButtonLoading(feedAccountSettingBtn, false);
-    showToast(e.message || 'Lỗi khi chạy Feed+Search', 'error');
-  }
-}
 
 if (feedStartBtn) {
   feedStartBtn.addEventListener('click', async () => {
@@ -1462,20 +1448,14 @@ if (feedStartBtn) {
     const modeEl = document.querySelector('input[name="feedMode"]:checked');
     const mode = modeEl ? String(modeEl.value || 'feed') : 'feed';
     const text = String(feedTextInput?.value || '').trim();
-    const runMinutes = parseInt(String(feedRunMinutesInput?.value || '30').trim(), 10);
-    const restMinutes = parseInt(String(feedRestMinutesInput?.value || '0').trim(), 10);
+    const runMinutes = parseFloat(String(feedRunMinutesInput?.value || '30').trim()) || 30;
+    const restMinutes = parseFloat(String(feedRestMinutesInput?.value || '0').trim()) || 0;
 
     // Feed: cho phép text rỗng (quét theo keyword mặc định). Search: bắt buộc có text.
-    // Feed+search: feed không cần text, nhưng search sẽ cần text
     if (!text && mode === 'search') {
       showToast('Search cần nhập text.', 'error');
       return;
     }
-    if (mode === 'feed+search' && !text) {
-      showToast('Feed+search: Search cần nhập text.', 'error');
-      return;
-    }
-    // Feed+search: feed sẽ chạy một lần (restMinutes = 0), search có thể có loop
     if (!runMinutes || runMinutes <= 0) {
       showToast('Chạy (phút) không hợp lệ.', 'error');
       return;
@@ -1489,16 +1469,8 @@ if (feedStartBtn) {
     setButtonLoading(feedAccountSettingBtn, true, 'Đang nuôi acc...');
     
     try {
-      // Nếu mode là feed+search, chạy tuần tự với loop
-      if (mode === 'feed+search') {
-        if (feedConfigPanel) feedConfigPanel.style.display = 'none';
-        
-        // Chạy feed+search với loop (chia đôi thời gian: feed một nửa, search một nửa, nghỉ, loop lại)
-        feedSearchLoopRunning = true;
-        runFeedSearchLoop(selected, text, runMinutes, restMinutes);
-      } else {
-        // Chạy mode thông thường (feed hoặc search)
-        const res = await callBackend('/feed/start', {
+      // Chạy mode thông thường (feed hoặc search)
+      const res = await callBackend('/feed/start', {
           method: 'POST',
           body: JSON.stringify({
             profile_ids: selected,
@@ -1541,7 +1513,6 @@ if (feedStartBtn) {
           setButtonLoading(feedStartBtn, false);
           setButtonLoading(feedAccountSettingBtn, false);
         }
-      }
     } catch (e) {
       setButtonLoading(feedStartBtn, false);
       setButtonLoading(feedAccountSettingBtn, false);
@@ -1776,8 +1747,8 @@ if (scanStartBtn) {
       return;
     }
 
-    const runMinutes = parseInt(String(scanRunMinutesInput?.value || '0').trim(), 10);
-    const restMinutes = parseInt(String(scanRestMinutesInput?.value || '0').trim(), 10);
+    const runMinutes = parseFloat(String(scanRunMinutesInput?.value || '0').trim()) || 0;
+    const restMinutes = parseFloat(String(scanRestMinutesInput?.value || '0').trim()) || 0;
     const text = String(scanTextInput?.value || '').trim();
     const mode = String(document.querySelector('input[name="scanMode"]:checked')?.value || 'feed').trim().toLowerCase();
 
@@ -1876,8 +1847,6 @@ async function handleStopAll() {
       clearInterval(feedPollTimer);
       feedPollTimer = null;
     }
-    // Dừng feed+search loop nếu đang chạy
-    feedSearchLoopRunning = false;
     if (groupScanPollTimer) {
       clearInterval(groupScanPollTimer);
       groupScanPollTimer = null;
@@ -2692,6 +2661,153 @@ async function pollAccountStatus() {
 try {
   setInterval(pollAccountStatus, 45000);
 } catch (_) { }
+
+// Hàm helper để chạy scan và đợi hoàn thành
+async function runScanAndWait(runMinutes, restMinutes, text, mode) {
+  return new Promise((resolve, reject) => {
+    triggerBackendRun({ runMinutes, restMinutes, text, mode })
+      .then((ok) => {
+        if (!ok) {
+          reject(new Error('Không chạy được scan'));
+          return;
+        }
+        
+        // Đợi một chút để backend kịp start
+        setTimeout(() => {
+          // Poll status để đợi scan hoàn thành
+          let pollCount = 0;
+          const maxPolls = Math.ceil((runMinutes * 60 + 60) / 2); // Tối đa = thời gian chạy + 1 phút buffer, poll mỗi 2 giây
+          const pollTimer = setInterval(async () => {
+            pollCount++;
+            if (pollCount > maxPolls) {
+              clearInterval(pollTimer);
+              reject(new Error('Scan quá lâu, đã timeout'));
+              return;
+            }
+            
+            try {
+              const st = await callBackendNoAlert('/jobs/status', { method: 'GET' });
+              if (st) {
+                const botRunning = st.bot_running === true;
+                if (!botRunning) {
+                  clearInterval(pollTimer);
+                  resolve();
+                }
+              }
+            } catch (e) {
+              clearInterval(pollTimer);
+              reject(new Error('Không lấy được trạng thái scan (kiểm tra FastAPI).'));
+            }
+          }, 2000); // Poll mỗi 2 giây
+        }, 2000); // Đợi 2 giây trước khi bắt đầu poll
+      })
+      .catch((e) => {
+        reject(new Error(e.message || 'Không chạy được scan (kiểm tra FastAPI).'));
+      });
+  });
+}
+
+// Hàm helper để chạy group scan và đợi hoàn thành
+async function runGroupScanAndWait(selected, postCount, startDate, endDate) {
+  return new Promise((resolve, reject) => {
+    callBackend('/scan-groups', {
+      method: 'POST',
+      body: JSON.stringify({
+        profile_ids: selected,
+        post_count: postCount,
+        start_date: startDate,
+        end_date: endDate
+      })
+    })
+      .then(() => {
+        // Poll trạng thái quét group để đợi hoàn thành
+        let pollCount = 0;
+        const maxPolls = 3600; // Tối đa 1 giờ (3600 * 1 giây)
+        const pollTimer = setInterval(async () => {
+          pollCount++;
+          if (pollCount > maxPolls) {
+            clearInterval(pollTimer);
+            reject(new Error('Quét group quá lâu, đã timeout'));
+            return;
+          }
+          
+          try {
+            const st = await callBackendNoAlert('/scan-groups/status', { method: 'GET' });
+            if (st) {
+              const processing = st.processing === true;
+              const queueLength = typeof st.queue_length === 'number' ? st.queue_length : 0;
+              
+              // Nếu không còn đang xử lý và queue rỗng thì hoàn thành
+              if (!processing && queueLength === 0) {
+                clearInterval(pollTimer);
+                resolve();
+              }
+            }
+          } catch (e) {
+            clearInterval(pollTimer);
+            reject(new Error('Không lấy được trạng thái quét group (kiểm tra FastAPI).'));
+          }
+        }, 1000); // Poll mỗi 1 giây
+      })
+      .catch((e) => {
+        reject(new Error(e.message || 'Không chạy được quét group (kiểm tra FastAPI).'));
+      });
+  });
+}
+
+// Hàm helper để chạy lấy thông tin và đợi hoàn thành
+async function runInfoCollectorAndWait(mode = 'selected') {
+  return new Promise((resolve, reject) => {
+    const isSelected = mode === 'selected';
+    const selected = getSelectedProfileIds();
+    
+    if (isSelected && selected.length === 0) {
+      reject(new Error('Chọn (tick) ít nhất 1 profile trước.'));
+      return;
+    }
+    
+    const body = { mode: isSelected ? 'selected' : 'all' };
+    if (isSelected) body.profiles = selected;
+    
+    callBackend('/info/run', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+      .then(() => {
+        // Đợi một chút để backend kịp start
+        setTimeout(() => {
+          // Poll trạng thái để đợi hoàn thành
+          let pollCount = 0;
+          const maxPolls = 1800; // Tối đa 1 giờ (1800 * 2 giây)
+          const pollTimer = setInterval(async () => {
+            pollCount++;
+            if (pollCount > maxPolls) {
+              clearInterval(pollTimer);
+              reject(new Error('Lấy thông tin quá lâu, đã timeout'));
+              return;
+            }
+            
+            try {
+              const res = await callBackendNoAlert('/info/progress', { method: 'GET' });
+              if (res) {
+                const isRunning = res.is_running === true;
+                if (!isRunning) {
+                  clearInterval(pollTimer);
+                  resolve();
+                }
+              }
+            } catch (e) {
+              clearInterval(pollTimer);
+              reject(new Error('Không lấy được trạng thái lấy thông tin (kiểm tra FastAPI).'));
+            }
+          }, 2000); // Poll mỗi 2 giây
+        }, 2000); // Đợi 2 giây trước khi bắt đầu poll
+      })
+      .catch((e) => {
+        reject(new Error(e.message || 'Không chạy được lấy thông tin (kiểm tra FastAPI).'));
+      });
+  });
+}
 
 // Start quét bài viết (dùng chung cho nút "Bắt đầu quét" và nút trong tab Setting profile)
 async function startScanFlow(options = {}) {
