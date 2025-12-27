@@ -591,16 +591,24 @@ button:active {
 }
 
 .time-filter-inline {
-  display      : flex;
-  align-items  : center;
-  gap          : 5px;
-  background   : linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  border       : 1.5px solid var(--border);
-  border-radius: 8px;
-  padding      : 5px 7px;
-  width        : 100%;
-  box-shadow   : 0 2px 6px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-  transition   : all 0.3s ease;
+  display        : flex;
+  align-items    : center;
+  gap            : 5px;
+  background     : linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border         : 1.5px solid var(--border);
+  border-radius  : 8px;
+  padding        : 5px 7px;
+  width          : 100%;
+  box-shadow     : 0 2px 6px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition     : all 0.3s ease;
+  justify-content: space-between;
+}
+
+.action-buttons-group {
+  display    : flex;
+  align-items: center;
+  gap        : 8px;
+  margin-left: auto;
 }
 
 .time-filter-inline:hover {
@@ -937,24 +945,24 @@ tbody tr.filtered-out {
 }
 
 .feed-radio {
-  display    : inline-flex;
-  gap        : 6px;
-  align-items: center;
-  font-size  : 13px;
-  font-weight: 500;
-  color      : var(--text-primary);
-  padding    : 6px 10px;
+  display      : inline-flex;
+  gap          : 6px;
+  align-items  : center;
+  font-size    : 13px;
+  font-weight  : 500;
+  color        : var(--text-primary);
+  padding      : 6px 10px;
   border-radius: 6px;
-  transition : background 0.2s ease;
-  cursor     : pointer;
+  transition   : background 0.2s ease;
+  cursor       : pointer;
 }
 
 .feed-radio:hover {
   background: rgba(99, 102, 241, 0.05);
 }
 
-.feed-radio input[type="radio"]:checked + span {
-  color: var(--primary);
+.feed-radio input[type="radio"]:checked+span {
+  color      : var(--primary);
   font-weight: 600;
 }
 
@@ -1030,11 +1038,11 @@ tbody tr.filtered-out {
 }
 
 .feed-panel-actions button {
-  width    : auto;
-  min-width: 100px;
-  height   : 36px;
-  padding  : 8px 16px;
-  font-size: 13px;
+  width        : auto;
+  min-width    : 100px;
+  height       : 36px;
+  padding      : 8px 16px;
+  font-size    : 13px;
   border-radius: 8px;
 }
 
@@ -1258,17 +1266,17 @@ tbody tr.filtered-out {
 }
 
 #settingsView .inline-field button {
-  flex     : 0 0 auto;
-  min-width: 110px;
+  flex       : 0 0 auto;
+  min-width  : 110px;
   white-space: nowrap;
 }
 
 .setting-card-actions {
-  display      : flex;
-  gap          : 10px;
-  flex-wrap    : wrap;
-  align-items  : center;
-  margin-top   : 8px;
+  display    : flex;
+  gap        : 10px;
+  flex-wrap  : wrap;
+  align-items: center;
+  margin-top : 8px;
 }
 
 .setting-card-actions button {
@@ -1419,12 +1427,12 @@ tbody tr.filtered-out {
 
 
 .profile-row .profile-actions button {
-  width    : auto;
-  flex     : 0 0 auto;
-  min-width: 75px;
-  height   : 32px;
-  padding  : 6px 12px;
-  font-size: 12px;
+  width        : auto;
+  flex         : 0 0 auto;
+  min-width    : 75px;
+  height       : 32px;
+  padding      : 6px 12px;
+  font-size    : 12px;
   border-radius: 6px;
 }
 
@@ -1460,10 +1468,10 @@ tbody tr.filtered-out {
 }
 
 .add-profile-form button {
-  min-width: 100px;
-  height   : 36px;
-  padding  : 8px 16px;
-  font-size: 13px;
+  min-width    : 100px;
+  height       : 36px;
+  padding      : 8px 16px;
+  font-size    : 13px;
   border-radius: 8px;
 }
 
@@ -2496,12 +2504,13 @@ td:nth-child(5) {
 }
 
 /* Export Button - Inline with time filter */
-.export-btn-inline-time {
+.export-btn-inline-time,
+.start-scan-btn-inline,
+.stop-scan-btn-inline {
   padding        : 12px 16px;
   font-size      : 16px;
   font-weight    : 500;
   border-radius  : 6px;
-  background     : linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
   color          : white;
   transition     : all 0.2s ease;
   cursor         : pointer;
@@ -2510,16 +2519,36 @@ td:nth-child(5) {
   gap            : 6px;
   width          : 200px;
   justify-content: center;
-  margin-left    : auto;
   box-shadow     : 0 2px 6px rgba(99, 102, 241, 0.15);
   border         : none;
 }
 
-.export-btn-inline-time:hover {
+.export-btn-inline-time {
+  background: green
+}
+
+.start-scan-btn-inline {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+}
+
+.stop-scan-btn-inline {
+  background: linear-gradient(135deg, var(--danger) 0%, var(--danger-dark) 100%);
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.15);
+}
+
+.export-btn-inline-time:hover,
+.start-scan-btn-inline:hover {
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
   transform : translateY(-1px);
 }
 
-.export-btn-inline-time:active {
+.stop-scan-btn-inline:hover {
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
+  transform : translateY(-1px);
+}
+
+.export-btn-inline-time:active,
+.start-scan-btn-inline:active,
+.stop-scan-btn-inline:active {
   transform: translateY(0);
 }

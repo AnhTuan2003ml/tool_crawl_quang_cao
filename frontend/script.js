@@ -1811,8 +1811,8 @@ async function handleStopAll() {
   // Reset info collector state ngay lập tức
   resetInfoCollectorState();
   
-  // stop-all có thể bấm từ left panel hoặc từ setting header
-  const btns = [stopAllBtn, stopAllSettingBtn].filter(Boolean);
+  // stop-all có thể bấm từ left panel, setting header, hoặc tab kết quả
+  const btns = [stopAllBtn, stopAllSettingBtn, stopScanBtn].filter(Boolean);
   btns.forEach((b) => setButtonLoading(b, true, 'Đang dừng tất cả...'));
   
   try {
@@ -1844,6 +1844,7 @@ async function handleStopAll() {
     setScanning(false);
     setButtonLoading(scanStartBtn, false);
     setButtonLoading(scanPostsSettingBtn, false);
+    setButtonLoading(startScanBtn, false);
     // stopBtn đã bị xóa khỏi left-panel
 
     btns.forEach((b) => setButtonLoading(b, false));
@@ -2876,6 +2877,8 @@ async function startScanFlow(options = {}) {
 
 // Xuất file Excel
 const exportExcelBtn = document.getElementById('exportExcelBtn');
+const startScanBtn = document.getElementById('startScanBtn');
+const stopScanBtn = document.getElementById('stopScanBtn');
 
 function exportToExcel() {
   const table = document.getElementById('listTable');
@@ -2987,6 +2990,52 @@ function exportToExcel() {
 }
 
 exportExcelBtn.addEventListener('click', exportToExcel);
+
+// Nút "Bắt đầu" trong tab kết quả
+if (startScanBtn) {
+  startScanBtn.addEventListener('click', async () => {
+    // Kiểm tra đang quét
+    if (isScanning) {
+      showToast('Đang quét, vui lòng đợi hoặc bấm dừng trước', 'warning');
+      return;
+    }
+    
+    // Kiểm tra profile đã chọn
+    const selected = Object.keys(profileState.selected || {}).filter((pid) => profileState.selected[pid]);
+    if (selected.length === 0) {
+      showToast('Chọn (tick) ít nhất 1 profile để quét bài viết.', 'error');
+      try { switchTab('settings'); } catch (_) { }
+      return;
+    }
+
+    // Lấy settings từ inputs hoặc giá trị mặc định
+    const runMinutes = parseFloat(String(scanRunMinutesInput?.value || '30').trim()) || 30;
+    const restMinutes = parseFloat(String(scanRestMinutesInput?.value || '0').trim()) || 0;
+    const text = String(scanTextInput?.value || '').trim();
+    const modeEl = document.querySelector('input[name="scanMode"]:checked');
+    const mode = modeEl ? String(modeEl.value || 'feed').trim().toLowerCase() : 'feed';
+
+    // Search và Feed+Search: bắt buộc có text
+    if ((mode === 'search' || mode === 'feed+search' || mode === 'feed_search') && !text) {
+      showToast('Search và Feed+Search cần nhập text để search.', 'error');
+      return;
+    }
+
+    setButtonLoading(startScanBtn, true, 'Đang chạy...');
+    try {
+      await startScanFlow({ runMinutes, restMinutes, text, mode });
+    } catch (e) {
+      showToast('Không chạy được quét bài viết (kiểm tra FastAPI).', 'error');
+      setButtonLoading(startScanBtn, false);
+      setScanning(false);
+    }
+  });
+}
+
+// Nút "Dừng" trong tab kết quả - gọi cùng hàm handleStopAll
+if (stopScanBtn) {
+  stopScanBtn.addEventListener('click', handleStopAll);
+}
 
 // ==== FastAPI integration ====
 
