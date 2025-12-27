@@ -30,11 +30,20 @@
       "fb_dtsg": "NAfuThREXgQSv3eDigoYZeNme1uWqm5Z_u88Dp6dbi-y3iplfrBky8g:27:1766688999",
       "lsd": "bZ6-DJiz5RrKKVlfXAS4jF",
       "spin_r": "1031381813",
-      "spin_t": "1766339451",
+      "spin_t": "1766339451", 
       "groups": [
         "https://www.facebook.com/groups/tuyendungkisuIT"
       ],
       "cookie": "sb=p-s7aVkVeb1zYbyjsvyodAWl; ps_l=1; ps_n=1; datr=p-s7aWqfsx-mTxfu314B49U1; c_user=100044138143352; fr=1PNRUmLdMr1Tr5wvy.AWclE3VkTsxcvHlqbxvFcoTSC1Bv6jeAe_pXg5KbNI2NOz9NGWA.BpT6UC..AAA.0.0.BpT6UC.AWcUgEDgbL1nNq5l827rxTxm7HY; xs=27%3AhqtD8JK61cB8hQ%3A2%3A1766688999%3A-1%3A-1%3A%3AAcxSyaD-hEKAKWeXMXmUqYIZB1vlkOjc3c8K97KyVQ; wd=1038x680;"
+    },
+    "a": {
+      "cookie": "",
+      "access_token": "",
+      "fb_dtsg": "",
+      "lsd": "",
+      "spin_r": "",
+      "spin_t": "",
+      "groups": []
     }
   },
   "RUN_MINUTES": 30,

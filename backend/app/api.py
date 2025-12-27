@@ -572,8 +572,8 @@ def run_bot(payload: Optional[RunRequest] = Body(None)) -> dict:
     except Exception:
         pass
 
-    # ✅ Chặn chạy nếu bất kỳ profile nào thiếu cookie/access_token
-    _validate_profiles_requirements(pids, require_cookie=True, require_access_token=True)
+    # ✅ Cho phép chạy ngay cả khi thiếu cookie/access_token (không bắt buộc)
+    _validate_profiles_requirements(pids, require_cookie=False, require_access_token=False)
 
     m = str(mode or "feed").strip().lower()
     if m not in ("feed", "search"):
@@ -667,11 +667,12 @@ def _read_settings_raw() -> Dict[str, Any]:
 def _validate_profiles_requirements(
     profile_ids: list[str],
     *,
-    require_cookie: bool = True,
-    require_access_token: bool = True,
+    require_cookie: bool = False,
+    require_access_token: bool = False,
 ) -> None:
     """
     Nếu có profile thiếu cookie/access_token (theo require_*), sẽ raise 400 và KHÔNG cho start job.
+    Mặc định không bắt buộc (require_cookie=False, require_access_token=False) để cho phép các trường trống.
     """
     raw = _read_settings_raw()
     profiles = raw.get("PROFILE_IDS") or {}
@@ -1103,8 +1104,8 @@ def auto_join_groups(payload: JoinGroupsRequest) -> dict:
     except Exception:
         pass
 
-    # ✅ Join group chỉ cần cookie (không bắt access_token)
-    _validate_profiles_requirements(pids, require_cookie=True, require_access_token=False)
+    # ✅ Join group không bắt buộc cookie/access_token (cho phép trống)
+    _validate_profiles_requirements(pids, require_cookie=False, require_access_token=False)
 
     started: list[str] = []
     skipped: list[dict] = []
@@ -1258,8 +1259,8 @@ def feed_start(payload: FeedStartRequest) -> dict:
     except Exception:
         pass
 
-    # ✅ Chặn chạy nếu bất kỳ profile nào thiếu cookie/access_token
-    _validate_profiles_requirements(pids, require_cookie=True, require_access_token=True)
+    # ✅ Cho phép chạy ngay cả khi thiếu cookie/access_token (không bắt buộc)
+    _validate_profiles_requirements(pids, require_cookie=False, require_access_token=False)
 
     run_minutes = int(payload.run_minutes or 0)
     if run_minutes <= 0:
