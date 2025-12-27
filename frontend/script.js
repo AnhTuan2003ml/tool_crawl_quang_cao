@@ -3012,12 +3012,12 @@ if (startScanBtn) {
     const runMinutes = parseFloat(String(scanRunMinutesInput?.value || '30').trim()) || 30;
     const restMinutes = parseFloat(String(scanRestMinutesInput?.value || '0').trim()) || 0;
     const text = String(scanTextInput?.value || '').trim();
-    const modeEl = document.querySelector('input[name="scanMode"]:checked');
-    const mode = modeEl ? String(modeEl.value || 'feed').trim().toLowerCase() : 'feed';
+    // Nút "Bắt đầu" luôn mặc định chạy mode feed+search
+    const mode = 'feed+search';
 
-    // Search và Feed+Search: bắt buộc có text
-    if ((mode === 'search' || mode === 'feed+search' || mode === 'feed_search') && !text) {
-      showToast('Search và Feed+Search cần nhập text để search.', 'error');
+    // Feed+Search: bắt buộc có text
+    if (!text) {
+      showToast('Feed+Search cần nhập text để search.', 'error');
       return;
     }
 
