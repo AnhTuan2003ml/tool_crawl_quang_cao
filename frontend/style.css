@@ -387,18 +387,25 @@ button {
 
 /* Loading state (spinner) */
 .btn-loading {
-  opacity: 0.9;
-  cursor : not-allowed;
+  opacity       : 0.9 !important;
+  cursor        : not-allowed !important;
+  position      : relative;
+  pointer-events: none !important;
 }
 
 .btn-loading::after {
-  content         : "";
-  width           : 14px;
-  height          : 14px;
-  border-radius   : 50%;
-  border          : 2px solid rgba(255, 255, 255, 0.55);
-  border-top-color: rgba(255, 255, 255, 1);
-  animation       : btnSpin 0.9s linear infinite;
+  content         : "" !important;
+  display         : inline-block !important;
+  width           : 14px !important;
+  height          : 14px !important;
+  margin-left     : 8px !important;
+  border-radius   : 50% !important;
+  border          : 2px solid rgba(255, 255, 255, 0.55) !important;
+  border-top-color: rgba(255, 255, 255, 1) !important;
+  animation       : btnSpin 0.9s linear infinite !important;
+  vertical-align  : middle !important;
+  position        : relative !important;
+  box-sizing      : border-box !important;
 }
 
 @keyframes btnSpin {
