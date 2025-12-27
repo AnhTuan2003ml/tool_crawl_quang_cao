@@ -1,0 +1,99 @@
+MỤC TIÊU:
+Khi ấn nút "Bắt đầu" ở tab kết quả, hệ thống sẽ:
+1. Quét feed+search (đã có sẵn)
+2. Quét group (đã có sẵn)
+3. Chạy cả 2 song song cùng lúc
+
+========================================
+CÁC HÀM LIÊN QUAN CẦN THAM KHẢO
+========================================
+
+FRONTEND (JavaScript) - File: frontend/script.js
+-------------------------------------------------
+
+1. startScanFlow() - DÒNG 2846-2902
+   ✓ Hàm chính cần SỬA
+   ✓ Hiện tại: chỉ gọi triggerBackendRun() (feed+search)
+   ✓ Cần thêm: gọi quét group song song
+   ✓ Tham khảo: runGroupScanAndWait() để biết cách gọi API /scan-groups
+
+2. triggerBackendRun() - DÒNG 3134-3183
+   ✓ Tham khảo: cách gọi API /run
+   ✓ Endpoint: POST /run
+   ✓ Payload: { profile_ids, run_minutes, rest_minutes, text, mode }
+
+3. runGroupScanAndWait() - DÒNG 2744-2789
+   ✓ Tham khảo: cách gọi API /scan-groups
+   ✓ Endpoint: POST /scan-groups
+   ✓ Payload: { profile_ids, post_count, start_date, end_date }
+   ✓ Cách lấy input: scanGroupPostCountInput, scanGroupStartDateInput, scanGroupEndDateInput
+
+4. Nút "Bắt đầu" ở tab kết quả - DÒNG 3023-3061
+   ✓ Element: startScanBtn
+   ✓ Event: click → gọi startScanFlow()
+   ✓ Mode mặc định: 'feed+search'
+
+BACKEND (Python) - File: backend/app/api.py
+--------------------------------------------
+
+1. /run endpoint - DÒNG 599-750
+   ✓ Xử lý quét feed+search
+   ✓ Gọi _run_bot_profile_loop() cho mỗi profile
+   ✓ KHÔNG CẦN SỬA (đã hoạt động tốt)
+
+2. /scan-groups endpoint - DÒNG 2532-2583
+   ✓ Xử lý quét group
+   ✓ Thêm task vào _group_scan_queue
+   ✓ Khởi động _process_group_scan_queue() trong thread
+   ✓ KHÔNG CẦN SỬA (đã hoạt động tốt)
+
+3. _run_bot_profile_loop() - DÒNG 164-422
+   ✓ Worker quét feed+search cho 1 profile
+   ✓ Chạy trong process riêng (multiprocessing.Process)
+   ✓ Tham khảo để hiểu cách hoạt động
+
+4. _process_group_scan_queue() - DÒNG 2424-2530
+   ✓ Worker xử lý queue quét group
+   ✓ Chạy trong thread riêng
+   ✓ Tham khảo để hiểu cách hoạt động
+
+========================================
+CÁCH THỰC HIỆN
+========================================
+
+BƯỚC 1: Sửa hàm startScanFlow() trong frontend/script.js
+
+Vị trí: Sau dòng 2872 (sau khi gọi triggerBackendRun())
+
+Thêm code:
+- Lấy thông tin từ inputs: post_count, start_date, end_date
+- Gọi API /scan-groups song song (không await hoặc dùng Promise.all)
+- Xử lý lỗi nếu có
+
+BƯỚC 2: Kiểm tra inputs cần thiết
+
+Cần tìm các element:
+- scanGroupPostCountInput (số bài viết)
+- scanGroupStartDateInput (ngày bắt đầu)
+- scanGroupEndDateInput (ngày kết thúc)
+
+Nếu không có, có thể:
+- Dùng giá trị mặc định
+- Hoặc lấy từ frontend_state.json
+
+BƯỚC 3: Test
+
+1. Chọn profile
+2. Nhập text (bắt buộc cho feed+search)
+3. Nhập thông tin quét group (nếu có)
+4. Ấn nút "Bắt đầu"
+5. Kiểm tra cả 2 quy trình chạy song song
+
+========================================
+LƯU Ý
+========================================
+
+- Backend KHÔNG CẦN SỬA (cả 2 API đã hoạt động độc lập)
+- Chỉ cần sửa frontend để gọi cả 2 API song song
+- Đảm bảo xử lý lỗi cho cả 2 API
+- Có thể dùng Promise.all() hoặc không await để chạy song song
