@@ -1989,6 +1989,11 @@ function appendRow({ id, userId, name, react, comment, time, type }) {
   tr.style.transform = 'translateY(-10px)';
   tbody.appendChild(tr);
 
+  // Lưu comment vào tr.dataset để dễ truy cập khi xuất Excel
+  if (hasComment) {
+    tr.dataset.comment = comment;
+  }
+  
   // Gắn dữ liệu comment và sự kiện click cho icon con mắt
   if (hasComment) {
     const commentCell = tr.children[4]; // cột Comment
@@ -2050,6 +2055,11 @@ function appendPostRow(item) {
   const tr = document.createElement('tr');
   const postId = item.post_id || '';
   const text = item.text || '';
+
+  // Bỏ qua post có text chứa CSS code của Facebook
+  if (text.includes(':root') || text.includes('__fb-light-mode') || text.includes('__fb-dark-mode')) {
+    return; // Không hiển thị post này
+  }
 
   const postLink = postId
     ? `<a href="https://fb.com/${postId}" target="_blank" rel="noopener noreferrer" class="id-link">${postId}</a>`
@@ -2177,7 +2187,7 @@ async function checkForNewData() {
             name: ownerName,
             react: false,
             comment: '',
-            time: defaultTime,
+            time: '',
             type: type,
           });
           loadedPostIds.add(uniqueKey);
@@ -2198,7 +2208,7 @@ async function checkForNewData() {
         const hasReact = !!reaction;
         const commentText = comment && comment.text ? comment.text : '';
         const time =
-          (comment && comment.created_time_vn) ? comment.created_time_vn : defaultTime;
+          (comment && comment.created_time_vn) ? comment.created_time_vn : '';
 
         const uniqueKey = `${postId}_${userId}`;
         if (uniqueKey && !loadedPostIds.has(uniqueKey)) {
@@ -2329,7 +2339,7 @@ async function loadInitialData() {
             name: ownerName,
             react: false,
             comment: '',
-            time: defaultTime,
+            time: '',
             type: type,
           });
           loadedPostIds.add(uniqueKey);
@@ -2350,7 +2360,7 @@ async function loadInitialData() {
         const hasReact = !!reaction;
         const commentText = comment && comment.text ? comment.text : '';
         const time =
-          (comment && comment.created_time_vn) ? comment.created_time_vn : defaultTime;
+          (comment && comment.created_time_vn) ? comment.created_time_vn : '';
 
         const uniqueKey = `${postId}_${userId}`; // Tạo key duy nhất cho mỗi cặp post-user
         if (uniqueKey && !loadedPostIds.has(uniqueKey)) {
@@ -2530,6 +2540,26 @@ function exportToExcel() {
           v: userId,
           l: { Target: profileUrl, Tooltip: `Xem profile Facebook của ${userId}` }
         });
+      }
+      // Cột thứ 5 (index 4) là Comment - lấy nội dung từ tr.dataset.comment hoặc td.dataset.comment
+      else if (colIndex === 4) {
+        // Ưu tiên lấy từ tr.dataset.comment (đã lưu khi appendRow)
+        let commentText = tr.dataset.comment || '';
+        
+        // Nếu không có, thử lấy từ td.dataset.comment
+        if (!commentText) {
+          commentText = td.getAttribute('data-comment') || td.dataset.comment || '';
+        }
+        
+        // Nếu vẫn không có, kiểm tra xem có phần tử .comment-text không (user đã click để hiển thị)
+        if (!commentText) {
+          const commentTextElement = td.querySelector('.comment-text');
+          if (commentTextElement) {
+            commentText = commentTextElement.textContent || '';
+          }
+        }
+        
+        row.push(commentText);
       } else {
         row.push(td.textContent);
       }
@@ -2545,9 +2575,9 @@ function exportToExcel() {
   ws['!cols'] = [
     { wch: 18 }, // ID Bài Post
     { wch: 18 }, // ID User
-    { wch: 20 }, // Name
+    { wch: 25 }, // Name
     { wch: 12 }, // React
-    { wch: 12 }, // Comment
+    { wch: 40 }, // Comment - tăng độ rộng để chứa nội dung dài
     { wch: 20 }, // Time
     { wch: 15 }  // Type
   ];
@@ -3515,7 +3545,7 @@ async function loadDataFromFile(filename) {
             name: ownerName,
             react: false,
             comment: '',
-            time: defaultTime,
+            time: '',
             type: type,
           });
           loadedPostIds.add(uniqueKey);
@@ -3532,7 +3562,7 @@ async function loadDataFromFile(filename) {
 
         const hasReact = !!reaction;
         const commentText = comment && comment.text ? comment.text : '';
-        const time = (comment && comment.created_time_vn) ? comment.created_time_vn : defaultTime;
+        const time = (comment && comment.created_time_vn) ? comment.created_time_vn : '';
 
         const uniqueKey = `${postId}_${userId}`;
         if (!loadedPostIds.has(uniqueKey)) {
@@ -3742,7 +3772,7 @@ async function loadDataByDateRange(fromDate, toDate) {
             name: ownerName,
             react: false,
             comment: '',
-            time: defaultTime,
+            time: '',
             type: type,
           });
           loadedPostIds.add(uniqueKey);
@@ -3759,7 +3789,7 @@ async function loadDataByDateRange(fromDate, toDate) {
 
         const hasReact = !!reaction;
         const commentText = comment && comment.text ? comment.text : '';
-        const time = (comment && comment.created_time_vn) ? comment.created_time_vn : defaultTime;
+        const time = (comment && comment.created_time_vn) ? comment.created_time_vn : '';
 
         const uniqueKey = `${postId}_${userId}`;
         if (!loadedPostIds.has(uniqueKey)) {
