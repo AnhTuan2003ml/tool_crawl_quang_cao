@@ -6,10 +6,14 @@ import re
 from urllib.parse import urlparse, parse_qs, unquote
 import os
 import sys
+import threading
 from core.settings import get_settings, SETTINGS_PATH
 from core import control as control_state
 from core.control import smart_sleep
 from core.paths import get_data_dir
+
+# Lock để bảo vệ việc ghi settings.json (tránh race condition khi nhiều profile cùng lưu cookie)
+_settings_write_lock = threading.Lock()
 # ==============================================================================
 # JS TOOLS & HELPER FUNCTIONS
 # ==============================================================================
@@ -647,40 +651,55 @@ class FBController:
             else:
                 cookie_string = ""
 
-            # 4. Lưu vào settings.json theo đúng profile_id
+            # 4. Lưu vào settings.json theo đúng profile_id (với lock để tránh race condition)
             try:
                 if not SETTINGS_PATH.exists():
                     print(f"⚠️ Không tìm thấy settings.json: {SETTINGS_PATH}")
                     return cookie_string
-
-                with SETTINGS_PATH.open("r", encoding="utf-8") as f:
-                    raw = json.load(f)
-
-                if not isinstance(raw, dict):
-                    raw = {}
-
-                profiles = raw.get("PROFILE_IDS")
-                if profiles is None or isinstance(profiles, (list, str)):
-                    profiles = {}
-                if not isinstance(profiles, dict):
-                    profiles = {}
 
                 pid = str(self.profile_id or "").strip()
                 if not pid:
                     print("⚠️ profile_id rỗng, không ghi vào settings.json")
                     return cookie_string
 
-                cfg = profiles.get(pid)
-                if not isinstance(cfg, dict):
-                    cfg = {}
-                cfg["cookie"] = cookie_string
-                profiles[pid] = cfg
-                raw["PROFILE_IDS"] = profiles
+                # 🔒 Dùng lock để tránh race condition khi nhiều profile cùng lưu cookie
+                with _settings_write_lock:
+                    # Đọc lại file trong lock để đảm bảo có dữ liệu mới nhất
+                    with SETTINGS_PATH.open("r", encoding="utf-8") as f:
+                        raw = json.load(f)
 
-                # ghi file
-                with SETTINGS_PATH.open("w", encoding="utf-8") as f:
-                    json.dump(raw, f, indent=2, ensure_ascii=False)
-                    f.write("\n")
+                    if not isinstance(raw, dict):
+                        raw = {}
+
+                    profiles = raw.get("PROFILE_IDS")
+                    if profiles is None or isinstance(profiles, (list, str)):
+                        profiles = {}
+                    if not isinstance(profiles, dict):
+                        profiles = {}
+
+                    cfg = profiles.get(pid)
+                    if not isinstance(cfg, dict):
+                        cfg = {}
+                    cfg["cookie"] = cookie_string
+                    profiles[pid] = cfg
+                    raw["PROFILE_IDS"] = profiles
+
+                    # Ghi file (atomic write: temp file rồi replace)
+                    import tempfile
+                    directory = str(SETTINGS_PATH.parent)
+                    os.makedirs(directory, exist_ok=True)
+                    fd, tmp_path = tempfile.mkstemp(prefix="settings_", suffix=".json", dir=directory)
+                    try:
+                        with os.fdopen(fd, "w", encoding="utf-8") as f:
+                            json.dump(raw, f, ensure_ascii=False, indent=2)
+                            f.write("\n")
+                        os.replace(tmp_path, str(SETTINGS_PATH))
+                    except Exception:
+                        try:
+                            os.remove(tmp_path)
+                        except Exception:
+                            pass
+                        raise
 
                 print(f"✅ Đã cập nhật cookie vào settings.json cho profile_id={pid}")
             except Exception as e:

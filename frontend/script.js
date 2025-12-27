@@ -581,7 +581,12 @@ function showToast(message, type = 'success', ms = 1600) {
   if (!toastContainer) return;
   const el = document.createElement('div');
   el.className = `toast ${type}`;
-  el.textContent = message;
+  // Hỗ trợ nhiều dòng: thay \n thành <br>
+  if (typeof message === 'string' && message.includes('\n')) {
+    el.innerHTML = message.split('\n').map(line => line.trim()).filter(line => line).join('<br>');
+  } else {
+    el.textContent = message;
+  }
   toastContainer.appendChild(el);
   requestAnimationFrame(() => el.classList.add('show'));
   setTimeout(() => {
@@ -1111,11 +1116,11 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
   });
 
   actions.appendChild(saveBtn);
-  actions.appendChild(removeBtn);
+
   actions.appendChild(groupBtn);
   actions.appendChild(cookieBtn);
   actions.appendChild(tokenBtn);
-
+  actions.appendChild(removeBtn);
   selectWrap.appendChild(selectCb);
   row.appendChild(selectWrap);
   row.appendChild(pidInput);
@@ -2647,6 +2652,9 @@ async function loadInitialData() {
 // ==========================
 // CẢNH BÁO ACCOUNT CÓ VẤN ĐỀ
 // ==========================
+// Track profile đã toast trong pollAccountStatus để tránh spam
+let polledBannedProfiles = new Set();
+
 async function pollAccountStatus() {
   try {
     const res = await callBackendNoAlert('/account/status', { method: 'GET' });
@@ -2657,9 +2665,29 @@ async function pollAccountStatus() {
       const info = accounts[pid];
       if (!info) return;
       if (!info.banned) return;
+      
+      // Chỉ toast 1 lần cho mỗi profile để tránh spam
+      if (polledBannedProfiles.has(pid)) return;
+      polledBannedProfiles.add(pid);
 
+      // Tạo message đầy đủ thông tin
+      let detailMsg = `Profile: ${pid}`;
+      if (info.title) {
+        detailMsg += `\nTitle: ${info.title}`;
+      }
+      if (info.keyword) {
+        detailMsg += `\nKeyword: ${info.keyword}`;
+      }
+      if (info.url) {
+        detailMsg += `\nURL: ${info.url}`;
+      }
+      if (info.reason) {
+        detailMsg += `\nLý do: ${info.reason}`;
+      }
+      
       const msg = info.message || 'Tài khoản có vấn đề, hãy kiểm tra lại bằng tay.';
-      showToast(`Profile ${pid}: ${msg}`, 'warning', 10000);
+      const fullMessage = `${msg}\n${detailMsg}`;
+      showToast(fullMessage, 'error', 12000);
     });
   } catch (e) {
     // bỏ qua lỗi, không ảnh hưởng luồng cũ
@@ -2856,6 +2884,10 @@ async function startScanFlow(options = {}) {
     dataCheckInterval = setInterval(checkForNewData, checkInterval);
 
     setScanning(true);
+    
+    // Reset danh sách profile die đã toast khi bắt đầu quét mới
+    notifiedDeadProfiles.clear();
+    polledBannedProfiles.clear();
     
     // Bắt đầu poll số bài đã quét được
     if (scanStatsInterval) clearInterval(scanStatsInterval);
@@ -3601,12 +3633,25 @@ if (timeFilterFrom) {
 let isInfoCollectorRunning = false;
 let scanStatsInterval = null;
 let infoProgressInterval = null;
+// Track profile die/banned đã toast để không toast lại
+let notifiedDeadProfiles = new Set();
 
 // Hàm để cập nhật số bài đã quét được
 async function updateScanStats() {
   try {
     const res = await callBackendNoAlert('/info/scan-stats', { method: 'GET' });
     if (!res || !res.stats) return;
+    
+    // Lấy account status để check profile die/banned
+    let accountStatus = {};
+    try {
+      const statusRes = await callBackendNoAlert('/account/status', { method: 'GET' });
+      if (statusRes && statusRes.accounts) {
+        accountStatus = statusRes.accounts;
+      }
+    } catch (e) {
+      // Ignore errors khi lấy account status
+    }
     
     const stats = res.stats;
     const toast = document.getElementById('scanStatsToast');
@@ -3627,17 +3672,69 @@ async function updateScanStats() {
     }
     
     // Chỉ hiển thị các profile đã chọn hoặc tất cả nếu không có profile nào được chọn
-    const profilesToShow = selected.length > 0 ? selected : Object.keys(stats);
+    let profilesToShow = selected.length > 0 ? selected : Object.keys(stats);
+    
+    // 🆕 Lọc bỏ profile die/banned khỏi danh sách hiển thị
+    const deadProfiles = [];
+    profilesToShow = profilesToShow.filter(pid => {
+      const status = accountStatus[pid];
+      if (status && (status.banned === true || status.status === 'banned' || status.status === 'dead')) {
+        deadProfiles.push(pid);
+        return false; // Loại bỏ profile die khỏi danh sách hiển thị
+      }
+      return true; // Giữ lại profile còn sống
+    });
+    
+    // 🆕 Toast cảnh báo khi phát hiện profile die/banned mới
+    if (deadProfiles.length > 0) {
+      const newDead = deadProfiles.filter(pid => !notifiedDeadProfiles.has(pid));
+      if (newDead.length > 0) {
+        // Đánh dấu đã toast để không toast lại
+        newDead.forEach(pid => notifiedDeadProfiles.add(pid));
+        
+        // Toast cảnh báo nổi bật với đầy đủ thông tin
+        if (newDead.length === 1) {
+          const pid = newDead[0];
+          const status = accountStatus[pid];
+          if (status) {
+            // Tạo message chi tiết
+            let detailMsg = `Profile: ${pid}`;
+            if (status.title) {
+              detailMsg += `\nTitle: ${status.title}`;
+            }
+            if (status.keyword) {
+              detailMsg += `\nKeyword: ${status.keyword}`;
+            }
+            if (status.url) {
+              detailMsg += `\nURL: ${status.url}`;
+            }
+            if (status.reason) {
+              detailMsg += `\nLý do: ${status.reason}`;
+            }
+            const fullMessage = `${status.message || `Profile ${pid} bị khóa/bị ban`}\n${detailMsg}`;
+            showToast(fullMessage, 'error', 12000);
+          } else {
+            showToast(`⛔ Profile ${pid} bị khóa/bị ban`, 'error', 8000);
+          }
+        } else {
+          // Nhiều profile: hiển thị danh sách đầy đủ
+          const details = newDead.map(pid => {
+            const status = accountStatus[pid];
+            if (status && status.title) {
+              return `${pid} (${status.title})`;
+            }
+            return pid;
+          }).join(', ');
+          showToast(`⛔ Có ${newDead.length} profile bị khóa/bị ban:\n${details}`, 'error', 12000);
+        }
+      }
+    }
     
     let html = '';
     for (const pid of profilesToShow) {
       const count = stats[pid] || 0;
-      html += `<div style="margin: 6px 0; padding: 12px; background: white; border-radius: 8px; border-left: 4px solid #667eea; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 10px;">
-        <span style="font-size: 20px;">📝</span>
-        <div style="flex: 1;">
-          <div style="font-weight: 600; color: #2d3748; font-size: 13px; margin-bottom: 2px;">${pid}</div>
-          <div style="color: #667eea; font-weight: bold; font-size: 16px;">Đã quét được ${count} bài</div>
-        </div>
+      html += `<div style="padding: 8px 12px; background: rgba(102, 126, 234, 0.95); color: white; border-radius: 6px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); white-space: nowrap;">
+        <span style="font-weight: 600;">${pid}</span> : đã quét được <span style="font-weight: 700;">${count}</span> bài
       </div>`;
     }
     

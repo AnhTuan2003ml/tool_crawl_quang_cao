@@ -267,6 +267,7 @@ def _run_bot_profile_loop(
                 else:
                     bot = SimpleBot(fb)
                     bot.run(target_url, duration=duration_seconds)
+                    
             except RuntimeError as e:
                 # STOP/BROWSER_CLOSED/ACCOUNT_BANNED => thoát phiên
                 if (
@@ -299,6 +300,30 @@ def _run_bot_profile_loop(
                     print(f"🛑 [{pid}] Dừng loop do lỗi nghiêm trọng: {error_str}")
                     return
             finally:
+                # 🆕 LẤY COOKIE TỪ BROWSER ĐANG MỞ VÀ LƯU VÀO settings.json
+                # Lấy cookie TRƯỚC KHI đóng browser để đảm bảo browser còn mở
+                try:
+                    if fb and getattr(fb, "page", None):
+                        try:
+                            # Kiểm tra page và context còn hoạt động
+                            if hasattr(fb.page, "context") and fb.page.context:
+                                print(f"🍪 [{pid}] Đang lấy cookie từ browser đang mở...")
+                                cookie_string = fb.save_cookies()
+                                if cookie_string:
+                                    print(f"✅ [{pid}] Đã lưu cookie vào settings.json")
+                                else:
+                                    print(f"⚠️ [{pid}] Không lấy được cookie (có thể chưa đăng nhập hoặc cookie rỗng)")
+                        except Exception as cookie_err:
+                            # Nếu page/context đã đóng thì bỏ qua, không ảnh hưởng luồng chính
+                            error_msg = str(cookie_err).lower()
+                            if any(kw in error_msg for kw in ["closed", "disconnected", "target page", "context"]):
+                                print(f"⚠️ [{pid}] Browser đã đóng, không thể lấy cookie")
+                            else:
+                                print(f"⚠️ [{pid}] Lỗi khi lấy cookie: {cookie_err}")
+                except Exception as e:
+                    # Bỏ qua lỗi, không ảnh hưởng luồng chính
+                    print(f"⚠️ [{pid}] Không thể lấy cookie: {e}")
+                
                 # đóng playwright + NST profile best-effort
                 try:
                     if fb and getattr(fb, "page", None):
