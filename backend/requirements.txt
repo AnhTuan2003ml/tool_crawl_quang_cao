@@ -4,4 +4,6 @@ pyperclip
 fastapi
 uvicorn
 selenium
+webdriver_manager
 zstandard
+pyinstaller
