@@ -417,6 +417,112 @@ function saveProfileState() {
   localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(profileState));
 }
 
+// Lưu frontend state (selected profiles, mode, time, text) vào backend
+async function saveFrontendState() {
+  try {
+    const state = {
+      selected_profiles: profileState.selected || {},
+      feed_mode: document.querySelector('input[name="feedMode"]:checked')?.value || 'feed',
+      feed_text: feedTextInput?.value || '',
+      feed_run_minutes: parseInt(feedRunMinutesInput?.value || '30', 10),
+      feed_rest_minutes: parseInt(feedRestMinutesInput?.value || '120', 10),
+      scan_mode: document.querySelector('input[name="scanMode"]:checked')?.value || 'feed',
+      scan_text: scanTextInput?.value || '',
+      scan_run_minutes: parseInt(scanRunMinutesInput?.value || '30', 10),
+      scan_rest_minutes: parseInt(scanRestMinutesInput?.value || '120', 10),
+      group_scan_post_count: parseInt(groupScanPostCountInput?.value || '0', 10),
+      group_scan_start_date: groupScanStartDateInput?.value || '',
+      group_scan_end_date: groupScanEndDateInput?.value || '',
+    };
+    
+    await callBackendNoAlert('/frontend/state', {
+      method: 'POST',
+      body: JSON.stringify(state),
+    });
+  } catch (e) {
+    // Không hiển thị lỗi khi lưu state (silent fail)
+    console.warn('Không lưu được frontend state:', e);
+  }
+}
+
+// Đọc và khôi phục frontend state từ backend
+async function loadFrontendState() {
+  try {
+    const state = await callBackendNoAlert('/frontend/state', { method: 'GET' });
+    
+    // Khôi phục selected profiles - CẬP NHẬT profileState.selected TRƯỚC
+    if (state.selected_profiles && typeof state.selected_profiles === 'object') {
+      profileState.selected = state.selected_profiles;
+      // Cập nhật checkbox trong UI (nếu đã được render)
+      document.querySelectorAll('.profile-select-cb').forEach((cb) => {
+        const profileId = cb.closest('.profile-row-wrap')?.dataset.profileId;
+        if (profileId) {
+          cb.checked = Boolean(state.selected_profiles[profileId]);
+        }
+      });
+      // QUAN TRỌNG: Gọi updateSettingsActionButtons() để enable các nút
+      updateSettingsActionButtons();
+    }
+    
+    // Khôi phục feed mode
+    if (state.feed_mode) {
+      const feedModeRadio = document.querySelector(`input[name="feedMode"][value="${state.feed_mode}"]`);
+      if (feedModeRadio) {
+        feedModeRadio.checked = true;
+      }
+    }
+    
+    // Khôi phục feed text
+    if (feedTextInput && state.feed_text !== undefined) {
+      feedTextInput.value = state.feed_text;
+    }
+    
+    // Khôi phục feed run/rest minutes
+    if (feedRunMinutesInput && state.feed_run_minutes !== undefined) {
+      feedRunMinutesInput.value = state.feed_run_minutes;
+    }
+    if (feedRestMinutesInput && state.feed_rest_minutes !== undefined) {
+      feedRestMinutesInput.value = state.feed_rest_minutes;
+    }
+    
+    // Khôi phục scan mode
+    if (state.scan_mode) {
+      const scanModeRadio = document.querySelector(`input[name="scanMode"][value="${state.scan_mode}"]`);
+      if (scanModeRadio) {
+        scanModeRadio.checked = true;
+      }
+    }
+    
+    // Khôi phục scan text
+    if (scanTextInput && state.scan_text !== undefined) {
+      scanTextInput.value = state.scan_text;
+    }
+    
+    // Khôi phục scan run/rest minutes
+    if (scanRunMinutesInput && state.scan_run_minutes !== undefined) {
+      scanRunMinutesInput.value = state.scan_run_minutes;
+    }
+    if (scanRestMinutesInput && state.scan_rest_minutes !== undefined) {
+      scanRestMinutesInput.value = state.scan_rest_minutes;
+    }
+    
+    // Khôi phục group scan settings
+    if (groupScanPostCountInput && state.group_scan_post_count !== undefined) {
+      groupScanPostCountInput.value = state.group_scan_post_count;
+    }
+    if (groupScanStartDateInput && state.group_scan_start_date) {
+      groupScanStartDateInput.value = state.group_scan_start_date;
+    }
+    if (groupScanEndDateInput && state.group_scan_end_date) {
+      groupScanEndDateInput.value = state.group_scan_end_date;
+    }
+    
+    console.log('✅ Đã khôi phục frontend state từ backend');
+  } catch (e) {
+    console.warn('Không đọc được frontend state:', e);
+  }
+}
+
 function getSelectedProfileIds() {
   return Object.keys(profileState.selected || {}).filter((pid) => profileState.selected[pid]);
 }
@@ -723,6 +829,7 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
     if (selectCb.checked) profileState.selected[currentPid] = true;
     else delete profileState.selected[currentPid];
     saveProfileState();
+    saveFrontendState(); // Lưu state vào backend
     updateSettingsActionButtons();
   });
 
@@ -4028,6 +4135,52 @@ document.addEventListener('click', (e) => {
   }
 });
 
+// Thêm event listener để lưu frontend state khi có thay đổi
+if (feedTextInput) {
+  feedTextInput.addEventListener('input', () => saveFrontendState());
+  feedTextInput.addEventListener('change', () => saveFrontendState());
+}
+if (feedRunMinutesInput) {
+  feedRunMinutesInput.addEventListener('input', () => saveFrontendState());
+  feedRunMinutesInput.addEventListener('change', () => saveFrontendState());
+}
+if (feedRestMinutesInput) {
+  feedRestMinutesInput.addEventListener('input', () => saveFrontendState());
+  feedRestMinutesInput.addEventListener('change', () => saveFrontendState());
+}
+// Lưu khi chọn feed mode
+document.querySelectorAll('input[name="feedMode"]').forEach((radio) => {
+  radio.addEventListener('change', () => saveFrontendState());
+});
+
+if (scanTextInput) {
+  scanTextInput.addEventListener('input', () => saveFrontendState());
+  scanTextInput.addEventListener('change', () => saveFrontendState());
+}
+if (scanRunMinutesInput) {
+  scanRunMinutesInput.addEventListener('input', () => saveFrontendState());
+  scanRunMinutesInput.addEventListener('change', () => saveFrontendState());
+}
+if (scanRestMinutesInput) {
+  scanRestMinutesInput.addEventListener('input', () => saveFrontendState());
+  scanRestMinutesInput.addEventListener('change', () => saveFrontendState());
+}
+// Lưu khi chọn scan mode
+document.querySelectorAll('input[name="scanMode"]').forEach((radio) => {
+  radio.addEventListener('change', () => saveFrontendState());
+});
+
+if (groupScanPostCountInput) {
+  groupScanPostCountInput.addEventListener('input', () => saveFrontendState());
+  groupScanPostCountInput.addEventListener('change', () => saveFrontendState());
+}
+if (groupScanStartDateInput) {
+  groupScanStartDateInput.addEventListener('change', () => saveFrontendState());
+}
+if (groupScanEndDateInput) {
+  groupScanEndDateInput.addEventListener('change', () => saveFrontendState());
+}
+
 // Khởi tạo: luôn vào tab danh sách quét + load state profile
 let initialTab = 'scan';
 try {
@@ -4040,7 +4193,10 @@ switchTab(initialTab);
 // Khởi tạo: load state profile rồi sync UI theo backend (để F5 không bị lệch trạng thái)
 (async () => {
   try {
-    await loadProfileState();
+    await loadProfileState(); // Load profile list và render UI trước
+  } catch (_) { }
+  try {
+    await loadFrontendState(); // Sau đó mới khôi phục frontend state (selected, mode, time, text)
   } catch (_) { }
   try {
     await resyncUiFromBackendAfterReload();

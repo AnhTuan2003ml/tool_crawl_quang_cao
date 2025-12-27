@@ -1373,6 +1373,111 @@ def jobs_status() -> dict:
     }
 
 
+# ==============================================================================
+# FRONTEND STATE (lưu trạng thái UI để khôi phục khi reload)
+# ==============================================================================
+
+class FrontendStateRequest(BaseModel):
+    selected_profiles: Optional[Dict[str, bool]] = None
+    feed_mode: Optional[str] = None
+    feed_text: Optional[str] = None
+    feed_run_minutes: Optional[int] = None
+    feed_rest_minutes: Optional[int] = None
+    scan_mode: Optional[str] = None
+    scan_text: Optional[str] = None
+    scan_run_minutes: Optional[int] = None
+    scan_rest_minutes: Optional[int] = None
+    group_scan_post_count: Optional[int] = None
+    group_scan_start_date: Optional[str] = None
+    group_scan_end_date: Optional[str] = None
+
+
+def _get_frontend_state_path() -> Path:
+    """Đường dẫn file lưu frontend state."""
+    return get_data_dir() / "frontend_state.json"
+
+
+@app.get("/frontend/state")
+def get_frontend_state() -> dict:
+    """Đọc trạng thái frontend đã lưu."""
+    path = _get_frontend_state_path()
+    if not path.exists():
+        return {
+            "selected_profiles": {},
+            "feed_mode": "feed",
+            "feed_text": "",
+            "feed_run_minutes": 30,
+            "feed_rest_minutes": 120,
+            "scan_mode": "feed",
+            "scan_text": "",
+            "scan_run_minutes": 30,
+            "scan_rest_minutes": 120,
+            "group_scan_post_count": 0,
+            "group_scan_start_date": "",
+            "group_scan_end_date": "",
+            "last_updated": None,
+        }
+    
+    try:
+        with path.open(encoding="utf-8") as f:
+            data = json.load(f)
+        return data
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Không đọc được frontend state: {exc}") from exc
+
+
+@app.post("/frontend/state")
+def save_frontend_state(payload: FrontendStateRequest) -> dict:
+    """Lưu trạng thái frontend."""
+    path = _get_frontend_state_path()
+    
+    # Đọc state hiện tại (nếu có)
+    current_state = {}
+    if path.exists():
+        try:
+            with path.open(encoding="utf-8") as f:
+                current_state = json.load(f)
+        except Exception:
+            pass
+    
+    # Cập nhật state mới
+    if payload.selected_profiles is not None:
+        current_state["selected_profiles"] = payload.selected_profiles
+    if payload.feed_mode is not None:
+        current_state["feed_mode"] = payload.feed_mode
+    if payload.feed_text is not None:
+        current_state["feed_text"] = payload.feed_text
+    if payload.feed_run_minutes is not None:
+        current_state["feed_run_minutes"] = payload.feed_run_minutes
+    if payload.feed_rest_minutes is not None:
+        current_state["feed_rest_minutes"] = payload.feed_rest_minutes
+    if payload.scan_mode is not None:
+        current_state["scan_mode"] = payload.scan_mode
+    if payload.scan_text is not None:
+        current_state["scan_text"] = payload.scan_text
+    if payload.scan_run_minutes is not None:
+        current_state["scan_run_minutes"] = payload.scan_run_minutes
+    if payload.scan_rest_minutes is not None:
+        current_state["scan_rest_minutes"] = payload.scan_rest_minutes
+    if payload.group_scan_post_count is not None:
+        current_state["group_scan_post_count"] = payload.group_scan_post_count
+    if payload.group_scan_start_date is not None:
+        current_state["group_scan_start_date"] = payload.group_scan_start_date
+    if payload.group_scan_end_date is not None:
+        current_state["group_scan_end_date"] = payload.group_scan_end_date
+    
+    current_state["last_updated"] = datetime.now().isoformat()
+    
+    # Ghi file
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as f:
+            json.dump(current_state, f, ensure_ascii=False, indent=2)
+        return {"status": "ok", "message": "Đã lưu frontend state"}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Không ghi được frontend state: {exc}") from exc
+
+
 @app.post("/jobs/stop-all")
 def stop_all_jobs() -> dict:
     """
