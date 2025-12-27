@@ -2675,15 +2675,11 @@ async function pollAccountStatus() {
       if (info.title) {
         detailMsg += `\nTitle: ${info.title}`;
       }
-      if (info.keyword) {
-        detailMsg += `\nKeyword: ${info.keyword}`;
-      }
+      
       if (info.url) {
         detailMsg += `\nURL: ${info.url}`;
       }
-      if (info.reason) {
-        detailMsg += `\nLý do: ${info.reason}`;
-      }
+      
       
       const msg = info.message || 'Tài khoản có vấn đề, hãy kiểm tra lại bằng tay.';
       const fullMessage = `${msg}\n${detailMsg}`;
@@ -3702,15 +3698,11 @@ async function updateScanStats() {
             if (status.title) {
               detailMsg += `\nTitle: ${status.title}`;
             }
-            if (status.keyword) {
-              detailMsg += `\nKeyword: ${status.keyword}`;
-            }
+           
             if (status.url) {
               detailMsg += `\nURL: ${status.url}`;
             }
-            if (status.reason) {
-              detailMsg += `\nLý do: ${status.reason}`;
-            }
+          
             const fullMessage = `${status.message || `Profile ${pid} bị khóa/bị ban`}\n${detailMsg}`;
             showToast(fullMessage, 'error', 12000);
           } else {

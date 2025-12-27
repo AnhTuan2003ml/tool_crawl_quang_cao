@@ -1581,6 +1581,46 @@ def stop_all_jobs() -> dict:
 # INFO COLLECTOR (get_all_info_from_post_ids_dir)
 # ==============================================================================
 
+def _check_data_exists(mode: str, profiles: Optional[list[str]] = None) -> bool:
+    """
+    Helper function: Kiểm tra xem có dữ liệu bài viết không trước khi lấy cookie.
+    Trả về True nếu có dữ liệu, False nếu không có.
+    """
+    from pathlib import Path
+    post_ids_dir = get_data_dir() / "post_ids"
+    
+    if not post_ids_dir.exists():
+        return False
+    
+    if mode == "selected":
+        if not profiles:
+            return False
+        # Kiểm tra xem có file nào cho các profile đã chọn không
+        for pid in profiles:
+            file_path = post_ids_dir / f"{pid}.json"
+            if file_path.exists():
+                try:
+                    with file_path.open("r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        if isinstance(data, list) and len(data) > 0:
+                            return True
+                except Exception:
+                    pass
+        return False
+    else:
+        # Mode "all": kiểm tra xem có file nào có dữ liệu không
+        json_files = list(post_ids_dir.glob("*.json"))
+        for file_path in json_files:
+            try:
+                with file_path.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list) and len(data) > 0:
+                        return True
+            except Exception:
+                pass
+        return False
+
+
 @app.post("/info/run")
 async def run_info_collector(payload: InfoRunRequest = Body(...)) -> dict:
     """
@@ -1588,7 +1628,8 @@ async def run_info_collector(payload: InfoRunRequest = Body(...)) -> dict:
       - mode="all": chạy toàn bộ post_ids dir (giống CLI hiện tại)
       - mode="selected": chỉ chạy các profile_id truyền trong payload.profiles
     
-    TRƯỚC KHI lấy thông tin, sẽ tự động lấy cookie cho tất cả profile (tuần tự).
+    TRƯỚC KHI lấy cookie, sẽ kiểm tra xem có dữ liệu bài viết không.
+    Nếu có dữ liệu thì mới lấy cookie, sau đó mới lấy thông tin.
     """
     mode = (payload.mode or "all").lower()
     
@@ -1602,7 +1643,20 @@ async def run_info_collector(payload: InfoRunRequest = Body(...)) -> dict:
     except Exception:
         pass
     
-    # 🆕 BƯỚC 1: LẤY COOKIE CHO TẤT CẢ PROFILE (TUẦN TỰ)
+    # 🆕 BƯỚC 1: KIỂM TRA DỮ LIỆU TRƯỚC
+    try:
+        has_data = _check_data_exists(mode, payload.profiles if mode == "selected" else None)
+        if not has_data:
+            print(f"⚠️ [/info/run] Không có dữ liệu bài viết để xử lý")
+            raise HTTPException(status_code=400, detail="Không có dữ liệu bài viết để xử lý")
+        print(f"✅ [/info/run] Đã kiểm tra: có dữ liệu bài viết, tiếp tục lấy cookie...")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"⚠️ [/info/run] Lỗi khi kiểm tra dữ liệu: {e}")
+        raise HTTPException(status_code=400, detail="Không có dữ liệu bài viết để xử lý")
+    
+    # 🆕 BƯỚC 2: LẤY COOKIE CHO TẤT CẢ PROFILE (TUẦN TỰ) - CHỈ KHI CÓ DỮ LIỆU
     profiles_to_fetch_cookies = []
     try:
         if mode == "selected":
@@ -1619,11 +1673,13 @@ async def run_info_collector(payload: InfoRunRequest = Body(...)) -> dict:
                 profiles_to_fetch_cookies = []
         
         # Lấy cookie tuần tự cho từng profile (tránh race condition)
+        # Dùng run_in_threadpool vì _fetch_cookie_for_profile dùng Playwright Sync API
         if profiles_to_fetch_cookies:
             print(f"🍪 [/info/run] Bắt đầu lấy cookie cho {len(profiles_to_fetch_cookies)} profile(s)...")
             cookie_results = []
             for pid in profiles_to_fetch_cookies:
-                result = _fetch_cookie_for_profile(pid)
+                # Chạy trong thread pool để tránh lỗi "Playwright Sync API inside asyncio loop"
+                result = await run_in_threadpool(_fetch_cookie_for_profile, pid)
                 cookie_results.append(result)
                 if result["status"] == "ok":
                     print(f"✅ [{pid}] Đã lấy cookie thành công")
@@ -1634,15 +1690,11 @@ async def run_info_collector(payload: InfoRunRequest = Body(...)) -> dict:
             success_count = sum(1 for r in cookie_results if r["status"] == "ok")
             error_count = len(cookie_results) - success_count
             print(f"🍪 [/info/run] Hoàn thành lấy cookie: {success_count} thành công, {error_count} lỗi")
-            
-            # Nếu tất cả đều lỗi, cảnh báo nhưng vẫn tiếp tục lấy thông tin
-            if error_count == len(cookie_results):
-                print(f"⚠️ [/info/run] Tất cả profile đều lỗi khi lấy cookie, nhưng vẫn tiếp tục lấy thông tin...")
     except Exception as e:
         # Nếu lỗi khi lấy cookie, log nhưng vẫn tiếp tục lấy thông tin
         print(f"⚠️ [/info/run] Lỗi khi lấy cookie: {e}, nhưng vẫn tiếp tục lấy thông tin...")
     
-    # 🆕 BƯỚC 2: SAU KHI LẤY ĐỦ COOKIE, MỚI BẮT ĐẦU LẤY THÔNG TIN
+    # 🆕 BƯỚC 3: SAU KHI LẤY ĐỦ COOKIE, MỚI BẮT ĐẦU LẤY THÔNG TIN
     try:
         if mode == "selected":
             profiles = payload.profiles or []
