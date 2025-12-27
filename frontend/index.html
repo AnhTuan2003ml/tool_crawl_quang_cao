@@ -207,38 +207,26 @@
 
         <!-- View: Setting profile -->
         <div id="settingsView" style="display:none;">
-          <div class="settings-stack">
-            <div class="setting-card">
-              <div class="setting-card-header">
-                <div>
-                  <h4>API Key</h4>
-
+          <div class="settings-grid">
+            <!-- Cột trái: Actions và Config Panels -->
+            <div class="settings-left-column">
+              <div class="setting-card">
+                <div class="setting-card-header">
+                  <div>
+                    <h4>Danh sách profile</h4>
+                    <p class="muted">Thêm profile_id và thao tác nhanh</p>
+                  </div>
+                  <div class="setting-card-actions">
+                    <button id="runAllInfoBtn" class="btn-primary" type="button">Lấy thông tin toàn bộ</button>
+                    <button id="runSelectedInfoBtn" class="btn-primary" type="button">Lấy thông tin profile đã chọn</button>
+                    <button id="scanPostsSettingBtn" class="btn-primary" type="button">Quét bài viết</button>
+                    <button id="scanGroupSettingBtn" class="btn-primary" type="button">Quét theo group</button>
+                    <button id="autoJoinGroupBtn" class="btn-primary" type="button">Tự động tham gia group</button>
+                    <button id="feedAccountSettingBtn" class="btn-primary" type="button">Nuôi acc</button>
+                    <button id="stopAllSettingBtn" class="btn-danger" type="button">Dừng tất cả</button>
+                  </div>
                 </div>
-              </div>
-              <div class="inline-field">
-                <input id="settingApiKey" type="text" placeholder="Nhập API Key" />
-                <button id="saveApiKeyBtn" class="btn-primary" type="button">Lưu API Key</button>
-              </div>
-              <p class="hint">API Key được lưu trên trình duyệt; đổi thì nhập mới rồi bấm Lưu.</p>
-            </div>
-
-            <div class="setting-card">
-              <div class="setting-card-header">
-                <div>
-                  <h4>Danh sách profile</h4>
-                  <p class="muted">Thêm profile_id và thao tác nhanh</p>
-                </div>
-                <div class="setting-card-actions">
-                  <button id="runAllInfoBtn" class="btn-primary" type="button">Lấy thông tin toàn bộ</button>
-                  <button id="runSelectedInfoBtn" class="btn-primary" type="button">Lấy thông tin profile đã chọn</button>
-                  <button id="scanPostsSettingBtn" class="btn-primary" type="button">Quét bài viết</button>
-                  <button id="scanGroupSettingBtn" class="btn-primary" type="button">Quét theo group</button>
-                  <button id="autoJoinGroupBtn" class="btn-primary" type="button">Tự động tham gia group</button>
-                  <button id="feedAccountSettingBtn" class="btn-primary" type="button">Nuôi acc</button>
-                  <button id="stopAllSettingBtn" class="btn-danger" type="button">Dừng tất cả</button>
-                </div>
-              </div>
-              <div id="feedConfigPanel" class="feed-panel" style="display:none;">
+                <div id="feedConfigPanel" class="feed-panel" style="display:none;">
                 <div class="feed-panel-row">
                   <label class="feed-radio">
                     <input type="radio" name="feedMode" value="feed" checked />
@@ -359,13 +347,37 @@
                   </p>
                 </div>
               </div>
+              </div>
+            </div>
 
-              <div id="profileList" class="profile-list empty-state-box">
-                <p class="muted">Chưa có profile nào</p>
+            <!-- Cột phải: API Key và Profile List -->
+            <div class="settings-right-column">
+              <div class="setting-card">
+                <div class="setting-card-header">
+                  <div>
+                    <h4>API Key</h4>
+                  </div>
+                </div>
+                <div class="inline-field">
+                  <input id="settingApiKey" type="text" placeholder="Nhập API Key" />
+                  <button id="saveApiKeyBtn" class="btn-primary" type="button">Lưu API Key</button>
+                </div>
+                <p class="hint">API Key được lưu trên trình duyệt; đổi thì nhập mới rồi bấm Lưu.</p>
               </div>
 
-              <div class="add-profile-row">
-                <button id="addProfileRowBtn" class="btn-primary" type="button">+ Thêm profile</button>
+              <div class="setting-card">
+                <div class="setting-card-header">
+                  <div>
+                    <h4>Danh sách profile</h4>
+                  </div>
+                </div>
+                <div id="profileList" class="profile-list empty-state-box">
+                  <p class="muted">Chưa có profile nào</p>
+                </div>
+
+                <div class="add-profile-row">
+                  <button id="addProfileRowBtn" class="btn-primary" type="button">+ Thêm profile</button>
+                </div>
               </div>
             </div>
           </div>
