@@ -58,6 +58,7 @@ const runSelectedInfoBtn = document.getElementById('runSelectedInfoBtn');
 const feedConfigPanel = document.getElementById('feedConfigPanel');
 const scanConfigPanel = document.getElementById('scanConfigPanel');
 const groupScanPanel = document.getElementById('groupScanPanel');
+const groupScanUrlInput = document.getElementById('groupScanUrlInput');
 const groupScanPostCountInput = document.getElementById('groupScanPostCountInput');
 const groupScanStartDateInput = document.getElementById('groupScanStartDateInput');
 const groupScanEndDateInput = document.getElementById('groupScanEndDateInput');
@@ -92,7 +93,6 @@ let profileState = {
 let addRowEl = null; // Row tạm để nhập profile mới
 let joinGroupPollTimer = null;
 let feedPollTimer = null;
-let groupScanPollTimer = null;
 let scanBackendPollTimer = null; // Poll trạng thái bot runner để sync UI sau F5
 let isScanning = false; // Trạng thái đang quét
 let isPausedAll = false; // Trạng thái pause all (UI)
@@ -216,15 +216,6 @@ function syncRunningLabelsWithPauseState() {
         autoJoinGroupBtn.textContent = isPausedAll ? 'Đang tạm dừng...' : 'Đang auto join...';
       }
     }
-
-    if (groupScanPollTimer) {
-      if (scanGroupSettingBtn && scanGroupSettingBtn.classList.contains('btn-loading')) {
-        scanGroupSettingBtn.textContent = isPausedAll ? 'Đang tạm dừng...' : 'Đang quét group...';
-      }
-      if (groupScanStartBtn && groupScanStartBtn.classList.contains('btn-loading')) {
-        groupScanStartBtn.textContent = isPausedAll ? 'Đang tạm dừng...' : 'Đang quét group...';
-      }
-    }
   } catch (_) { }
 }
 
@@ -244,7 +235,43 @@ function applyControlStateToProfileRows(st) {
     || feedRunning.size > 0
   );
 
-  // Badge logic đã được xóa
+  const rows = document.querySelectorAll('.profile-row-wrap');
+  rows.forEach((wrap) => {
+    const pid = String(wrap.dataset.profileId || '').trim();
+    if (!pid) return;
+    const badge = wrap.querySelector('.profile-state-badge');
+
+    // --- Effective state ---
+    // Default: READY (mới vào / chưa có job)
+    let eff = 'READY';
+    // Nếu không có session nào chạy -> luôn READY
+    if (sessionRunning) {
+      // Nếu đang pause (global hoặc profile) -> PAUSED
+      if (pausedAll || pausedProfiles.has(pid)) {
+        eff = 'PAUSED';
+      } else {
+        // RUNNING nếu profile đang có feed/join hoặc runner đang chạy và profile_state RUNNING
+        if (feedRunning.has(pid) || joinRunning.has(pid)) {
+          eff = 'RUNNING';
+        } else if (botRunning) {
+          const ps = String(profileStates[pid] || '').toUpperCase();
+          // Ưu tiên list từ backend: bot_profile_ids
+          const inBot = botProfileIds.size > 0 ? botProfileIds.has(pid) : false;
+          eff = (ps === 'RUNNING' || inBot) ? 'RUNNING' : 'READY';
+        } else {
+          eff = 'READY';
+        }
+      }
+    }
+
+    if (badge) {
+      badge.classList.remove('state-running', 'state-paused', 'state-ready', 'state-idle', 'state-unknown', 'state-stopping', 'state-stopped', 'state-error');
+      if (eff === 'PAUSED') badge.classList.add('state-paused');
+      else if (eff === 'RUNNING') badge.classList.add('state-running');
+      else badge.classList.add('state-ready');
+      badge.textContent = (eff === 'READY') ? 'SẴN SÀNG' : (eff === 'RUNNING') ? 'ĐANG CHẠY' : 'ĐANG TẠM DỪNG';
+    }
+  });
 }
 
 /**
@@ -549,6 +576,11 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
   groupBtn.type = 'button';
   groupBtn.className = 'btn-primary';
   groupBtn.textContent = 'Thêm Groups';
+
+  // Badge hiển thị trạng thái profile (RUNNING/PAUSED/STOPPED)
+  const stateBadge = document.createElement('span');
+  stateBadge.className = isNew ? 'profile-state-badge state-ready' : 'profile-state-badge state-idle';
+  stateBadge.textContent = isNew ? 'SẴN SÀNG' : 'IDLE';
 
   // ===== Group editor panel (div) =====
   const groupPanel = document.createElement('div');
@@ -966,6 +998,7 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
     }
   });
 
+  actions.appendChild(stateBadge);
   actions.appendChild(saveBtn);
   actions.appendChild(removeBtn);
   actions.appendChild(groupBtn);
@@ -1352,6 +1385,7 @@ if (scanGroupSettingBtn) {
 
     const isOpen = groupScanPanel.style.display !== 'none';
     groupScanPanel.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen && groupScanUrlInput) groupScanUrlInput.focus();
   });
 }
 
@@ -1363,104 +1397,48 @@ if (groupScanCancelBtn && groupScanPanel) {
 
 // UI only: bấm "Chạy" thì chỉ validate + toast (chưa gọi API)
 if (groupScanStartBtn) {
-  groupScanStartBtn.addEventListener('click', async () => {
+  groupScanStartBtn.addEventListener('click', () => {
     const selected = Object.keys(profileState.selected || {}).filter((pid) => profileState.selected[pid]);
     if (selected.length === 0) {
       showToast('Chọn (tick) ít nhất 1 profile trước.', 'error');
       return;
     }
+    const raw = String(groupScanUrlInput?.value || '');
+    const urls = raw
+      .split(/\r?\n/)
+      .map((s) => String(s || '').trim())
+      .filter(Boolean);
     const postCount = parseInt(String(groupScanPostCountInput?.value || '0').trim(), 10);
     const startDate = String(groupScanStartDateInput?.value || '').trim();
     const endDate = String(groupScanEndDateInput?.value || '').trim();
-    
-    if (!Number.isFinite(postCount) || postCount <= 0) {
-      showToast('Số bài viết theo dõi phải lớn hơn 0.', 'error');
+    if (urls.length === 0) {
+      showToast('Nhập ít nhất 1 URL group (mỗi dòng 1 URL).', 'error');
+      return;
+    }
+    if (!Number.isFinite(postCount) || postCount < 0) {
+      showToast('Số bài viết theo dõi không hợp lệ.', 'error');
       return;
     }
     if (!startDate || !endDate) {
-      showToast('Nhập đủ ngày bắt đầu và ngày kết thúc.', 'error');
+      showToast('Nhập đủ thời gian bắt đầu và kết thúc.', 'error');
       return;
     }
-    
-    // Parse date (YYYY-MM-DD format)
-    const startTs = Date.parse(startDate + 'T00:00:00');
-    const endTs = Date.parse(endDate + 'T23:59:59');
+    const startTs = Date.parse(startDate);
+    const endTs = Date.parse(endDate);
     if (!Number.isFinite(startTs) || !Number.isFinite(endTs)) {
-      showToast('Ngày không hợp lệ.', 'error');
+      showToast('Thời gian không hợp lệ.', 'error');
       return;
     }
     if (startTs > endTs) {
-      showToast('Ngày bắt đầu phải ≤ ngày kết thúc.', 'error');
+      showToast('Thời gian bắt đầu phải ≤ thời gian kết thúc.', 'error');
       return;
     }
 
-    // Disable button và hiển thị loading
-    setButtonLoading(groupScanStartBtn, true, 'Đang quét group...');
-    setButtonLoading(scanGroupSettingBtn, true, 'Đang quét group...');
-    
-    try {
-      const response = await fetch('http://localhost:8000/scan-groups', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          profile_ids: selected,
-          post_count: postCount,
-          start_date: startDate,
-          end_date: endDate
-        })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Lỗi không xác định');
-      }
-
-      showToast(
-        `✅ Đã thêm ${selected.length} profile vào hàng chờ quét group. Số bài: ${postCount}, từ ${startDate} đến ${endDate}`,
-        'success',
-        4000
-      );
-      
-      // Đóng panel sau khi thành công
-      if (groupScanPanel) {
-        groupScanPanel.style.display = 'none';
-      }
-
-      // Poll trạng thái quét group để biết khi nào hoàn thành
-      if (groupScanPollTimer) clearInterval(groupScanPollTimer);
-      groupScanPollTimer = setInterval(async () => {
-        try {
-          const st = await callBackendNoAlert('/scan-groups/status', { method: 'GET' });
-          const processing = st && typeof st.processing === 'boolean' ? st.processing : false;
-          const queueLength = st && typeof st.queue_length === 'number' ? st.queue_length : 0;
-          
-          // Nếu không còn đang xử lý và queue rỗng thì hoàn thành
-          if (!processing && queueLength === 0) {
-            clearInterval(groupScanPollTimer);
-            groupScanPollTimer = null;
-            setButtonLoading(groupScanStartBtn, false);
-            setButtonLoading(scanGroupSettingBtn, false);
-            showToast('✅ Quét group: Hoàn thành', 'success', 2000);
-          }
-        } catch (e) {
-          // Nếu lỗi poll thì dừng poll để không spam
-          clearInterval(groupScanPollTimer);
-          groupScanPollTimer = null;
-          setButtonLoading(groupScanStartBtn, false);
-          setButtonLoading(scanGroupSettingBtn, false);
-          showToast('Không lấy được trạng thái quét group (kiểm tra FastAPI).', 'error');
-        }
-      }, 4000);
-      
-    } catch (error) {
-      console.error('Lỗi khi quét group:', error);
-      showToast(`❌ Lỗi: ${error.message}`, 'error', 4000);
-      setButtonLoading(groupScanStartBtn, false);
-      setButtonLoading(scanGroupSettingBtn, false);
-    }
+    showToast(
+      `✅ Đã nhận ${urls.length} group URL, số bài: ${postCount}, từ ${startDate} đến ${endDate}`,
+      'success',
+      2400
+    );
   });
 }
 
@@ -1584,15 +1562,9 @@ async function handleStopAll() {
       clearInterval(feedPollTimer);
       feedPollTimer = null;
     }
-    if (groupScanPollTimer) {
-      clearInterval(groupScanPollTimer);
-      groupScanPollTimer = null;
-    }
     setButtonLoading(autoJoinGroupBtn, false);
     setButtonLoading(feedAccountSettingBtn, false);
     setButtonLoading(feedStartBtn, false);
-    setButtonLoading(scanGroupSettingBtn, false);
-    setButtonLoading(groupScanStartBtn, false);
     if (feedConfigPanel) feedConfigPanel.style.display = 'none';
     
     // Refresh state và update buttons
@@ -2493,11 +2465,6 @@ function exportToExcel() {
           v: userId,
           l: { Target: profileUrl, Tooltip: `Xem profile Facebook của ${userId}` }
         });
-      }
-      // Cột thứ 5 (index 4) là Comment - lấy nội dung thực tế thay vì icon mắt
-      else if (colIndex === 4) {
-        const commentContent = td.dataset.comment || '';
-        row.push(commentContent);
       } else {
         row.push(td.textContent);
       }
@@ -2511,38 +2478,14 @@ function exportToExcel() {
 
   // Đặt độ rộng cột
   ws['!cols'] = [
-    { wch: 20 }, // ID Bài Post
+    { wch: 18 }, // ID Bài Post
     { wch: 18 }, // ID User
     { wch: 20 }, // Name
     { wch: 12 }, // React
-    { wch: 40 }, // Comment - tăng độ rộng cho nội dung comment
+    { wch: 12 }, // Comment
     { wch: 20 }, // Time
     { wch: 15 }  // Type
   ];
-
-  // Thiết lập wrap text cho cột Comment (cột E, index 4)
-  const range = XLSX.utils.decode_range(ws['!ref']);
-  for (let row = range.s.r; row <= range.e.r; row++) {
-    const cellAddress = XLSX.utils.encode_cell({ r: row, c: 4 }); // Cột 4 là Comment
-    if (ws[cellAddress]) {
-      if (!ws[cellAddress].s) ws[cellAddress].s = {};
-      ws[cellAddress].s.alignment = { wrapText: true, vertical: 'top' };
-    }
-  }
-
-  // Đặt chiều cao hàng tự động cho comments dài
-  const rowsHeight = [];
-  data.forEach((row, index) => {
-    if (index > 0 && row[4]) { // Bỏ qua header và kiểm tra cột comment
-      const commentText = row[4];
-      const lines = commentText.split('\n').length;
-      const estimatedHeight = Math.max(15, lines * 12); // Chiều cao tối thiểu 15, mỗi dòng 12
-      rowsHeight.push({ hpt: estimatedHeight });
-    } else {
-      rowsHeight.push({ hpt: 15 }); // Chiều cao mặc định
-    }
-  });
-  ws['!rows'] = rowsHeight;
 
   // Thêm worksheet vào workbook
   XLSX.utils.book_append_sheet(wb, ws, 'Danh sách quét');

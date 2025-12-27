@@ -8,6 +8,51 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+
+def parse_facebook_json_response(response_text):
+    """
+    Parse Facebook JSON response, xử lý prefix "for (;;);" và các edge cases.
+    
+    Args:
+        response_text (str): Raw response text từ Facebook API
+        
+    Returns:
+        dict: Parsed JSON object
+        
+    Raises:
+        json.JSONDecodeError: Nếu không thể parse JSON
+        ValueError: Nếu response chứa Facebook error
+    """
+    if not response_text or not response_text.strip():
+        raise ValueError("Response text rỗng")
+    
+    # Facebook thường wrap JSON trong "for (;;);" để tránh JSON hijacking
+    json_text = response_text.strip()
+    if json_text.startswith("for (;;);"):
+        json_text = json_text[9:].strip()  # Remove "for (;;);" prefix
+    
+    # Parse JSON
+    response_json = json.loads(json_text)
+    
+    # Kiểm tra error code trực tiếp trong response (Facebook error format)
+    if "error" in response_json:
+        error_code = response_json.get("error")
+        error_summary = response_json.get("errorSummary", "")
+        error_description = response_json.get("errorDescription", "")
+        
+        if error_code == 1357004:
+            error_msg = f"Facebook API Error 1357004: {error_summary}"
+            if error_description:
+                error_msg += f" - {error_description}"
+            raise ValueError(error_msg)
+        else:
+            error_msg = f"Facebook API Error {error_code}: {error_summary}"
+            if error_description:
+                error_msg += f" - {error_description}"
+            raise ValueError(error_msg)
+    
+    return response_json
+
 # Import control state để check stop/pause
 try:
     from backend.core.control import check_flags, wait_if_paused
@@ -129,6 +174,79 @@ def send_request(feedback_target_id, payload_dict, profile_id, cookies, cursor=N
     return response
 
 
+def process_reactors_response(response_json, all_users, seen_ids, duplicate_count):
+    """
+    Xử lý response_json từ Facebook API để trích xuất users từ reactors.
+    
+    Args:
+        response_json (dict): Parsed JSON response từ Facebook API
+        all_users (list): List users đã thu thập (sẽ được extend)
+        seen_ids (set): Set các user IDs đã thấy (sẽ được update)
+        duplicate_count (int): Counter cho duplicate users (sẽ được update)
+        
+    Returns:
+        tuple: (page_users, end_cursor, has_next_page, last_cursor, new_duplicate_count)
+            - page_users: List users mới từ trang này
+            - end_cursor: Cursor để lấy trang tiếp theo
+            - has_next_page: Boolean có trang tiếp theo không
+            - last_cursor: Cursor từ edge cuối cùng
+            - new_duplicate_count: Số duplicate mới (duplicate_count + số duplicate trong trang này)
+    """
+    reactors = response_json.get("data", {}).get("node", {}).get("reactors", {})
+    edges = reactors.get("edges", [])
+    page_info = reactors.get("page_info", {})
+    end_cursor = page_info.get("end_cursor")
+    has_next_page = page_info.get("has_next_page", False)
+    
+    print(f"   🔍 Debug: Số edges trong response: {len(edges)}")
+    if len(edges) == 0:
+        print(f"   ⚠️ Không có edges trong response!")
+        print(f"   🔍 Debug: Reactors keys: {list(reactors.keys()) if reactors else 'None'}")
+        print(f"   🔍 Debug: Data structure: {json.dumps(response_json.get('data', {}), indent=2, ensure_ascii=True)[:500]}")
+    elif len(edges) > 0:
+        # Debug: In ra node đầu tiên để kiểm tra
+        first_node = edges[0].get("node", {})
+        first_id = first_node.get("id")
+        first_name = first_node.get("name")
+        print(f"   🔍 Debug node đầu tiên: id={first_id}, name={first_name}, đã có trong seen_ids: {first_id in seen_ids if first_id else 'N/A'}")
+    
+    page_users = []
+    last_cursor = None
+    page_duplicate_count = 0  # Đếm duplicate trong trang này
+    
+    for edge in edges:
+        node = edge.get("node", {})
+        node_id = node.get("id")
+        node_name = node.get("name")
+        edge_cursor = edge.get("cursor")  # Lấy cursor từ edge
+        
+        # Debug: In ra node đầu tiên để kiểm tra
+        if len(page_users) == 0 and len(edges) > 0:
+            print(f"   🔍 Debug node đầu tiên: id={node_id}, name={node_name}, node_keys={list(node.keys())}")
+        
+        if node_id and node_name:
+            # Kiểm tra xem id đã tồn tại chưa
+            if node_id not in seen_ids:
+                seen_ids.add(node_id)
+                page_users.append({
+                    "id": node_id,
+                    "name": node_name
+                })
+            else:
+                page_duplicate_count += 1
+        elif not node_id:
+            print(f"   ⚠️ Node không có id: {node}")
+        elif not node_name:
+            print(f"   ⚠️ Node không có name: id={node_id}")
+        
+        # Lưu cursor của edge cuối cùng
+        if edge_cursor:
+            last_cursor = edge_cursor
+    
+    new_duplicate_count = duplicate_count + page_duplicate_count
+    return page_users, end_cursor, has_next_page, last_cursor, new_duplicate_count
+
+
 # ================================
 #   HÀM HOÀN CHỈNH: LẤY TẤT CẢ USERS TỪ FID
 # ================================
@@ -210,13 +328,25 @@ def get_all_users_by_fid(fid, payload_dict, profile_id, cookies):
 
         if response.status_code != 200:
             print(f"❌ Lỗi: Status code {response.status_code}")
+            print(f"   Response preview: {saved_text[:500] if saved_text else 'Empty response'}")
             break
+        
+        # Debug: Kiểm tra content-type
+        content_type = response.headers.get("content-type", "").lower()
+        print(f"   Content-Type: {content_type}")
+        
+        # Debug: In preview của response để kiểm tra
+        if saved_text:
+            preview = saved_text[:200].replace("\n", "\\n")
+            print(f"   Response preview (200 chars): {preview}")
+        else:
+            print(f"   ⚠️ Response text rỗng!")
         
         # Parse response thành JSON
         try:
-            response_json = response.json()
+            response_json = parse_facebook_json_response(saved_text)
             
-            # Kiểm tra và parse lỗi Facebook API
+            # Kiểm tra và parse lỗi Facebook API (format errors array)
             if "errors" in response_json:
                 errors = response_json.get("errors", [])
                 if errors and isinstance(errors, list) and len(errors) > 0:
@@ -241,55 +371,9 @@ def get_all_users_by_fid(fid, payload_dict, profile_id, cookies):
             
             # Trích xuất id và name từ mỗi node
             try:
-                reactors = response_json.get("data", {}).get("node", {}).get("reactors", {})
-                edges = reactors.get("edges", [])
-                page_info = reactors.get("page_info", {})
-                end_cursor = page_info.get("end_cursor")
-                has_next_page = page_info.get("has_next_page", False)
-                
-                print(f"   🔍 Debug: Số edges trong response: {len(edges)}")
-                if len(edges) == 0:
-                    print(f"   ⚠️ Không có edges trong response!")
-                    print(f"   🔍 Debug: Reactors keys: {list(reactors.keys()) if reactors else 'None'}")
-                    print(f"   🔍 Debug: Data structure: {json.dumps(response_json.get('data', {}), indent=2, ensure_ascii=True)[:500]}")
-                elif len(edges) > 0:
-                    # Debug: In ra node đầu tiên để kiểm tra
-                    first_node = edges[0].get("node", {})
-                    first_id = first_node.get("id")
-                    first_name = first_node.get("name")
-                    print(f"   🔍 Debug node đầu tiên: id={first_id}, name={first_name}, đã có trong seen_ids: {first_id in seen_ids if first_id else 'N/A'}")
-                
-                page_users = []
-                last_cursor = None
-                
-                for edge in edges:
-                    node = edge.get("node", {})
-                    node_id = node.get("id")
-                    node_name = node.get("name")
-                    edge_cursor = edge.get("cursor")  # Lấy cursor từ edge
-                    
-                    # Debug: In ra node đầu tiên để kiểm tra
-                    if len(page_users) == 0 and len(edges) > 0:
-                        print(f"   🔍 Debug node đầu tiên: id={node_id}, name={node_name}, node_keys={list(node.keys())}")
-                    
-                    if node_id and node_name:
-                        # Kiểm tra xem id đã tồn tại chưa
-                        if node_id not in seen_ids:
-                            seen_ids.add(node_id)
-                            page_users.append({
-                                "id": node_id,
-                                "name": node_name
-                            })
-                        else:
-                            duplicate_count += 1
-                    elif not node_id:
-                        print(f"   ⚠️ Node không có id: {node}")
-                    elif not node_name:
-                        print(f"   ⚠️ Node không có name: id={node_id}")
-                    
-                    # Lưu cursor của edge cuối cùng
-                    if edge_cursor:
-                        last_cursor = edge_cursor
+                page_users, end_cursor, has_next_page, last_cursor, duplicate_count = process_reactors_response(
+                    response_json, all_users, seen_ids, duplicate_count
+                )
                 
                 all_users.extend(page_users)
                 
@@ -320,9 +404,14 @@ def get_all_users_by_fid(fid, payload_dict, profile_id, cookies):
                 print(f"⚠️ Lỗi khi trích xuất nodes: {e}")
                 break
                 
-        except json.JSONDecodeError as e:
-            print(f"❌ Lỗi: Response không phải JSON hợp lệ")
-            print(f"   Chi tiết: {e}")
+        except ValueError as e:
+            # Facebook API error (1357004, etc.) - đã được parse và xử lý trong parse_facebook_json_response
+            error_msg = str(e)
+            if "1357004" in error_msg:
+                print(f"   ❌ Facebook Error 1357004")
+                print(f"   💡 Có thể do: Session hết hạn, cookies không hợp lệ, hoặc cần refresh browser")
+            else:
+                print(f"   ❌ {error_msg}")
             # Attempt to extract dynamic payload values (fb_dtsg, lsd, __spin_r, __spin_t)
             try:
                 from get_payload import ensure_payload_from_bad_response, get_payload_by_profile_id, update_payload_file
@@ -348,9 +437,164 @@ def get_all_users_by_fid(fid, payload_dict, profile_id, cookies):
                     print("ℹ️ Thử gửi lại request sau khi cập nhật payload...")
                     response = send_request(feedback_target_id, payload_dict, profile_id, cookies, cursor)
                     try:
-                        response_json = response.json()
+                        # Lấy response text để parse
+                        retry_saved_text = response.text or ""
+                        if not retry_saved_text and response.content:
+                            retry_saved_text = response.content.decode("utf-8", errors="replace")
+                        response_json = parse_facebook_json_response(retry_saved_text)
                         print("✅ Retry thành công, response JSON hợp lệ.")
-                        # continue processing with new response_json
+                        
+                        # Kiểm tra errors array
+                        if "errors" in response_json:
+                            errors = response_json.get("errors", [])
+                            if errors and isinstance(errors, list) and len(errors) > 0:
+                                error = errors[0]
+                                error_code = error.get("code")
+                                error_message = error.get("message", "Unknown error")
+                                print(f"   ❌ Response có errors: {errors}")
+                                raise ValueError(f"Facebook API Error: {error_message} (Code: {error_code})")
+                        
+                        # Xử lý response_json ngay tại đây
+                        if "data" not in response_json:
+                            print(f"   ⚠️ Response không có 'data': {list(response_json.keys())}")
+                            break
+                        
+                        # Trích xuất users từ response
+                        try:
+                            page_users, end_cursor, has_next_page, last_cursor, duplicate_count = process_reactors_response(
+                                response_json, all_users, seen_ids, duplicate_count
+                            )
+                            
+                            all_users.extend(page_users)
+                            next_cursor = end_cursor
+                            
+                            print(f"   ✅ Lấy được {len(page_users)} users mới (Tổng: {len(all_users)}, Trùng: {duplicate_count})")
+                            print(f"   🔗 End cursor: {end_cursor[:50] if end_cursor else 'None'}...")
+                            print(f"   📄 Has next page: {has_next_page}")
+                            
+                            if not has_next_page:
+                                print(f"\n✅ Đã lấy hết tất cả users! (has_next_page = False)")
+                                break
+                            
+                            if not next_cursor:
+                                print(f"\n⚠️ Không có cursor để tiếp tục, dừng lại")
+                                break
+                            
+                            cursor = next_cursor
+                            page_number += 1
+                            print(f"   ➡️ Cursor đã được cập nhật: {cursor[:50]}...")
+                            continue  # Tiếp tục vòng lặp với cursor mới
+                            
+                        except Exception as e_extract:
+                            print(f"⚠️ Lỗi khi trích xuất nodes từ retry response: {e_extract}")
+                            break
+                            
+                    except ValueError as e2:
+                        print(f"❌ Retry vẫn có lỗi Facebook API: {e2}")
+                        break
+                    except Exception as e2:
+                        print(f"❌ Retry vẫn không trả về JSON hợp lệ: {e2}")
+                        break
+                else:
+                    print("❌ Không thể tạo payload mới từ payload.txt/settings.json, dừng.")
+                    break
+            except Exception as ee:
+                print(f"⚠️ Lỗi khi cố gắng fix bằng headless: {ee}")
+                break
+        except json.JSONDecodeError as e:
+            print(f"❌ Lỗi: Response không phải JSON hợp lệ")
+            print(f"   Chi tiết: {e}")
+            print(f"   Content-Type: {content_type}")
+            print(f"   Response length: {len(saved_text) if saved_text else 0} chars")
+            if saved_text:
+                # In ra 500 ký tự đầu để debug
+                preview = saved_text[:500].replace("\n", "\\n")
+                print(f"   Response preview: {preview}")
+                # Kiểm tra xem có phải HTML không
+                if saved_text.strip().startswith("<!DOCTYPE") or saved_text.strip().startswith("<html"):
+                    print(f"   ⚠️ Response có vẻ là HTML (có thể là trang lỗi của Facebook)")
+                elif len(saved_text.strip()) == 0:
+                    print(f"   ⚠️ Response rỗng!")
+            # Attempt to extract dynamic payload values (fb_dtsg, lsd, __spin_r, __spin_t)
+            try:
+                from get_payload import ensure_payload_from_bad_response, get_payload_by_profile_id, update_payload_file
+                print("ℹ️ Thực hiện headless capture để lấy các giá trị động và cập nhật settings.json/payload.txt...")
+                payload_values = ensure_payload_from_bad_response(profile_id, cookies, response_text=saved_text, timeout=8)
+                if not payload_values:
+                    print("❌ Headless capture không trả về giá trị nào, dừng.")
+                    break
+
+                # Update payload.txt with discovered dynamic values
+                try:
+                    updated = update_payload_file(payload_values)
+                    if updated:
+                        print("✅ Đã cập nhật backend/config/payload.txt từ headless capture")
+                    else:
+                        print("⚠️ Không thể cập nhật backend/config/payload.txt từ headless capture")
+                except Exception as e_up:
+                    print(f"⚠️ Lỗi khi cập nhật payload.txt: {e_up}")
+
+                # Rebuild payload_dict from updated payload.txt / settings.json and retry once
+                payload_dict = get_payload_by_profile_id(profile_id)
+                if payload_dict:
+                    print("ℹ️ Thử gửi lại request sau khi cập nhật payload...")
+                    response = send_request(feedback_target_id, payload_dict, profile_id, cookies, cursor)
+                    try:
+                        # Lấy response text để parse
+                        retry_saved_text = response.text or ""
+                        if not retry_saved_text and response.content:
+                            retry_saved_text = response.content.decode("utf-8", errors="replace")
+                        response_json = parse_facebook_json_response(retry_saved_text)
+                        print("✅ Retry thành công, response JSON hợp lệ.")
+                        
+                        # Kiểm tra errors array
+                        if "errors" in response_json:
+                            errors = response_json.get("errors", [])
+                            if errors and isinstance(errors, list) and len(errors) > 0:
+                                error = errors[0]
+                                error_code = error.get("code")
+                                error_message = error.get("message", "Unknown error")
+                                print(f"   ❌ Response có errors: {errors}")
+                                raise ValueError(f"Facebook API Error: {error_message} (Code: {error_code})")
+                        
+                        # Xử lý response_json ngay tại đây
+                        if "data" not in response_json:
+                            print(f"   ⚠️ Response không có 'data': {list(response_json.keys())}")
+                            break
+                        
+                        # Trích xuất users từ response
+                        try:
+                            page_users, end_cursor, has_next_page, last_cursor, duplicate_count = process_reactors_response(
+                                response_json, all_users, seen_ids, duplicate_count
+                            )
+                            
+                            all_users.extend(page_users)
+                            next_cursor = end_cursor
+                            
+                            print(f"   ✅ Lấy được {len(page_users)} users mới (Tổng: {len(all_users)}, Trùng: {duplicate_count})")
+                            print(f"   🔗 End cursor: {end_cursor[:50] if end_cursor else 'None'}...")
+                            print(f"   📄 Has next page: {has_next_page}")
+                            
+                            if not has_next_page:
+                                print(f"\n✅ Đã lấy hết tất cả users! (has_next_page = False)")
+                                break
+                            
+                            if not next_cursor:
+                                print(f"\n⚠️ Không có cursor để tiếp tục, dừng lại")
+                                break
+                            
+                            cursor = next_cursor
+                            page_number += 1
+                            print(f"   ➡️ Cursor đã được cập nhật: {cursor[:50]}...")
+                            continue  # Tiếp tục vòng lặp với cursor mới
+                            
+                        except Exception as e_extract:
+                            print(f"⚠️ Lỗi khi trích xuất nodes từ retry response: {e_extract}")
+                            break
+                            
+                    except ValueError as e2:
+                        print(f"❌ Retry vẫn có lỗi Facebook API: {e2}")
+                        break
                     except Exception as e2:
                         print(f"❌ Retry vẫn không trả về JSON hợp lệ: {e2}")
                         break
@@ -426,7 +670,12 @@ def get_users_by_cursor(fid, payload_dict, profile_id, cookies, cursor=None):
     
     # Parse response
     try:
-        response_json = response.json()
+        # Lấy response text
+        response_text = response.text or ""
+        if not response_text and response.content:
+            response_text = response.content.decode("utf-8", errors="replace")
+        
+        response_json = parse_facebook_json_response(response_text)
         reactors = response_json.get("data", {}).get("node", {}).get("reactors", {})
         edges = reactors.get("edges", [])
         page_info = reactors.get("page_info", {})
@@ -452,6 +701,10 @@ def get_users_by_cursor(fid, payload_dict, profile_id, cookies, cursor=None):
             "has_next_page": has_next_page
         }
         
+    except ValueError as e:
+        # Facebook API error (1357004, etc.)
+        print(f"❌ Lỗi Facebook API: {e}")
+        return {"users": [], "end_cursor": None, "has_next_page": False}
     except json.JSONDecodeError as e:
         print(f"❌ Lỗi: Response không phải JSON hợp lệ: {e}")
         return {"users": [], "end_cursor": None, "has_next_page": False}
