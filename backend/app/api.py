@@ -1587,8 +1587,11 @@ async def run_info_collector(payload: InfoRunRequest = Body(...)) -> dict:
     Trigger lấy thông tin reactions/comments:
       - mode="all": chạy toàn bộ post_ids dir (giống CLI hiện tại)
       - mode="selected": chỉ chạy các profile_id truyền trong payload.profiles
+    
+    TRƯỚC KHI lấy thông tin, sẽ tự động lấy cookie cho tất cả profile (tuần tự).
     """
     mode = (payload.mode or "all").lower()
+    
     # Khi bấm Lấy thông tin, auto clear global_pause + emergency_stop
     try:
         control_state.set_global_pause(False)
@@ -1598,6 +1601,48 @@ async def run_info_collector(payload: InfoRunRequest = Body(...)) -> dict:
             control_state.reset_emergency_stop(clear_stopped_profiles=False)
     except Exception:
         pass
+    
+    # 🆕 BƯỚC 1: LẤY COOKIE CHO TẤT CẢ PROFILE (TUẦN TỰ)
+    profiles_to_fetch_cookies = []
+    try:
+        if mode == "selected":
+            profiles_to_fetch_cookies = payload.profiles or []
+            if not profiles_to_fetch_cookies:
+                raise HTTPException(status_code=400, detail="profiles is required when mode=selected")
+        else:
+            # Mode "all": lấy tất cả profile từ settings.json
+            raw = _read_settings_raw()
+            all_profiles = raw.get("PROFILE_IDS") or {}
+            if isinstance(all_profiles, dict):
+                profiles_to_fetch_cookies = list(all_profiles.keys())
+            else:
+                profiles_to_fetch_cookies = []
+        
+        # Lấy cookie tuần tự cho từng profile (tránh race condition)
+        if profiles_to_fetch_cookies:
+            print(f"🍪 [/info/run] Bắt đầu lấy cookie cho {len(profiles_to_fetch_cookies)} profile(s)...")
+            cookie_results = []
+            for pid in profiles_to_fetch_cookies:
+                result = _fetch_cookie_for_profile(pid)
+                cookie_results.append(result)
+                if result["status"] == "ok":
+                    print(f"✅ [{pid}] Đã lấy cookie thành công")
+                else:
+                    print(f"⚠️ [{pid}] Lỗi lấy cookie: {result.get('message', 'Unknown error')}")
+            
+            # Thống kê kết quả
+            success_count = sum(1 for r in cookie_results if r["status"] == "ok")
+            error_count = len(cookie_results) - success_count
+            print(f"🍪 [/info/run] Hoàn thành lấy cookie: {success_count} thành công, {error_count} lỗi")
+            
+            # Nếu tất cả đều lỗi, cảnh báo nhưng vẫn tiếp tục lấy thông tin
+            if error_count == len(cookie_results):
+                print(f"⚠️ [/info/run] Tất cả profile đều lỗi khi lấy cookie, nhưng vẫn tiếp tục lấy thông tin...")
+    except Exception as e:
+        # Nếu lỗi khi lấy cookie, log nhưng vẫn tiếp tục lấy thông tin
+        print(f"⚠️ [/info/run] Lỗi khi lấy cookie: {e}, nhưng vẫn tiếp tục lấy thông tin...")
+    
+    # 🆕 BƯỚC 2: SAU KHI LẤY ĐỦ COOKIE, MỚI BẮT ĐẦU LẤY THÔNG TIN
     try:
         if mode == "selected":
             profiles = payload.profiles or []
@@ -1836,24 +1881,23 @@ def delete_profile(profile_id: str) -> dict:
         return {"status": "ok"}
 
 
-@app.post("/settings/profiles/{profile_id}/cookie/fetch")
-def fetch_and_save_cookie(profile_id: str) -> dict:
+def _fetch_cookie_for_profile(profile_id: str) -> dict:
     """
-    Kết nối NST profile -> lấy cookie từ browser context -> lưu vào settings.json.
+    Helper function: Lấy cookie cho 1 profile (mở NST, lấy cookie, lưu, đóng).
+    Trả về dict với status và message.
     """
     pid = _norm_profile_id(profile_id)
     if not pid:
-        raise HTTPException(status_code=400, detail="profile_id rỗng")
+        return {"status": "error", "profile_id": profile_id, "message": "profile_id rỗng"}
 
+    fb = None
     try:
+        print(f"🍪 [{pid}] Đang mở NST để lấy cookie...")
         ws = connect_profile(pid)
-    except Exception as exc:
-        # NST chưa chạy / API key sai / profile_id sai
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    fb = FBController(ws)
-    fb.profile_id = pid
-    fb.connect()
-    try:
+        fb = FBController(ws)
+        fb.profile_id = pid
+        fb.connect()
+        
         # đảm bảo context đã có session/cookie
         try:
             fb.goto("https://www.facebook.com/")
@@ -1863,43 +1907,61 @@ def fetch_and_save_cookie(profile_id: str) -> dict:
 
         cookie_string = fb.save_cookies()
         if not cookie_string:
-            raise HTTPException(status_code=400, detail="Không lấy được cookie (có thể chưa đăng nhập)")
-        return {"status": "ok", "profile_id": pid, "cookie": cookie_string}
+            return {"status": "error", "profile_id": pid, "message": "Không lấy được cookie (có thể chưa đăng nhập)"}
+        
+        print(f"✅ [{pid}] Đã lấy và lưu cookie thành công")
+        return {"status": "ok", "profile_id": pid, "message": "Đã lấy và lưu cookie thành công"}
+    except Exception as exc:
+        error_msg = str(exc)
+        print(f"❌ [{pid}] Lỗi khi lấy cookie: {error_msg}")
+        return {"status": "error", "profile_id": pid, "message": f"Lỗi: {error_msg}"}
     finally:
         # Đóng sạch tab/context playwright
-        try:
-            if fb.page:
-                try:
-                    fb.page.close()
-                except Exception:
-                    pass
-        except Exception:
-            pass
-        try:
-            if fb.browser and getattr(fb.browser, "contexts", None):
-                for ctx in list(fb.browser.contexts):
+        if fb:
+            try:
+                if fb.page:
                     try:
-                        ctx.close()
+                        fb.page.close()
                     except Exception:
                         pass
-        except Exception:
-            pass
-        try:
-            if fb.browser:
-                fb.browser.close()
-        except Exception:
-            pass
-        try:
-            if fb.play:
-                fb.play.stop()
-        except Exception:
-            pass
+            except Exception:
+                pass
+            try:
+                if fb.browser and getattr(fb.browser, "contexts", None):
+                    for ctx in list(fb.browser.contexts):
+                        try:
+                            ctx.close()
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+            try:
+                if fb.browser:
+                    fb.browser.close()
+            except Exception:
+                pass
+            try:
+                if fb.play:
+                    fb.play.stop()
+            except Exception:
+                pass
 
         # Best-effort: yêu cầu NST stop/close browser instance của profile
         try:
             stop_profile(pid)
         except Exception:
             pass
+
+
+@app.post("/settings/profiles/{profile_id}/cookie/fetch")
+def fetch_and_save_cookie(profile_id: str) -> dict:
+    """
+    Kết nối NST profile -> lấy cookie từ browser context -> lưu vào settings.json.
+    """
+    result = _fetch_cookie_for_profile(profile_id)
+    if result["status"] == "error":
+        raise HTTPException(status_code=400, detail=result["message"])
+    return {"status": "ok", "profile_id": result["profile_id"], "cookie": "đã lưu vào settings.json"}
 
 
 def _get_latest_results_file_logic(filename_param: Optional[str] = None) -> dict:
