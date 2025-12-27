@@ -1451,9 +1451,9 @@ if (feedStartBtn) {
     const runMinutes = parseFloat(String(feedRunMinutesInput?.value || '30').trim()) || 30;
     const restMinutes = parseFloat(String(feedRestMinutesInput?.value || '0').trim()) || 0;
 
-    // Feed: cho phép text rỗng (quét theo keyword mặc định). Search: bắt buộc có text.
-    if (!text && mode === 'search') {
-      showToast('Search cần nhập text.', 'error');
+    // Feed: cho phép text rỗng (quét theo keyword mặc định). Search và Feed+Search: bắt buộc có text.
+    if (!text && (mode === 'search' || mode === 'feed+search' || mode === 'feed_search')) {
+      showToast('Search và Feed+Search cần nhập text.', 'error');
       return;
     }
     if (!runMinutes || runMinutes <= 0) {
@@ -1486,33 +1486,40 @@ if (feedStartBtn) {
         showToast(`Đã chạy nuôi acc (${mode})${loopText}: started=${started}, skipped=${skipped}`, 'success', 2600);
         if (feedConfigPanel) feedConfigPanel.style.display = 'none';
 
-        // Nếu chạy vòng lặp (restMinutes > 0) thì coi như chạy liên tục -> không poll "hoàn thành"
-        if (restMinutes <= 0) {
-          if (feedPollTimer) clearInterval(feedPollTimer);
-          feedPollTimer = setInterval(async () => {
-            try {
-              const st = await callBackendNoAlert('/feed/status', { method: 'GET' });
-              const running = (st && Array.isArray(st.running)) ? st.running : [];
-              const still = selected.filter((pid) => running.includes(pid));
-              if (still.length === 0) {
-                clearInterval(feedPollTimer);
-                feedPollTimer = null;
-                setButtonLoading(feedStartBtn, false);
-                setButtonLoading(feedAccountSettingBtn, false);
-                showToast('✅ Nuôi acc: Hoàn thành', 'success', 2000);
-              }
-            } catch (e) {
+        // Luôn poll status để cập nhật loading state (kể cả khi có loop)
+        if (feedPollTimer) clearInterval(feedPollTimer);
+        feedPollTimer = setInterval(async () => {
+          try {
+            const st = await callBackendNoAlert('/feed/status', { method: 'GET' });
+            const running = (st && Array.isArray(st.running)) ? st.running : [];
+            const still = selected.filter((pid) => running.includes(pid));
+            if (still.length === 0) {
+              // Không còn profile nào đang chạy -> tắt loading
               clearInterval(feedPollTimer);
               feedPollTimer = null;
               setButtonLoading(feedStartBtn, false);
               setButtonLoading(feedAccountSettingBtn, false);
-              showToast('Không lấy được trạng thái nuôi acc (kiểm tra FastAPI).', 'error');
+              // Chỉ hiển thị "Hoàn thành" nếu không có loop (restMinutes <= 0)
+              if (restMinutes <= 0) {
+                showToast('✅ Nuôi acc: Hoàn thành', 'success', 2000);
+              }
+            } else {
+              // Vẫn còn profile đang chạy -> giữ loading state
+              if (!feedStartBtn.classList.contains('btn-loading')) {
+                setButtonLoading(feedStartBtn, true, 'Đang chạy...');
+              }
+              if (!feedAccountSettingBtn.classList.contains('btn-loading')) {
+                setButtonLoading(feedAccountSettingBtn, true, 'Đang nuôi acc...');
+              }
             }
-          }, 4000);
-        } else {
-          setButtonLoading(feedStartBtn, false);
-          setButtonLoading(feedAccountSettingBtn, false);
-        }
+          } catch (e) {
+            clearInterval(feedPollTimer);
+            feedPollTimer = null;
+            setButtonLoading(feedStartBtn, false);
+            setButtonLoading(feedAccountSettingBtn, false);
+            showToast('Không lấy được trạng thái nuôi acc (kiểm tra FastAPI).', 'error');
+          }
+        }, 4000);
     } catch (e) {
       setButtonLoading(feedStartBtn, false);
       setButtonLoading(feedAccountSettingBtn, false);
@@ -1752,8 +1759,9 @@ if (scanStartBtn) {
     const text = String(scanTextInput?.value || '').trim();
     const mode = String(document.querySelector('input[name="scanMode"]:checked')?.value || 'feed').trim().toLowerCase();
 
-    if (mode === 'search' && !text) {
-      showToast('Search cần nhập text để search.', 'error');
+    // Search và Feed+Search: bắt buộc có text
+    if ((mode === 'search' || mode === 'feed+search' || mode === 'feed_search') && !text) {
+      showToast('Search và Feed+Search cần nhập text để search.', 'error');
       return;
     }
 

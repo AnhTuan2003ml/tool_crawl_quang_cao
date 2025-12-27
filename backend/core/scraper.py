@@ -145,6 +145,333 @@ class SimpleBot:
                     # Sleep với pause check
                     self._sleep_with_pause_check(delay, profile_id, active_time_list, last_check_time_list)
 
+            except RuntimeError as e:
+                # Nếu là exception đặc biệt BROWSER_CLOSED thì dừng ngay
+                if "BROWSER_CLOSED" in str(e) or "EMERGENCY_STOP" in str(e):
+                    print(f"🛑 Dừng bot ngay lập tức ({e})")
+                    break
+                raise  # Re-raise nếu không phải BROWSER_CLOSED
+            except Exception as e:
+                error_msg = str(e).lower()
+                # Nếu browser/page đã bị đóng thì dừng luôn
+                if any(keyword in error_msg for keyword in ["closed", "disconnected", "target page", "context or browser"]):
+                    print(f"🛑 Browser đã bị đóng -> Dừng bot")
+                    break
+                print(f"⚠️ Lỗi scan: {e}")
+                # Sleep với pause check cho lỗi
+                self._sleep_with_pause_check(2.0, profile_id, active_time_list, last_check_time_list)
+
+
+class FeedSearchCombinedScanBot(SimpleBot):
+    """
+    Bot quét bài viết kết hợp Feed + Search:
+    - Bắt đầu quét Feed (có SHARE và SAVE ID)
+    - Khi đạt nửa thời gian, tự động goto sang Search URL
+    - Tiếp tục quét cho đến hết thời gian
+    """
+    def __init__(self, fb, search_text: str):
+        super().__init__(fb)
+        self.search_text = search_text
+        self.search_url = None
+        if search_text:
+            from urllib.parse import quote_plus
+            encoded_query = quote_plus(search_text)
+            self.search_url = f"https://www.facebook.com/search/top/?q={encoded_query}"
+        self.switched_to_search = False  # Flag để đảm bảo chỉ switch 1 lần
+
+    def run(self, url, duration=None):
+        print(f"🚀 [Scan Feed+Search] Đang truy cập Feed: {url}")
+        # Điều hướng trực tiếp tới URL Feed
+        self.fb.goto(url)
+
+        # ==== CHECK ACCOUNT STATUS MỘT LẦN SAU KHI VÀO TRANG MỤC TIÊU ====
+        profile_id = getattr(self.fb, 'profile_id', None)
+        if profile_id:
+            try:
+                print(f"🔍 [ACCOUNT_STATUS] Kiểm tra trạng thái account cho profile {profile_id} (scan feed+search)...")
+                from core.account_status import check_account_status_brutal, save_account_status
+                status = check_account_status_brutal(self.fb)
+                status["profile_id"] = profile_id
+                status["checked_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+                save_account_status(profile_id, status)
+
+                if status.get("banned"):
+                    error_msg = f"⛔ [ACCOUNT_BANNED] Profile {profile_id} bị khóa/bị ban: {status.get('message')}"
+                    print(error_msg)
+                    raise RuntimeError(f"ACCOUNT_BANNED: {status.get('message')}")
+                else:
+                    print(f"✅ [ACCOUNT_STATUS] Profile {profile_id} OK: {status.get('message')}")
+            except RuntimeError:
+                raise
+            except Exception as e:
+                print(f"⚠️ [ACCOUNT_STATUS] Không kiểm tra được trạng thái account (scan feed+search): {e}")
+        
+        # Track "active time" (chỉ tăng khi không pause) thay vì wall clock time
+        active_time_list = [0.0]
+        last_check_time_list = [time.time()]
+        wall_time_start = time.time()
+        last_log_time = wall_time_start
+        half_duration = (duration / 2.0) if duration else None  # Nửa thời gian để switch sang search
+
+        # 🔍 DEBUG: Log thời gian nhận được
+        if duration:
+            print(f"⏱️ [Scan Feed+Search] {profile_id} Bắt đầu chạy với duration={duration}s ({duration/60:.2f} phút)")
+            print(f"⏱️ [Scan Feed+Search] {profile_id} Sẽ chuyển sang Search sau {half_duration}s ({half_duration/60:.2f} phút)")
+        
+        while True:
+            try:
+                # STOP/PAUSE checkpoint (ưu tiên STOP ALL)
+                try:
+                    if hasattr(self.fb, "control_checkpoint"):
+                        self.fb.control_checkpoint("before_loop")
+                except RuntimeError as ce:
+                    if "EMERGENCY_STOP" in str(ce) or "BROWSER_CLOSED" in str(ce):
+                        print("🛑 Dừng bot do control flag / browser closed")
+                        break
+                    raise
+
+                # Check pause/stop trước khi xử lý
+                stop, paused, _reason = control_state.check_flags(profile_id)
+                if stop:
+                    print("🛑 Dừng bot do STOP flag")
+                    break
+                
+                # Nếu đang pause thì đợi và không tính thời gian
+                if paused:
+                    control_state.wait_if_paused(profile_id, sleep_seconds=0.5)
+                    continue
+                
+                # 🔍 DEBUG: In bộ đếm thời gian mỗi 10 giây
+                now_wall = time.time()
+                if now_wall - last_log_time >= 10.0:
+                    wall_time_elapsed = now_wall - wall_time_start
+                    if duration:
+                        remaining = max(0, duration - active_time_list[0])
+                        mode_str = "🔍 Search" if self.switched_to_search else "🏠 Feed"
+                        print(f"⏱️ [Scan Feed+Search] {profile_id} {mode_str}: active_time={active_time_list[0]:.1f}s/{duration}s (còn {remaining:.1f}s), wall_time={wall_time_elapsed:.1f}s")
+                    else:
+                        mode_str = "🔍 Search" if self.switched_to_search else "🏠 Feed"
+                        print(f"⏱️ [Scan Feed+Search] {profile_id} {mode_str}: active_time={active_time_list[0]:.1f}s, wall_time={wall_time_elapsed:.1f}s")
+                    last_log_time = now_wall
+                
+                # Chuyển sang Search khi đạt nửa thời gian (chỉ 1 lần) - PHẢI CHECK TRƯỚC khi check hết thời gian
+                if not self.switched_to_search and half_duration and active_time_list[0] >= half_duration and self.search_url:
+                    print(f"🔄 [Scan Feed+Search] {profile_id} Đã quét Feed {active_time_list[0]:.1f}s, chuyển sang Search...")
+                    try:
+                        self.fb.goto(self.search_url)
+                        self.switched_to_search = True
+                        print(f"✅ [Scan Feed+Search] {profile_id} Đã chuyển sang Search: {self.search_url}")
+                        # Đợi một chút để trang load
+                        try:
+                            from core.control import smart_sleep
+                            smart_sleep(2.0, profile_id)
+                            active_time_list[0] += 2.0
+                            last_check_time_list[0] = time.time()
+                        except RuntimeError as e:
+                            if "EMERGENCY_STOP" in str(e):
+                                raise
+                    except Exception as e:
+                        print(f"⚠️ [Scan Feed+Search] {profile_id} Lỗi khi chuyển sang Search: {e}")
+                        # Tiếp tục quét Feed nếu không chuyển được
+                
+                # 1. Kiểm tra thời gian chạy (dùng active_time thay vì wall clock) - CHECK SAU khi chuyển Search
+                if duration and active_time_list[0] >= duration:
+                    wall_time_elapsed = time.time() - wall_time_start
+                    mode_str = "🔍 Search" if self.switched_to_search else "🏠 Feed"
+                    print(f"⏳ Hết giờ chạy (đã chạy {active_time_list[0]:.1f}s / {duration}s, wall_time={wall_time_elapsed:.1f}s) [{mode_str}].")
+                    break
+                
+                # ============================================================
+                # CHIẾN THUẬT: SCAN & SCROLL (ĐỒNG BỘ)
+                # ============================================================
+                
+                # Đo thời gian xử lý bài (scan + process) để tính vào active_time
+                process_start = time.time()
+                
+                # Bot cuộn và trả về bài viết (nếu có) cùng loại (green/yellow)
+                post, post_type = self.fb.scan_while_scrolling()
+
+                if post:
+                    self.fb.process_post(post, post_type)
+                    process_end = time.time()
+                    process_time = process_end - process_start
+                    # Tính thời gian xử lý bài vào active_time
+                    active_time_list[0] += process_time
+                    last_check_time_list[0] = process_end
+
+                    delay = random.uniform(12.0, 20.0)
+                    mode_str = "🔍 Search" if self.switched_to_search else "🏠 Feed"
+                    print(f"😴 [{mode_str}] Nghỉ sau khi xử lý bài {delay:.1f}s (đã xử lý {process_time:.1f}s)")
+                    # Sleep với pause check: chỉ tính thời gian không pause vào active_time
+                    self._sleep_with_pause_check(delay, profile_id, active_time_list, last_check_time_list)
+                else:
+                    process_end = time.time()
+                    process_time = process_end - process_start
+                    # Tính thời gian scan (dù không có bài) vào active_time
+                    active_time_list[0] += process_time
+                    last_check_time_list[0] = process_end
+
+                    delay = random.uniform(3.0, 5.0)
+                    mode_str = "🔍 Search" if self.switched_to_search else "🏠 Feed"
+                    print(f"😴 [{mode_str}] Không có bài – nghỉ {delay:.1f}s (đã scan {process_time:.1f}s)")
+                    # Sleep với pause check
+                    self._sleep_with_pause_check(delay, profile_id, active_time_list, last_check_time_list)
+
+            except RuntimeError as e:
+                if "BROWSER_CLOSED" in str(e) or "EMERGENCY_STOP" in str(e):
+                    print(f"🛑 Dừng bot ngay lập tức ({e})")
+                    break
+                raise
+            except Exception as e:
+                error_msg = str(e).lower()
+                if any(keyword in error_msg for keyword in ["closed", "disconnected", "target page", "context or browser"]):
+                    print(f"🛑 Browser đã bị đóng -> Dừng bot")
+                    break
+                print(f"⚠️ Lỗi scan: {e}")
+                # Sleep với pause check cho lỗi
+                self._sleep_with_pause_check(2.0, profile_id, active_time_list, last_check_time_list)
+
+
+class SimpleBot:
+    def __init__(self, fb):
+        self.fb = fb 
+
+    def _sleep_with_pause_check(self, total_seconds, profile_id, active_time_list, last_check_time_list):
+        """
+        Sleep nhưng check pause: chỉ tính thời gian không pause vào active_time.
+        active_time_list và last_check_time_list là list để pass by reference.
+        Sử dụng smart_sleep để handle STOP/PAUSE.
+        """
+        start_time = time.time()
+        try:
+            smart_sleep(total_seconds, profile_id)
+            # Nếu smart_sleep return bình thường (không pause), tính vào active_time
+            end_time = time.time()
+            elapsed = end_time - start_time
+            active_time_list[0] += elapsed
+            last_check_time_list[0] = end_time
+        except RuntimeError as e:
+            if "EMERGENCY_STOP" in str(e):
+                raise
+            # Nếu pause thì không tính vào active_time
+            last_check_time_list[0] = time.time()
+
+    def run(self, url, duration=None):
+        print(f"🚀 Đang truy cập: {url}")
+        # Điều hướng trực tiếp tới URL mục tiêu (trang quét bài viết)
+        self.fb.goto(url)
+
+        # ==== CHECK ACCOUNT STATUS MỘT LẦN SAU KHI VÀO TRANG MỤC TIÊU ====
+        profile_id = getattr(self.fb, 'profile_id', None)
+        if profile_id:
+            try:
+                print(f"🔍 [ACCOUNT_STATUS] Kiểm tra trạng thái account cho profile {profile_id} (scraper)...")
+                status = check_account_status_brutal(self.fb)
+                status["profile_id"] = profile_id
+                status["checked_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+                save_account_status(profile_id, status)
+
+                if status.get("banned"):
+                    error_msg = f"⛔ [ACCOUNT_BANNED] Profile {profile_id} bị khóa/bị ban: {status.get('message')}"
+                    print(error_msg)
+                    # DỪNG BOT cho profile này, để caller xử lý/log và không quét tiếp
+                    raise RuntimeError(f"ACCOUNT_BANNED: {status.get('message')}")
+                else:
+                    print(f"✅ [ACCOUNT_STATUS] Profile {profile_id} OK: {status.get('message')}")
+            except RuntimeError:
+                # ACCOUNT_BANNED / EMERGENCY_STOP sẽ được xử lý ở tầng caller
+                raise
+            except Exception as e:
+                # Không cho phép lỗi check account làm vỡ luồng cũ
+                print(f"⚠️ [ACCOUNT_STATUS] Không kiểm tra được trạng thái account (scraper): {e}")
+        
+        # Track "active time" (chỉ tăng khi không pause) thay vì wall clock time
+        # Dùng list để pass by reference cho helper function
+        active_time_list = [0.0]
+        last_check_time_list = [time.time()]
+        wall_time_start = time.time()  # Thời gian bắt đầu thực tế (wall clock)
+        last_log_time = wall_time_start  # Thời gian in log cuối cùng
+        profile_id = getattr(self.fb, 'profile_id', None)
+        
+        # 🔍 DEBUG: Log thời gian nhận được
+        if duration:
+            print(f"⏱️ [SCRAPER] {profile_id} Bắt đầu chạy với duration={duration}s ({duration/60:.2f} phút)")
+        
+        while True:
+            try:
+                # STOP/PAUSE checkpoint (ưu tiên STOP ALL)
+                try:
+                    if hasattr(self.fb, "control_checkpoint"):
+                        self.fb.control_checkpoint("before_loop")
+                except RuntimeError as ce:
+                    if "EMERGENCY_STOP" in str(ce) or "BROWSER_CLOSED" in str(ce):
+                        print("🛑 Dừng bot do control flag / browser closed")
+                        break
+                    raise
+
+                # Check pause/stop trước khi xử lý
+                stop, paused, _reason = control_state.check_flags(profile_id)
+                if stop:
+                    print("🛑 Dừng bot do STOP flag")
+                    break
+                
+                # Nếu đang pause thì đợi và không tính thời gian
+                if paused:
+                    control_state.wait_if_paused(profile_id, sleep_seconds=0.5)
+                    continue
+                
+                # 🔍 DEBUG: In bộ đếm thời gian mỗi 10 giây
+                now_wall = time.time()
+                if now_wall - last_log_time >= 10.0:  # In mỗi 10 giây
+                    wall_time_elapsed = now_wall - wall_time_start
+                    if duration:
+                        remaining = max(0, duration - active_time_list[0])
+                        print(f"⏱️ [SCRAPER] {profile_id} Đang chạy: active_time={active_time_list[0]:.1f}s/{duration}s (còn {remaining:.1f}s), wall_time={wall_time_elapsed:.1f}s")
+                    else:
+                        print(f"⏱️ [SCRAPER] {profile_id} Đang chạy: active_time={active_time_list[0]:.1f}s, wall_time={wall_time_elapsed:.1f}s")
+                    last_log_time = now_wall
+                
+                # 1. Kiểm tra thời gian chạy (dùng active_time thay vì wall clock)
+                # active_time bao gồm: thời gian xử lý bài + thời gian nghỉ giữa các bài (12-20s)
+                if duration and active_time_list[0] >= duration:
+                    wall_time_elapsed = time.time() - wall_time_start
+                    print(f"⏳ Hết giờ chạy (đã chạy {active_time_list[0]:.1f}s / {duration}s, wall_time={wall_time_elapsed:.1f}s).")
+                    break
+                
+                # ============================================================
+                # CHIẾN THUẬT: SCAN & SCROLL (ĐỒNG BỘ)
+                # ============================================================
+                
+                # Đo thời gian xử lý bài (scan + process) để tính vào active_time
+                process_start = time.time()
+                
+                # Bot cuộn và trả về bài viết (nếu có) cùng loại (green/yellow)
+                post, post_type = self.fb.scan_while_scrolling()
+
+                if post:
+                    self.fb.process_post(post, post_type)
+                    process_end = time.time()
+                    process_time = process_end - process_start
+                    # Tính thời gian xử lý bài vào active_time
+                    active_time_list[0] += process_time
+                    last_check_time_list[0] = process_end
+
+                    delay = random.uniform(12.0, 20.0)
+                    print(f"😴 Nghỉ sau khi xử lý bài {delay:.1f}s (đã xử lý {process_time:.1f}s)")
+                    # Sleep với pause check: chỉ tính thời gian không pause vào active_time
+                    self._sleep_with_pause_check(delay, profile_id, active_time_list, last_check_time_list)
+                else:
+                    process_end = time.time()
+                    process_time = process_end - process_start
+                    # Tính thời gian scan (dù không có bài) vào active_time
+                    active_time_list[0] += process_time
+                    last_check_time_list[0] = process_end
+
+                    delay = random.uniform(3.0, 5.0)
+                    print(f"😴 Không có bài – nghỉ {delay:.1f}s (đã scan {process_time:.1f}s)")
+                    # Sleep với pause check
+                    self._sleep_with_pause_check(delay, profile_id, active_time_list, last_check_time_list)
+
 
 
                 # Random mouse move nhẹ cho đỡ bị check bot

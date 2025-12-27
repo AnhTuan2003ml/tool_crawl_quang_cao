@@ -204,6 +204,157 @@ def open_notifications_random_then_back(
         return False
 
 
+class FeedSearchCombinedBot(SimpleBot):
+    """
+    Bot kết hợp Feed + Search:
+    - Bắt đầu quét Feed
+    - Khi đạt nửa thời gian, tự động goto sang Search URL
+    - Tiếp tục quét cho đến hết thời gian
+    """
+    def __init__(self, fb, search_text: str):
+        super().__init__(fb)
+        self.search_text = search_text
+        self.search_url = None
+        if search_text:
+            encoded_query = urllib.parse.quote_plus(search_text)
+            self.search_url = f"https://www.facebook.com/search/top/?q={encoded_query}"
+        self.switched_to_search = False  # Flag để đảm bảo chỉ switch 1 lần
+
+    def run(self, url, duration=None):
+        print(f"🚀 [Feed+Search] Đang truy cập Feed: {url}")
+        # Điều hướng trực tiếp tới URL Feed
+        self.fb.goto(url)
+
+        # ==== CHECK ACCOUNT STATUS MỘT LẦN SAU KHI VÀO TRANG MỤC TIÊU ====
+        profile_id = getattr(self.fb, "profile_id", None)
+        if profile_id:
+            try:
+                print(f"🔍 [ACCOUNT_STATUS] Kiểm tra trạng thái account cho profile {profile_id} (feed+search)...")
+                status = check_account_status_brutal(self.fb)
+                status["profile_id"] = profile_id
+                status["checked_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+                save_account_status(profile_id, status)
+
+                if status.get("banned"):
+                    error_msg = f"⛔ [ACCOUNT_BANNED] Profile {profile_id} bị khóa/bị ban: {status.get('message')}"
+                    print(error_msg)
+                    raise RuntimeError(f"ACCOUNT_BANNED: {status.get('message')}")
+                else:
+                    print(f"✅ [ACCOUNT_STATUS] Profile {profile_id} OK: {status.get('message')}")
+            except RuntimeError:
+                raise
+            except Exception as e:
+                print(f"⚠️ [ACCOUNT_STATUS] Không kiểm tra được trạng thái account: {e}")
+
+        # ACTIVE TIME tracking (chỉ tăng khi không pause)
+        active_time = 0.0
+        wall_time_start = time.time()
+        last_log_time = wall_time_start
+        next_notify_active_time = _random_notification_interval_seconds()
+        half_duration = (duration / 2.0) if duration else None  # Nửa thời gian để switch sang search
+
+        # 🔍 DEBUG: Log thời gian nhận được
+        if duration:
+            print(f"⏱️ [Feed+Search] {profile_id} Bắt đầu chạy với duration={duration}s ({duration/60:.2f} phút)")
+            print(f"⏱️ [Feed+Search] {profile_id} Sẽ chuyển sang Search sau {half_duration}s ({half_duration/60:.2f} phút)")
+
+        while True:
+            try:
+                # 🔍 DEBUG: In bộ đếm thời gian mỗi 10 giây
+                now_wall = time.time()
+                if now_wall - last_log_time >= 10.0:
+                    wall_time_elapsed = now_wall - wall_time_start
+                    if duration:
+                        remaining = max(0, duration - active_time)
+                        mode_str = "🔍 Search" if self.switched_to_search else "🏠 Feed"
+                        print(f"⏱️ [Feed+Search] {profile_id} {mode_str}: active_time={active_time:.1f}s/{duration}s (còn {remaining:.1f}s), wall_time={wall_time_elapsed:.1f}s")
+                    else:
+                        mode_str = "🔍 Search" if self.switched_to_search else "🏠 Feed"
+                        print(f"⏱️ [Feed+Search] {profile_id} {mode_str}: active_time={active_time:.1f}s, wall_time={wall_time_elapsed:.1f}s")
+                    last_log_time = now_wall
+
+                # Check duration bằng ACTIVE TIME
+                if duration and active_time >= duration:
+                    wall_time_elapsed = time.time() - wall_time_start
+                    print(f"⏳ Hết giờ chạy (đã chạy {active_time:.1f}s / {duration}s, wall_time={wall_time_elapsed:.1f}s).")
+                    break
+
+                # Chuyển sang Search khi đạt nửa thời gian (chỉ 1 lần)
+                if not self.switched_to_search and half_duration and active_time >= half_duration and self.search_url:
+                    print(f"🔄 [Feed+Search] {profile_id} Đã quét Feed {active_time:.1f}s, chuyển sang Search...")
+                    try:
+                        self.fb.goto(self.search_url)
+                        self.switched_to_search = True
+                        print(f"✅ [Feed+Search] {profile_id} Đã chuyển sang Search: {self.search_url}")
+                        # Đợi một chút để trang load
+                        try:
+                            smart_sleep(2.0, profile_id)
+                            active_time += 2.0
+                        except RuntimeError as e:
+                            if "EMERGENCY_STOP" in str(e):
+                                raise
+                    except Exception as e:
+                        print(f"⚠️ [Feed+Search] {profile_id} Lỗi khi chuyển sang Search: {e}")
+                        # Tiếp tục quét Feed nếu không chuyển được
+
+                # Đo thời gian xử lý bài (scan + process) để tính vào active_time
+                process_start = time.time()
+
+                post, post_type = self.fb.scan_while_scrolling()
+
+                if post:
+                    self.fb.process_post(post, post_type)
+                    process_end = time.time()
+                    process_time = process_end - process_start
+                    active_time += process_time
+
+                    delay = random.uniform(12.0, 20.0)
+                    mode_str = "🔍 Search" if self.switched_to_search else "🏠 Feed"
+                    print(f"😴 [{mode_str}] Nghỉ sau khi xử lý bài {delay:.1f}s (đã xử lý {process_time:.1f}s)")
+                    try:
+                        smart_sleep(delay, self.fb.profile_id)
+                        active_time += delay
+                    except RuntimeError as e:
+                        if "EMERGENCY_STOP" in str(e):
+                            raise
+
+                    # Mở thông báo định kỳ
+                    if active_time >= next_notify_active_time:
+                        is_feed = not self.switched_to_search
+                        try:
+                            open_notifications_random_then_back(self.fb, reload_after_back=is_feed)
+                            next_notify_active_time = active_time + _random_notification_interval_seconds()
+                        except RuntimeError as e:
+                            if "EMERGENCY_STOP" in str(e):
+                                raise
+                else:
+                    process_end = time.time()
+                    process_time = process_end - process_start
+                    active_time += process_time
+
+                    delay = random.uniform(3.0, 5.0)
+                    mode_str = "🔍 Search" if self.switched_to_search else "🏠 Feed"
+                    print(f"😴 [{mode_str}] Không có bài – nghỉ {delay:.1f}s (đã scan {process_time:.1f}s)")
+                    try:
+                        smart_sleep(delay, self.fb.profile_id)
+                        active_time += delay
+                    except RuntimeError as e:
+                        if "EMERGENCY_STOP" in str(e):
+                            raise
+
+            except RuntimeError as e:
+                if "EMERGENCY_STOP" in str(e):
+                    print("🛑 Dừng do EMERGENCY_STOP")
+                    raise
+                print(f"❌ Lỗi vòng lặp: {e}")
+                try:
+                    smart_sleep(2.0, self.fb.profile_id)
+                    active_time += 2.0
+                except RuntimeError as stop_e:
+                    if "EMERGENCY_STOP" in str(stop_e):
+                        raise
+
+
 class HumanLikeBot(SimpleBot):
     """
     Kế thừa SimpleBot để gắn nhịp mở Thông báo 8–15 phút/lần,
@@ -470,6 +621,126 @@ def feed_and_like(profile_id: str, filter_text: str, duration_minutes: int = 30,
 
     except Exception as e:
         print(f"❌ Lỗi feed_and_like: {e}")
+
+# ==============================================================================
+# HÀM 3: FEED + SEARCH KẾT HỢP (Quét Feed nửa thời gian, rồi chuyển sang Search)
+# ==============================================================================
+def feed_and_search_combined(profile_id: str, search_text: str, duration_minutes: float = 30.0, all_profile_ids=None):
+    """
+    Quét Feed nửa thời gian, rồi tự động chuyển sang Search và tiếp tục quét.
+    - Bắt đầu với Feed URL
+    - Khi đạt nửa thời gian, goto sang Search URL
+    - Tiếp tục quét cho đến hết thời gian
+    """
+    try:
+        # 1. URL bắt đầu là Trang chủ (Feed)
+        feed_url = "https://www.facebook.com/"
+        
+        print(f"🔄 [Feed+Search] Bắt đầu quét Feed, sau đó chuyển sang Search")
+        print(f"🔍 [Feed+Search] Từ khóa Search: '{search_text}'")
+        print(f"⏱️ [Feed+Search] Thời gian chạy: {duration_minutes} phút ({duration_minutes/2} phút Feed + {duration_minutes/2} phút Search)")
+
+        # 2. Kết nối profile
+        print(f"🚀 Đang mở profile: {profile_id}")
+        ws_url = connect_profile(profile_id)
+        
+        # Dùng Controller đã cắt bỏ Share/Save
+        fb = SearchBotController(ws_url)
+        fb.profile_id = profile_id
+        try:
+            if all_profile_ids:
+                fb.all_profile_ids = list(all_profile_ids)
+            else:
+                fb.all_profile_ids = [profile_id]
+        except Exception:
+            fb.all_profile_ids = [profile_id]
+        fb.connect()
+
+        # 3. Setup filter rules (giống feed_and_like)
+        raw_text_str = str(search_text or "").strip()
+        if not raw_text_str:
+            locations = []
+        else:
+            locations = _parse_location_terms(raw_text_str, strip_terms=getattr(fb, "job_keywords", []))
+            if not locations:
+                print("ℹ️ Không có location từ input -> chỉ dùng keyword mặc định để lọc.")
+
+        fb.required_locations = locations
+        if locations:
+            print(f"✅ Filter location (OR): {locations}")
+        else:
+            print("✅ Filter location: (none) -> chỉ dùng keyword mặc định")
+        print(f"✅ Filter job keywords (default): {getattr(fb, 'job_keywords', [])}")
+        
+        # 4. Chạy Bot kết hợp Feed+Search
+        bot = FeedSearchCombinedBot(fb, search_text)
+        print(f"▶️ Bắt đầu lướt Feed+Search trong {duration_minutes} phút...")
+        duration_seconds = int(duration_minutes * 60)
+        
+        try:
+            bot.run(feed_url, duration=duration_seconds)
+        except RuntimeError as e:
+            if "EMERGENCY_STOP" in str(e):
+                print("🛑 Dừng bot do EMERGENCY_STOP")
+                return
+            if "ACCOUNT_BANNED" in str(e):
+                print(f"🛑 Dừng bot do ACCOUNT_BANNED: {e}")
+                return
+            raise
+        
+    except RuntimeError as e:
+        if "EMERGENCY_STOP" in str(e):
+            print("🛑 Dừng runner do EMERGENCY_STOP")
+            return
+        if "ACCOUNT_BANNED" in str(e):
+            print(f"🛑 Dừng runner do ACCOUNT_BANNED: {e}")
+            return
+        print(f"❌ Lỗi Runner: {e}")
+    except Exception as e:
+        print(f"❌ Lỗi Runner: {e}")
+    finally:
+        print("🛑 Kết thúc Feed+Search.")
+        # Đóng sạch tab/context playwright + stop NST
+        try:
+            if 'fb' in locals() and fb:
+                try:
+                    if getattr(fb, "page", None):
+                        try:
+                            fb.page.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    if getattr(fb, "browser", None) and getattr(fb.browser, "contexts", None):
+                        for ctx in list(fb.browser.contexts):
+                            try:
+                                ctx.close()
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                try:
+                    if getattr(fb, "browser", None):
+                        try:
+                            fb.browser.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    if getattr(fb, "play", None):
+                        try:
+                            fb.play.stop()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        finally:
+            try:
+                stop_profile(profile_id)
+            except Exception:
+                pass
 
 # ==============================================================================
 # HÀM CHẠY CHUNG (CORE LOGIC)

@@ -181,9 +181,11 @@ def _run_bot_profile_loop(
     cfg = get_settings()
     target_url = cfg.target_url
     m = str(mode or "feed").strip().lower()
-    if m not in ("feed", "search"):
+    # Hỗ trợ feed+search và feed_search cho quét bài viết
+    if m not in ("feed", "search", "feed+search", "feed_search"):
         m = "feed"
     t = str(text or "").strip()
+    # Chỉ tạo search URL nếu là search thuần (không phải feed+search, vì feed+search sẽ tự chuyển sau)
     if m == "search" and t:
         q = quote_plus(t)
         target_url = f"https://www.facebook.com/search/top/?q={q}"
@@ -253,8 +255,17 @@ def _run_bot_profile_loop(
                 except Exception:
                     pass
                 fb.connect()
-                bot = SimpleBot(fb)
-                bot.run(target_url, duration=duration_seconds)
+                
+                # Hỗ trợ mode feed+search cho quét bài viết
+                if (m == "feed+search" or m == "feed_search") and t:
+                    from core.scraper import FeedSearchCombinedScanBot
+                    bot = FeedSearchCombinedScanBot(fb, t)
+                    # Bắt đầu với Feed URL
+                    feed_url = "https://www.facebook.com/"
+                    bot.run(feed_url, duration=duration_seconds)
+                else:
+                    bot = SimpleBot(fb)
+                    bot.run(target_url, duration=duration_seconds)
             except RuntimeError as e:
                 # STOP/BROWSER_CLOSED/ACCOUNT_BANNED => thoát phiên
                 if (
@@ -382,7 +393,7 @@ def _run_feed_worker(
     Nếu rest_minutes <= 0 thì chỉ chạy 1 lần.
     """
     try:
-        from core.search_worker import feed_and_like, search_and_like
+        from core.search_worker import feed_and_like, search_and_like, feed_and_search_combined
         m = str(mode or "feed").strip().lower()
         # Hỗ trợ số thập phân (0.5 phút = 30 giây)
         run_m = float(run_minutes or 0)
@@ -409,6 +420,9 @@ def _run_feed_worker(
                 try:
                     if m == "search":
                         search_and_like(profile_id, text or "", duration_minutes=run_m, all_profile_ids=all_profile_ids)
+                    elif m == "feed+search" or m == "feed_search":
+                        # Mode kết hợp: Feed nửa thời gian, rồi chuyển sang Search
+                        feed_and_search_combined(profile_id, text or "", duration_minutes=run_m, all_profile_ids=all_profile_ids)
                     else:
                         feed_and_like(profile_id, text or "", duration_minutes=run_m, all_profile_ids=all_profile_ids)
                 except RuntimeError as e:
@@ -587,11 +601,12 @@ def run_bot(payload: Optional[RunRequest] = Body(None)) -> dict:
     _validate_profiles_requirements(pids, require_cookie=False, require_access_token=False)
 
     m = str(mode or "feed").strip().lower()
-    if m not in ("feed", "search"):
+    # Hỗ trợ feed+search và feed_search
+    if m not in ("feed", "search", "feed+search", "feed_search"):
         m = "feed"
-    # Search bắt buộc có text để search
-    if m == "search" and not str(text or "").strip():
-        raise HTTPException(status_code=400, detail="Search cần text")
+    # Search và Feed+Search bắt buộc có text để search
+    if m in ("search", "feed+search", "feed_search") and not str(text or "").strip():
+        raise HTTPException(status_code=400, detail="Search và Feed+Search cần text")
 
     started: list[str] = []
     skipped: list[dict] = []
@@ -1299,8 +1314,9 @@ def feed_start(payload: FeedStartRequest) -> dict:
     if not text and getattr(payload, "filter_text", None):
         text = str(payload.filter_text or "").strip()
     # Cho phép text rỗng nếu mode=feed (sẽ chỉ filter theo keyword mặc định)
-    if not text and mode == "search":
-        raise HTTPException(status_code=400, detail="text rỗng (search cần text)")
+    # Search và Feed+Search bắt buộc có text
+    if not text and mode in ("search", "feed+search", "feed_search"):
+        raise HTTPException(status_code=400, detail="text rỗng (search và feed+search cần text)")
 
     with _feed_lock:
         _prune_feed_processes()
