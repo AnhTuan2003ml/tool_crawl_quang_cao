@@ -167,6 +167,7 @@ def _run_bot_profile_loop(
     rest_minutes: float,  # Hỗ trợ số thập phân
     text: str,
     mode: str,
+    all_profile_ids: Optional[list[str]] = None,  # Danh sách tất cả profile đang chạy
 ) -> None:
     """
     Worker độc lập cho 1 profile:
@@ -346,6 +347,32 @@ def _run_bot_profile_loop(
                 except Exception:
                     pass
                 return
+
+            # 🆕 TẬN DỤNG THỜI GIAN NGHỈ ĐỂ LẤY THÔNG TIN
+            # Browser đã tắt, payload/cookies lấy từ file → không cần browser
+            # Chỉ profile đầu tiên trong danh sách mới gọi để tránh duplicate
+            if rest_m > 0 and all_profile_ids and len(all_profile_ids) > 0:
+                # Chỉ profile đầu tiên mới gọi lấy thông tin cho tất cả profile
+                is_first_profile = (pid == all_profile_ids[0])
+                if is_first_profile:
+                    try:
+                        print(f"📊 [{pid}] Tận dụng thời gian nghỉ để lấy thông tin cho {len(all_profile_ids)} profile(s)...")
+                        from worker.get_all_info import get_info_for_profile_ids
+                        import threading
+                        
+                        def collect_info():
+                            try:
+                                summary = get_info_for_profile_ids(all_profile_ids)
+                                print(f"✅ [{pid}] Đã lấy thông tin cho {len(all_profile_ids)} profile(s): {summary}")
+                            except Exception as e:
+                                print(f"⚠️ [{pid}] Lỗi khi lấy thông tin: {e}")
+                        
+                        # Chạy trong thread để không block rest period
+                        info_thread = threading.Thread(target=collect_info, daemon=True)
+                        info_thread.start()
+                        # Không join() để không block, cho phép rest period chạy song song
+                    except Exception as e:
+                        print(f"⚠️ [{pid}] Không thể khởi động lấy thông tin: {e}")
 
             # REST (độc lập theo profile) - pause freeze
             try:
@@ -630,7 +657,7 @@ def run_bot(payload: Optional[RunRequest] = Body(None)) -> dict:
                 continue
             proc = Process(
                 target=_run_bot_profile_loop,
-                args=(pid, run_m, rest_m, txt, md),
+                args=(pid, run_m, rest_m, txt, md, pids),  # Truyền danh sách tất cả profile_ids
                 daemon=True,
             )
             proc.start()
