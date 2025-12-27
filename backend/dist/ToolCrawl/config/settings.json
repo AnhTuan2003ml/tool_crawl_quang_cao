@@ -1,13 +1,13 @@
 {
-  "API_KEY": "7a43ee33-9f15-434d-a1b6-6d1b5809f935",
+  "API_KEY": "0709698d-8d3b-4756-8ddb-db6e2b389442",
   "HEADLESS": false,
   "TARGET_URL": "https://facebook.com",
   "PROFILE_IDS": {
     "b77da63d-af55-43c2-ab7f-364250b20e30": {
-      "cookie": "sb=acBIaQQgqAGBTmbz93PPTcnU; ps_l=1; ps_n=1; datr=acBIabhUTCuJxOkmdTYz8XW-; c_user=100044138143352; fr=1DlKMT9AxfcHlStqo.AWdoYsTxLLRLD9MjYGEWI85vTKCnRFehI9Ff0FyMZbtnkBkEASs.BpT5zi..AAA.0.0.BpT5zi.AWcFZ2pe3-6QnVaxuUb3O_EQANU; xs=47%3A747-NokaftOFlQ%3A2%3A1766689882%3A-1%3A-1%3A%3AAcyBCz3Np0gHK7aQ0LHykllbZLgLZ01Xs2WZuElBJZg; wd=1920x911;",
+      "cookie": "sb=KBKaaKs-55w3OPrtl37ElZmP; ps_l=1; ps_n=1; datr=aybWaNL75XQPdA6NYjjUV_5M; c_user=100013681742807; xs=5%3Ab-NtJ0mIbiUUcw%3A2%3A1766400415%3A-1%3A-1%3A%3AAcwZ6iIUgrnqlgvYD-4g99juV7VbJMYN8cpYtfwJwbY; wd=1061x919; fr=1zOaWo7A3sh3EWVlq.AWdM8e5ILObIRFAMJnHrhvd4m_mpheeG7ufiHe46bQ3wUELfnu0.BpTjQ2..AAA.0.0.BpTjeB.AWdwYlud4hDbXIjkbvILZH76nig; presence=C%7B%22lm3%22%3A%22sc.8404053716292895%22%2C%22t3%22%3A%5B%7B%22o%22%3A0%2C%22i%22%3A%22sc.7937231823031763%22%7D%2C%7B%22o%22%3A0%2C%22i%22%3A%22sc.7797414643710057%22%7D%5D%2C%22utc3%22%3A1766734384775%2C%22v%22%3A1%7D; dbln=%7B%22100013681742807%22%3A%22PZelVRQV%22%7D; _ga_WN22ZHXY2R=GS2.3.s1766396707%24o1%24g0%24t1766397650%24j60%24l0%24h0",
       "access_token": "EAAGNO4a7r2wBQUXHJowkv0akBHFjy9CryNPj83Qm22vBmrp7bPGPjz6dPAg3sB07gfd2LUhC1lHR4NQdav2vSvs0U5sSGRzxHQvWO2MRBe5Hj1jf4DKyPKtANePV6Nt3JYflU0x1VVV4Pp1yGyA3VedeidPByauJ5R8VNSvWdF3qaKiPMs5OZArObIKFcGzDqhMZC1nGQ2VfLx7gZDZD",
-      "fb_dtsg": "NAftUO48hZO8ftmIDghz8D-SRSlBqKQGiQTUWeDQvY7oNbv5PZdw88w:47:1766689882",
-      "lsd": "vQfJPktdYPgV4m8EwTfK5I",
+      "fb_dtsg": "NAfvH6IFjBd9jo4DvxEH_qZXlPAkWcmSyU1rt91dpHouC7AzYLM5Daw:5:1766400415",
+      "lsd": "mFcnBli6TjW_LBDQF8wn2v",
       "spin_r": "1031381813",
       "spin_t": "1766339451",
       "groups": [
@@ -24,6 +24,17 @@
       "groups": [
         "https://www.facebook.com/groups/tuyendungkisuIT"
       ]
+    },
+    "caabaa64-f2c5-4254-a83b-7f6d57632503": {
+      "access_token": "EAAGNO4a7r2wBQUXHJowkv0akBHFjy9CryNPj83Qm22vBmrp7bPGPjz6dPAg3sB07gfd2LUhC1lHR4NQdav2vSvs0U5sSGRzxHQvWO2MRBe5Hj1jf4DKyPKtANePV6Nt3JYflU0x1VVV4Pp1yGyA3VedeidPByauJ5R8VNSvWdF3qaKiPMs5OZArObIKFcGzDqhMZC1nGQ2VfLx7gZDZD",
+      "fb_dtsg": "NAfuThREXgQSv3eDigoYZeNme1uWqm5Z_u88Dp6dbi-y3iplfrBky8g:27:1766688999",
+      "lsd": "bZ6-DJiz5RrKKVlfXAS4jF",
+      "spin_r": "1031381813",
+      "spin_t": "1766339451",
+      "groups": [
+        "https://www.facebook.com/groups/tuyendungkisuIT"
+      ],
+      "cookie": "sb=p-s7aVkVeb1zYbyjsvyodAWl; ps_l=1; ps_n=1; datr=p-s7aWqfsx-mTxfu314B49U1; c_user=100044138143352; fr=1PNRUmLdMr1Tr5wvy.AWclE3VkTsxcvHlqbxvFcoTSC1Bv6jeAe_pXg5KbNI2NOz9NGWA.BpT6UC..AAA.0.0.BpT6UC.AWcUgEDgbL1nNq5l827rxTxm7HY; xs=27%3AhqtD8JK61cB8hQ%3A2%3A1766688999%3A-1%3A-1%3A%3AAcxSyaD-hEKAKWeXMXmUqYIZB1vlkOjc3c8K97KyVQ; wd=1038x680;"
     }
   },
   "RUN_MINUTES": 30,

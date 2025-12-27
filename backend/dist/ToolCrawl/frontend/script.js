@@ -272,6 +272,20 @@ function updateStopPauseButtonsByJobs() {
   // Nếu đang chạy info collector (local flag) hoặc có session running thì enable buttons
   const shouldEnableButtons = sessionRunning || isInfoCollectorRunning;
 
+  // Disable các nút lấy thông tin khi đang chạy (KHÔNG ghi đè nếu đang loading - setButtonLoading đã xử lý)
+  // Chỉ set disabled nếu KHÔNG đang loading để tránh conflict với setButtonLoading
+  if (runAllInfoBtn) {
+    if (runAllInfoBtn.classList.contains('btn-loading')) {
+      console.log('updateStopPauseButtonsByJobs: Skipping runAllInfoBtn because it is loading');
+    } else {
+      // Disable nếu đang chạy, enable nếu không chạy
+      runAllInfoBtn.disabled = isInfoCollectorRunning;
+      console.log('updateStopPauseButtonsByJobs: runAllInfoBtn disabled:', isInfoCollectorRunning);
+    }
+  }
+  
+  // runSelectedInfoBtn sẽ được xử lý trong updateSettingsActionButtons() để tránh conflict
+
   /**
    * Helper function để set button state một cách nhất quán
    */
@@ -422,9 +436,17 @@ function updateSettingsActionButtons() {
   ].filter(Boolean);
 
   needSelectedBtns.forEach((b) => {
-    // nếu đang loading thì giữ nguyên trạng thái disabled
+    // nếu đang loading thì giữ nguyên trạng thái disabled (setButtonLoading đã xử lý)
     if (b.classList && b.classList.contains('btn-loading')) return;
-    b.disabled = !hasSelected;
+    
+    // Đặc biệt xử lý runSelectedInfoBtn: cần kiểm tra cả isInfoCollectorRunning
+    if (b === runSelectedInfoBtn) {
+      // Disable nếu đang chạy hoặc không có selected
+      b.disabled = isInfoCollectorRunning || !hasSelected;
+    } else {
+      // Các nút khác chỉ cần kiểm tra hasSelected
+      b.disabled = !hasSelected;
+    }
   });
 
   // Các nút ALL (không phụ thuộc tick)
@@ -463,21 +485,36 @@ function showToast(message, type = 'success', ms = 1600) {
 }
 
 function setButtonLoading(btn, isLoading, loadingText) {
-  if (!btn) return;
+  if (!btn) {
+    console.warn('setButtonLoading: button is null');
+    return;
+  }
   if (isLoading) {
     if (!btn.dataset.origText) {
       btn.dataset.origText = btn.textContent || '';
     }
+    // Force disable và add class
     btn.disabled = true;
+    btn.setAttribute('disabled', 'disabled');
     btn.classList.add('btn-loading');
     if (loadingText) btn.textContent = loadingText;
+    // Force style để đảm bảo
+    btn.style.pointerEvents = 'none';
+    btn.style.cursor = 'not-allowed';
+    btn.style.opacity = '0.9';
+    console.log('setButtonLoading: Set loading for button', btn.id, 'disabled:', btn.disabled, 'has class:', btn.classList.contains('btn-loading'), 'classList:', btn.classList.toString());
   } else {
     btn.disabled = false;
+    btn.removeAttribute('disabled');
     btn.classList.remove('btn-loading');
+    btn.style.pointerEvents = '';
+    btn.style.cursor = '';
+    btn.style.opacity = '';
     if (btn.dataset.origText) {
       btn.textContent = btn.dataset.origText;
       delete btn.dataset.origText;
     }
+    console.log('setButtonLoading: Removed loading for button', btn.id);
   }
 }
 
@@ -1952,6 +1989,11 @@ function appendRow({ id, userId, name, react, comment, time, type }) {
   tr.style.transform = 'translateY(-10px)';
   tbody.appendChild(tr);
 
+  // Lưu comment vào tr.dataset để dễ truy cập khi xuất Excel
+  if (hasComment) {
+    tr.dataset.comment = comment;
+  }
+  
   // Gắn dữ liệu comment và sự kiện click cho icon con mắt
   if (hasComment) {
     const commentCell = tr.children[4]; // cột Comment
@@ -2013,6 +2055,11 @@ function appendPostRow(item) {
   const tr = document.createElement('tr');
   const postId = item.post_id || '';
   const text = item.text || '';
+
+  // Bỏ qua post có text chứa CSS code của Facebook
+  if (text.includes(':root') || text.includes('__fb-light-mode') || text.includes('__fb-dark-mode')) {
+    return; // Không hiển thị post này
+  }
 
   const postLink = postId
     ? `<a href="https://fb.com/${postId}" target="_blank" rel="noopener noreferrer" class="id-link">${postId}</a>`
@@ -2140,7 +2187,7 @@ async function checkForNewData() {
             name: ownerName,
             react: false,
             comment: '',
-            time: defaultTime,
+            time: '',
             type: type,
           });
           loadedPostIds.add(uniqueKey);
@@ -2161,7 +2208,7 @@ async function checkForNewData() {
         const hasReact = !!reaction;
         const commentText = comment && comment.text ? comment.text : '';
         const time =
-          (comment && comment.created_time_vn) ? comment.created_time_vn : defaultTime;
+          (comment && comment.created_time_vn) ? comment.created_time_vn : '';
 
         const uniqueKey = `${postId}_${userId}`;
         if (uniqueKey && !loadedPostIds.has(uniqueKey)) {
@@ -2292,7 +2339,7 @@ async function loadInitialData() {
             name: ownerName,
             react: false,
             comment: '',
-            time: defaultTime,
+            time: '',
             type: type,
           });
           loadedPostIds.add(uniqueKey);
@@ -2313,7 +2360,7 @@ async function loadInitialData() {
         const hasReact = !!reaction;
         const commentText = comment && comment.text ? comment.text : '';
         const time =
-          (comment && comment.created_time_vn) ? comment.created_time_vn : defaultTime;
+          (comment && comment.created_time_vn) ? comment.created_time_vn : '';
 
         const uniqueKey = `${postId}_${userId}`; // Tạo key duy nhất cho mỗi cặp post-user
         if (uniqueKey && !loadedPostIds.has(uniqueKey)) {
@@ -2494,10 +2541,25 @@ function exportToExcel() {
           l: { Target: profileUrl, Tooltip: `Xem profile Facebook của ${userId}` }
         });
       }
-      // Cột thứ 5 (index 4) là Comment - lấy nội dung thực tế thay vì icon mắt
+      // Cột thứ 5 (index 4) là Comment - lấy nội dung từ tr.dataset.comment hoặc td.dataset.comment
       else if (colIndex === 4) {
-        const commentContent = td.dataset.comment || '';
-        row.push(commentContent);
+        // Ưu tiên lấy từ tr.dataset.comment (đã lưu khi appendRow)
+        let commentText = tr.dataset.comment || '';
+        
+        // Nếu không có, thử lấy từ td.dataset.comment
+        if (!commentText) {
+          commentText = td.getAttribute('data-comment') || td.dataset.comment || '';
+        }
+        
+        // Nếu vẫn không có, kiểm tra xem có phần tử .comment-text không (user đã click để hiển thị)
+        if (!commentText) {
+          const commentTextElement = td.querySelector('.comment-text');
+          if (commentTextElement) {
+            commentText = commentTextElement.textContent || '';
+          }
+        }
+        
+        row.push(commentText);
       } else {
         row.push(td.textContent);
       }
@@ -2511,38 +2573,14 @@ function exportToExcel() {
 
   // Đặt độ rộng cột
   ws['!cols'] = [
-    { wch: 20 }, // ID Bài Post
+    { wch: 18 }, // ID Bài Post
     { wch: 18 }, // ID User
-    { wch: 20 }, // Name
+    { wch: 25 }, // Name
     { wch: 12 }, // React
-    { wch: 40 }, // Comment - tăng độ rộng cho nội dung comment
+    { wch: 40 }, // Comment - tăng độ rộng để chứa nội dung dài
     { wch: 20 }, // Time
     { wch: 15 }  // Type
   ];
-
-  // Thiết lập wrap text cho cột Comment (cột E, index 4)
-  const range = XLSX.utils.decode_range(ws['!ref']);
-  for (let row = range.s.r; row <= range.e.r; row++) {
-    const cellAddress = XLSX.utils.encode_cell({ r: row, c: 4 }); // Cột 4 là Comment
-    if (ws[cellAddress]) {
-      if (!ws[cellAddress].s) ws[cellAddress].s = {};
-      ws[cellAddress].s.alignment = { wrapText: true, vertical: 'top' };
-    }
-  }
-
-  // Đặt chiều cao hàng tự động cho comments dài
-  const rowsHeight = [];
-  data.forEach((row, index) => {
-    if (index > 0 && row[4]) { // Bỏ qua header và kiểm tra cột comment
-      const commentText = row[4];
-      const lines = commentText.split('\n').length;
-      const estimatedHeight = Math.max(15, lines * 12); // Chiều cao tối thiểu 15, mỗi dòng 12
-      rowsHeight.push({ hpt: estimatedHeight });
-    } else {
-      rowsHeight.push({ hpt: 15 }); // Chiều cao mặc định
-    }
-  });
-  ws['!rows'] = rowsHeight;
 
   // Thêm worksheet vào workbook
   XLSX.utils.book_append_sheet(wb, ws, 'Danh sách quét');
@@ -3216,35 +3254,30 @@ async function updateInfoProgress() {
       isInfoCollectorRunning = backendRunning;
       if (!backendRunning) {
         // Backend đã dừng, reset state
+        console.log('updateInfoProgress: Backend stopped, resetting state');
         resetInfoCollectorState();
+      } else {
+        console.log('updateInfoProgress: Backend started, keeping loading state');
       }
       updateStopPauseButtonsByJobs();
     }
     
+    // Bỏ toast "đã lấy được 1/bao nhiêu bài" - không hiển thị nữa
+    // Giữ lại logic để sync state nhưng không hiển thị toast
     if (res.is_running && res.total > 0) {
-      const current = res.current || 0;
-      const total = res.total || 0;
-      const file = res.current_file || '';
-      const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
-      
-      text.textContent = `Đã xử lý ${current}/${total} bài${file ? ` • File: ${file}` : ''}`;
-      
-      // Cập nhật progress bar
-      if (progressBar) {
-        progressBar.style.width = `${percentage}%`;
-      }
-      
-      toast.style.display = 'block';
-      progressToast.style.display = 'block';
+      // Không hiển thị toast nữa, chỉ sync state
+      // toast.style.display = 'block';
+      // progressToast.style.display = 'block';
     } else {
-      toast.style.display = 'none';
+      // Ẩn toast nếu có
+      if (toast) toast.style.display = 'none';
       // Reset progress bar
       if (progressBar) {
         progressBar.style.width = '0%';
       }
       // Ẩn progressToast nếu cả 2 toast đều ẩn
       const scanToast = document.getElementById('scanStatsToast');
-      if (!scanToast || scanToast.style.display === 'none') {
+      if (progressToast && (!scanToast || scanToast.style.display === 'none')) {
         progressToast.style.display = 'none';
       }
     }
@@ -3271,15 +3304,26 @@ async function runInfoCollector(mode = 'all') {
   // Đánh dấu đang chạy
   isInfoCollectorRunning = true;
   
+  // Hiển thị toast khi bắt đầu
+  const startMsg = isSelected 
+    ? `Đang lấy thông tin cho ${selected.length} profile đã chọn...` 
+    : 'Đang lấy thông tin toàn bộ...';
+  showToast(startMsg, 'info', 2000);
+  
+  // Set loading state TRƯỚC khi gọi các hàm update khác để tránh bị ghi đè
+  console.log('runInfoCollector: Setting loading for button', btn.id, btn);
   setButtonLoading(btn, true, 'Đang lấy thông tin...');
   
-  // Bắt đầu poll tiến trình
-  if (infoProgressInterval) clearInterval(infoProgressInterval);
-  updateInfoProgress(); // Cập nhật ngay lập tức
-  infoProgressInterval = setInterval(updateInfoProgress, 2000); // Poll mỗi 2 giây
+  // Verify loading state was set
+  console.log('runInfoCollector: After setButtonLoading - disabled:', btn.disabled, 'has btn-loading class:', btn.classList.contains('btn-loading'), 'classList:', btn.classList.toString());
   
-  // Update buttons để enable pause/stop buttons
+  // Update buttons để enable pause/stop buttons (sau khi đã set loading)
+  // Các hàm này sẽ skip nếu button đang loading
   updateStopPauseButtonsByJobs();
+  updateSettingsActionButtons();
+  
+  // Verify loading state is still set after updates
+  console.log('runInfoCollector: After updates - disabled:', btn.disabled, 'has btn-loading class:', btn.classList.contains('btn-loading'), 'classList:', btn.classList.toString());
   
   try {
     const body = { mode: isSelected ? 'selected' : 'all' };
@@ -3288,25 +3332,29 @@ async function runInfoCollector(mode = 'all') {
       method: 'POST',
       body: JSON.stringify(body),
     });
-    const summary = res && res.summary ? res.summary : null;
-    const msgParts = [];
-    msgParts.push(isSelected ? `Đã chạy cho ${body.profiles.length} profile` : 'Đã chạy lấy thông tin toàn bộ');
-    if (summary && typeof summary.total_posts_processed === 'number') {
-      msgParts.push(`posts: ${summary.total_posts_processed}`);
-    }
-    showToast(msgParts.join(' | '), 'success', 2200);
+    // Bỏ toast "posts: X" vì dư thừa - đã có toast "Đã cập nhật danh sách quét" ở dưới
+    // const summary = res && res.summary ? res.summary : null;
+    // Không hiển thị toast "posts: X" nữa
+
+    // Bắt đầu poll tiến trình SAU KHI backend đã start (để tránh reset state quá sớm)
+    if (infoProgressInterval) clearInterval(infoProgressInterval);
+    // Đợi một chút để backend kịp start trước khi check progress
+    setTimeout(() => {
+      updateInfoProgress(); // Cập nhật sau khi backend đã start
+      infoProgressInterval = setInterval(updateInfoProgress, 2000); // Poll mỗi 2 giây
+    }, 1000);
 
     // Tự động tải lại danh sách quét với dữ liệu mới nhất theo timestamp
     try {
       await loadInitialData();
-      showToast('Đã cập nhật danh sách quét với dữ liệu mới nhất', 'info', 1500);
+      showToast('Đã cập nhật danh sách quét với dữ liệu mới nhất', 'success', 3500);
     } catch (loadErr) {
       console.warn('Không thể tải lại danh sách quét:', loadErr);
       // Không hiện lỗi cho user vì chức năng chính đã thành công
     }
 
-    // Reset flag sau khi hoàn thành thành công
-    resetInfoCollectorState();
+    // KHÔNG reset state ở đây - để poll progress tự động reset khi backend dừng
+    // resetInfoCollectorState();
   } catch (e) {
     console.error('Error in runInfoCollector:', e);
     // Kiểm tra nếu là lỗi "không có dữ liệu bài viết"
@@ -3323,7 +3371,15 @@ async function runInfoCollector(mode = 'all') {
     // Reset flag khi có lỗi
     resetInfoCollectorState();
   } finally {
-    setButtonLoading(btn, false);
+    // KHÔNG reset loading ở đây nếu đang chạy thành công
+    // Chỉ reset nếu có lỗi (đã được xử lý trong catch block)
+    // Nếu thành công, để poll progress tự động reset khi backend dừng
+    if (!isInfoCollectorRunning) {
+      console.log('runInfoCollector finally: Resetting loading because not running');
+      setButtonLoading(btn, false);
+    } else {
+      console.log('runInfoCollector finally: Keeping loading state, backend is running');
+    }
     // Update buttons sau khi reset state
     updateStopPauseButtonsByJobs();
   }
@@ -3489,7 +3545,7 @@ async function loadDataFromFile(filename) {
             name: ownerName,
             react: false,
             comment: '',
-            time: defaultTime,
+            time: '',
             type: type,
           });
           loadedPostIds.add(uniqueKey);
@@ -3506,7 +3562,7 @@ async function loadDataFromFile(filename) {
 
         const hasReact = !!reaction;
         const commentText = comment && comment.text ? comment.text : '';
-        const time = (comment && comment.created_time_vn) ? comment.created_time_vn : defaultTime;
+        const time = (comment && comment.created_time_vn) ? comment.created_time_vn : '';
 
         const uniqueKey = `${postId}_${userId}`;
         if (!loadedPostIds.has(uniqueKey)) {
@@ -3716,7 +3772,7 @@ async function loadDataByDateRange(fromDate, toDate) {
             name: ownerName,
             react: false,
             comment: '',
-            time: defaultTime,
+            time: '',
             type: type,
           });
           loadedPostIds.add(uniqueKey);
@@ -3733,7 +3789,7 @@ async function loadDataByDateRange(fromDate, toDate) {
 
         const hasReact = !!reaction;
         const commentText = comment && comment.text ? comment.text : '';
-        const time = (comment && comment.created_time_vn) ? comment.created_time_vn : defaultTime;
+        const time = (comment && comment.created_time_vn) ? comment.created_time_vn : '';
 
         const uniqueKey = `${postId}_${userId}`;
         if (!loadedPostIds.has(uniqueKey)) {
