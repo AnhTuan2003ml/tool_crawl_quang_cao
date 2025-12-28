@@ -49,6 +49,7 @@ try:
         _group_scan_queue,
         _group_scan_lock,
         _group_scan_processing,
+        _group_scan_stop_requested,
         _bot_lock,
         _bot_processes,
         _prune_bot_processes,
@@ -66,6 +67,7 @@ except ImportError:
             _group_scan_queue,
             _group_scan_lock,
             _group_scan_processing,
+            _group_scan_stop_requested,
             _bot_lock,
             _bot_processes,
             _prune_bot_processes,
@@ -235,13 +237,29 @@ class MultiThreadRunner:
         """Perform health check"""
         issues = []
 
-        # Check feed search thread
-        if self.feed_search_thread and not self.feed_search_thread.is_alive():
-            issues.append("Feed search thread died")
+        # Check feed search thread - chỉ warning nếu thread died bất thường (chưa completed)
+        # Nếu thread đã được clear (None) thì không check (đã completed bình thường)
+        if self.feed_search_thread is not None and not self.feed_search_thread.is_alive():
+            # Chỉ warning nếu thread chưa completed (died bất thường)
+            # Nếu đã completed thì không coi là issue (thread đã hoàn thành bình thường)
+            if self.stats.feed_search_completed < self.stats.feed_search_started:
+                issues.append("Feed search thread died unexpectedly")
+            # Nếu completed >= started thì thread đã hoàn thành bình thường, không warning
+            # Nếu thread đã completed, clear reference để không check nữa
+            elif self.stats.feed_search_completed >= self.stats.feed_search_started:
+                self.feed_search_thread = None
 
-        # Check group scan thread
-        if self.group_scan_thread and not self.group_scan_thread.is_alive():
-            issues.append("Group scan thread died")
+        # Check group scan thread - chỉ warning nếu thread died bất thường (chưa completed)
+        # Nếu thread đã được clear (None) thì không check (đã completed bình thường)
+        if self.group_scan_thread is not None and not self.group_scan_thread.is_alive():
+            # Chỉ warning nếu thread chưa completed (died bất thường)
+            # Nếu đã completed thì không coi là issue (thread đã hoàn thành bình thường)
+            if self.stats.group_scan_completed < self.stats.group_scan_started:
+                issues.append("Group scan thread died unexpectedly")
+            # Nếu completed >= started thì thread đã hoàn thành bình thường, không warning
+            # Nếu thread đã completed, clear reference để không check nữa
+            elif self.stats.group_scan_completed >= self.stats.group_scan_started:
+                self.group_scan_thread = None
 
         # Check bot processes
         try:
@@ -358,6 +376,8 @@ class MultiThreadRunner:
                             if not running:
                                 logger.info("✅ Tất cả feed+search process đã hoàn thành")
                                 self.stats.feed_search_completed = len(started)
+                                # Clear thread reference để health check không warning
+                                self.feed_search_thread = None
                                 return
 
                             # Check for process errors
@@ -456,6 +476,8 @@ class MultiThreadRunner:
 
                         # Thêm tasks vào queue
                         with _group_scan_lock:
+                            # Reset stop flag khi bắt đầu quét mới
+                            _group_scan_stop_requested = False
                             for profile_id in profile_ids:
                                 if self.stop_event.is_set():
                                     break
@@ -485,6 +507,8 @@ class MultiThreadRunner:
                                 if consecutive_empty >= 3:  # Confirm completion
                                     logger.info("✅ Tất cả group scan tasks đã hoàn thành")
                                     self.stats.group_scan_completed = len(profile_ids)
+                                    # Clear thread reference để health check không warning
+                                    self.group_scan_thread = None
                                     return
                             else:
                                 consecutive_empty = 0
@@ -694,6 +718,17 @@ class MultiThreadRunner:
 
             except Exception as e:
                 logger.error(f"⚠️ Lỗi khi dừng feed search: {e}")
+
+            # Stop group scan queue trước
+            try:
+                logger.info("🛑 Dừng group scan queue...")
+                with _group_scan_lock:
+                    _group_scan_stop_requested = True
+                    queue_length = len(_group_scan_queue)
+                    _group_scan_queue.clear()
+                logger.info(f"✅ Đã dừng group scan queue (cleared {queue_length} task(s))")
+            except Exception as e:
+                logger.error(f"⚠️ Lỗi khi dừng group scan queue: {e}")
 
             # Stop worker threads
             threads_to_stop = [

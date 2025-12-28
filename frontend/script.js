@@ -3832,7 +3832,7 @@ async function updateScanStats() {
     let html = '';
     for (const pid of profilesToShow) {
       const count = stats[pid] || 0;
-      html += `<div style="padding: 8px 12px; background: rgba(102, 126, 234, 0.95); color: white; border-radius: 6px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); white-space: nowrap;">
+      html += `<div style="padding: 8px 12px; background: rgba(0, 255, 13, 0.95); color: white; border-radius: 6px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); white-space: nowrap;">
         <span style="font-weight: 600;">${pid}</span> : đã quét được <span style="font-weight: 700;">${count}</span> bài
       </div>`;
     }

@@ -129,7 +129,32 @@ def _hard_stop_everything(reason: str = "") -> dict:
     except Exception:
         pass
 
-    # 6) Reset runtime state về mặc định (để lần sau bấm chạy là "mới hoàn toàn")
+    # 6) Stop group scan queue
+    try:
+        global _group_scan_stop_requested, _group_scan_queue
+        with _group_scan_lock:
+            _group_scan_stop_requested = True
+            _group_scan_queue.clear()
+        print("🛑 Đã dừng group scan queue")
+    except Exception:
+        pass
+
+    # 7) Stop multi-thread runner
+    multi_thread_stopped = False
+    try:
+        from worker.multi_thread import stop_multi_thread
+        result = stop_multi_thread()
+        if result and result.get("status") == "ok":
+            multi_thread_stopped = True
+            print("🛑 Đã dừng multi-thread runner")
+        else:
+            print(f"⚠️ Multi-thread runner dừng không thành công: {result}")
+    except Exception as e:
+        print(f"⚠️ Lỗi khi dừng multi-thread runner: {e}")
+        import traceback
+        traceback.print_exc()
+
+    # 8) Reset runtime state về mặc định (để lần sau bấm chạy là "mới hoàn toàn")
     try:
         control_state.reset_all_state()
     except Exception:
@@ -146,6 +171,7 @@ def _hard_stop_everything(reason: str = "") -> dict:
         "bot_killed": bot_killed,
         "join_killed": join_killed,
         "feed_killed": feed_killed,
+        "multi_thread_stopped": multi_thread_stopped,
     }
 
 
@@ -1100,10 +1126,51 @@ def add_or_sync_profile_groups(profile_id: str, payload: ProfileGroupsPayload) -
         return {"status": "ok", "profile_id": pid, "groups": merged}
 
 
+def _extract_page_id_from_group_url(url: str) -> Optional[str]:
+    """
+    Extract page_id từ Facebook group URL.
+    Hỗ trợ các format:
+    - https://www.facebook.com/groups/486503093715305
+    - https://www.facebook.com/groups/486503093715305/
+    - https://www.facebook.com/groups/tuyendungkisuIT
+    - 486503093715305 (chỉ số)
+    """
+    if not url or not isinstance(url, str):
+        return None
+    
+    url = url.strip()
+    if not url:
+        return None
+    
+    # Nếu chỉ là số thì trả về luôn
+    if url.isdigit():
+        return url
+    
+    # Tìm pattern /groups/{id} trong URL
+    import re
+    patterns = [
+        r"/groups/(\d+)",  # /groups/486503093715305
+        r"groups/(\d+)",   # groups/486503093715305 (không có / đầu)
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, url, re.IGNORECASE)
+        if match:
+            page_id = match.group(1)
+            if page_id and page_id.isdigit():
+                return page_id
+    
+    # Nếu không tìm thấy số, có thể là group name (như tuyendungkisuIT)
+    # Trong trường hợp này, cần dùng get_id_from_url để lấy page_id
+    # Nhưng để đơn giản, trả về None và sẽ bỏ qua
+    return None
+
+
 @app.put("/settings/profiles/{profile_id}/groups")
 def replace_profile_groups(profile_id: str, payload: ProfileGroupsReplacePayload) -> dict:
     """
     Ghi đè toàn bộ groups của 1 profile (đúng yêu cầu: trong textarea có gì thì đè lên cái cũ).
+    Tự động tách page_id từ URL và lưu vào groups.json.
     """
     pid = _norm_profile_id(profile_id)
     if not pid:
@@ -1125,6 +1192,7 @@ def replace_profile_groups(profile_id: str, payload: ProfileGroupsReplacePayload
         seen.add(s)
         cleaned.append(s)
 
+    # Lưu vào settings.json (giữ nguyên logic cũ)
     with _settings_lock:
         raw = _read_settings_raw()
         profiles = raw.get("PROFILE_IDS") or {}
@@ -1141,7 +1209,41 @@ def replace_profile_groups(profile_id: str, payload: ProfileGroupsReplacePayload
         cur["groups"] = cleaned
         raw["PROFILE_IDS"] = profiles
         _write_settings_raw(raw)
-        return {"status": "ok", "profile_id": pid, "groups": cleaned}
+    
+    # Tự động tách page_id từ URL và lưu vào groups.json
+    try:
+        from core.join_groups import save_group_page_id
+        
+        saved_count = 0
+        for group_url in cleaned:
+            page_id = _extract_page_id_from_group_url(group_url)
+            if page_id:
+                # Normalize URL để đảm bảo format đúng
+                normalized_url = group_url
+                if not normalized_url.startswith("http"):
+                    if "/groups/" in normalized_url:
+                        normalized_url = f"https://www.facebook.com{normalized_url}" if normalized_url.startswith("/") else f"https://www.facebook.com/{normalized_url}"
+                    else:
+                        normalized_url = f"https://www.facebook.com/groups/{normalized_url}"
+                
+                # Lưu vào groups.json
+                if save_group_page_id(pid, page_id, normalized_url):
+                    saved_count += 1
+                    print(f"✅ Đã lưu group vào groups.json: profile_id={pid}, page_id={page_id}, url={normalized_url}")
+                else:
+                    print(f"⚠️ Không lưu được group: profile_id={pid}, page_id={page_id}, url={normalized_url}")
+            else:
+                print(f"⚠️ Không tách được page_id từ URL: {group_url}")
+        
+        if saved_count > 0:
+            print(f"✅ Đã lưu {saved_count}/{len(cleaned)} group(s) vào groups.json cho profile {pid}")
+    except Exception as e:
+        print(f"⚠️ Lỗi khi lưu groups vào groups.json: {e}")
+        import traceback
+        traceback.print_exc()
+        # Không raise error để không ảnh hưởng đến việc lưu vào settings.json
+    
+    return {"status": "ok", "profile_id": pid, "groups": cleaned}
 
 
 def _prune_join_group_processes() -> None:
@@ -2433,19 +2535,25 @@ class ScanGroupsRequest(BaseModel):
 _group_scan_queue = []
 _group_scan_lock = threading.Lock()
 _group_scan_processing = False
+_group_scan_stop_requested = False  # Flag để dừng group scan
 
 def _process_group_scan_queue():
     """Xử lý queue quét group lần lượt"""
-    global _group_scan_processing
+    global _group_scan_processing, _group_scan_stop_requested
     
     with _group_scan_lock:
-        if _group_scan_processing or len(_group_scan_queue) == 0:
+        if _group_scan_processing or len(_group_scan_queue) == 0 or _group_scan_stop_requested:
             return
         _group_scan_processing = True
+        _group_scan_stop_requested = False  # Reset flag khi bắt đầu
     
     try:
         while True:
+            # Check stop flag trước khi xử lý task tiếp theo
             with _group_scan_lock:
+                if _group_scan_stop_requested:
+                    print("🛑 Đã nhận yêu cầu dừng group scan")
+                    break
                 if len(_group_scan_queue) == 0:
                     break
                 task = _group_scan_queue.pop(0)
@@ -2486,6 +2594,12 @@ def _process_group_scan_queue():
                 # Quét từng group
                 total_posts_scanned = 0
                 for group_info in profile_groups:
+                    # Check stop flag trước mỗi group
+                    with _group_scan_lock:
+                        if _group_scan_stop_requested:
+                            print("🛑 Đã nhận yêu cầu dừng, dừng quét group")
+                            break
+                    
                     page_id = group_info.get("page_id")
                     url_page = group_info.get("url_page", "")
                     
@@ -2496,6 +2610,12 @@ def _process_group_scan_queue():
                     print(f"\n📌 Xử lý group: {page_id}")
                     if url_page:
                         print(f"   URL: {url_page}")
+                    
+                    # Check stop flag trước khi gọi get_posts_from_page
+                    with _group_scan_lock:
+                        if _group_scan_stop_requested:
+                            print("🛑 Đã nhận yêu cầu dừng, bỏ qua group còn lại")
+                            break
                     
                     try:
                         # Gọi get_posts_from_page với limit = post_count
@@ -2511,6 +2631,12 @@ def _process_group_scan_queue():
                             limit=post_count
                         )
                         
+                        # Check stop flag sau khi quét xong group
+                        with _group_scan_lock:
+                            if _group_scan_stop_requested:
+                                print("🛑 Đã nhận yêu cầu dừng sau khi quét xong group")
+                                break
+                        
                         if posts:
                             total_posts_scanned += len(posts)
                             print(f"   ✅ Đã quét {len(posts)} posts từ group {page_id}")
@@ -2522,6 +2648,12 @@ def _process_group_scan_queue():
                         import traceback
                         traceback.print_exc()
                         continue
+                
+                # Check stop flag sau khi quét xong profile
+                with _group_scan_lock:
+                    if _group_scan_stop_requested:
+                        print("🛑 Đã nhận yêu cầu dừng sau khi quét xong profile")
+                        break
                 
                 print(f"\n✅ Hoàn thành quét {len(profile_groups)} group(s), tổng cộng {total_posts_scanned} posts")
                 
@@ -2535,12 +2667,16 @@ def _process_group_scan_queue():
     finally:
         with _group_scan_lock:
             _group_scan_processing = False
+            # Chỉ reset stop flag nếu không phải do stop request
+            # Nếu do stop request thì giữ nguyên flag để đảm bảo không restart
         
-        # Kiểm tra xem còn task nào không
+        # KHÔNG tự động tiếp tục xử lý queue khi hoàn thành
+        # Chỉ tiếp tục nếu được gọi lại từ API
         with _group_scan_lock:
-            if len(_group_scan_queue) > 0:
-                # Tiếp tục xử lý queue
-                threading.Thread(target=_process_group_scan_queue, daemon=True).start()
+            if _group_scan_stop_requested:
+                print("🛑 Group scan đã dừng theo yêu cầu.")
+            else:
+                print("✅ Group scan đã hoàn thành và tự động dừng. Gọi lại API để tiếp tục.")
 
 @app.post("/scan-groups")
 def scan_groups(request: ScanGroupsRequest) -> dict:
@@ -2576,6 +2712,8 @@ def scan_groups(request: ScanGroupsRequest) -> dict:
     
     # Thêm các task vào queue
     with _group_scan_lock:
+        # Reset stop flag khi bắt đầu quét mới
+        _group_scan_stop_requested = False
         for profile_id in profile_ids:
             task = {
                 "profile_id": profile_id,
@@ -2602,8 +2740,33 @@ def get_scan_groups_status() -> dict:
         return {
             "processing": _group_scan_processing,
             "queue_length": len(_group_scan_queue),
-            "queue": _group_scan_queue.copy()
+            "queue": _group_scan_queue.copy(),
+            "stop_requested": _group_scan_stop_requested
         }
+
+
+@app.post("/scan-groups/stop")
+def stop_scan_groups() -> dict:
+    """
+    Dừng quét group ngay lập tức:
+    - Set flag stop để dừng xử lý queue
+    - Clear queue nếu cần
+    """
+    global _group_scan_stop_requested, _group_scan_queue
+    
+    with _group_scan_lock:
+        _group_scan_stop_requested = True
+        queue_length = len(_group_scan_queue)
+        # Clear queue để không xử lý các task còn lại
+        _group_scan_queue.clear()
+    
+    print(f"🛑 Đã yêu cầu dừng group scan. Queue đã được clear ({queue_length} task(s))")
+    
+    return {
+        "status": "ok",
+        "message": "Đã yêu cầu dừng group scan",
+        "queue_cleared": queue_length
+    }
 
 
 @app.post("/run-multi-thread")

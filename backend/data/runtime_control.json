@@ -3,11 +3,6 @@
   "global_pause": false,
   "paused_profiles": [],
   "stopped_profiles": [],
-  "profile_states": {
-    "b77da63d-af55-43c2-ab7f-364250b20e30": "RUNNING",
-    "profile2": "ERROR",
-    "profile1": "ERROR",
-    "ed3bd3bf-d906-42cf-9503-b73dfcfce117": "RUNNING"
-  },
-  "updated_at": "2025-12-28T09:17:52.285266+00:00"
+  "profile_states": {},
+  "updated_at": "2025-12-28T09:41:28.303625+00:00"
 }
