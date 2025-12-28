@@ -151,32 +151,51 @@ body.splash-active .container {
 
 /* Header */
 .header {
-  background     : rgba(255, 255, 255, 0.95);
+
   backdrop-filter: blur(10px);
   border-radius  : 16px;
   padding        : 2px;
-  margin-bottom  : 18px;
-  box-shadow     : 0 12px 30px rgba(0, 0, 0, 0.08);
-  text-align     : center;
-  animation      : slideDown 0.5s ease-out;
-  position       : relative;
+  margin-bottom  : 5px;
+
+  animation: slideDown 0.5s ease-out;
+  position : relative;
+}
+
+.header-content {
+  display    : flex;
+  align-items: center;
+  gap        : 16px;
+  padding    : 12px 20px;
+}
+
+.header-logo {
+  width        : 78px;
+  height       : 78px;
+  object-fit   : contain;
+  flex-shrink  : 0;
+  border-radius: 8px;
+}
+
+.header-text {
+  flex: 1;
+
 }
 
 .header-content h1 {
   font-size  : 28px;
   font-weight: 700;
-  color      : var(--text-primary);
+  color      : white;
+  margin     : 0;
 
-  background             : var(--bg-gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip        : text;
+
+  background-clip: text;
 }
 
 .subtitle {
-  color      : var(--text-secondary);
+  color      : white;
   font-size  : 14px;
   font-weight: 500;
+  margin     : 4px 0 0 0;
 }
 
 /* Color Legend */
@@ -271,7 +290,7 @@ body.splash-active .container {
 
 /* Thu nhỏ scrollbar cho right-panel cho gọn (giống left-panel) */
 .right-panel::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 
 .right-panel::-webkit-scrollbar-track {
@@ -850,7 +869,7 @@ tbody tr.filtered-out {
   border-radius: 999px;
   border       : none;
   background   : rgba(255, 255, 255, 0.15);
-  color        : #e5e7eb;
+  color        : #ffffff;
   font-size    : 13px;
   font-weight  : 600;
   cursor       : pointer;
@@ -1902,7 +1921,7 @@ tbody tr:last-child td {
 /* Help Button */
 .help-button {
   position       : fixed;
-  top            : 24px;
+  top            : 46px;
   right          : 36px;
   width          : 48px;
   height         : 48px;
@@ -2246,7 +2265,17 @@ td:nth-child(5) {
   }
 
   .header {
-    padding: 20px;
+    padding: 2px;
+  }
+
+  .header-content {
+    padding: 10px 15px;
+    gap    : 12px;
+  }
+
+  .header-logo {
+    width : 70px;
+    height: 70px;
   }
 
   .header-content h1 {
