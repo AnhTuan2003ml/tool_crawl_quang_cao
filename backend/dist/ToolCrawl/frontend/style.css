@@ -591,16 +591,24 @@ button:active {
 }
 
 .time-filter-inline {
-  display      : flex;
-  align-items  : center;
-  gap          : 5px;
-  background   : linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  border       : 1.5px solid var(--border);
-  border-radius: 8px;
-  padding      : 5px 7px;
-  width        : 100%;
-  box-shadow   : 0 2px 6px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-  transition   : all 0.3s ease;
+  display        : flex;
+  align-items    : center;
+  gap            : 5px;
+  background     : linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border         : 1.5px solid var(--border);
+  border-radius  : 8px;
+  padding        : 5px 7px;
+  width          : 100%;
+  box-shadow     : 0 2px 6px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition     : all 0.3s ease;
+  justify-content: space-between;
+}
+
+.action-buttons-group {
+  display    : flex;
+  align-items: center;
+  gap        : 8px;
+  margin-left: auto;
 }
 
 .time-filter-inline:hover {
@@ -870,28 +878,66 @@ tbody tr.filtered-out {
   padding       : 10px;
 }
 
-.setting-card {
-  background    : #f9fafb;
-  border        : 1px solid var(--border);
-  border-radius : 12px;
-  padding       : 16px;
+.settings-grid {
+  display              : grid;
+  grid-template-columns: 1fr 1fr;
+  gap                  : 16px;
+  padding              : 10px;
+  align-items          : start;
+  min-height           : 0;
+}
+
+.settings-left-column {
   display       : flex;
   flex-direction: column;
-  gap           : 12px;
+  gap           : 14px;
+  min-width     : 0;
+}
+
+.settings-right-column {
+  display       : flex;
+  flex-direction: column;
+  gap           : 14px;
+  min-width     : 0;
+}
+
+/* Đảm bảo các panel config nằm trong cột trái */
+.settings-left-column .feed-panel {
+  margin-top: 0;
+}
+
+/* Responsive: chuyển về 1 cột khi màn hình nhỏ */
+@media (max-width: 1200px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.setting-card {
+  background    : #ffffff;
+  border        : 1px solid var(--border);
+  border-radius : 12px;
+  padding       : 18px 20px;
+  display       : flex;
+  flex-direction: column;
+  gap           : 14px;
+  box-shadow    : 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .feed-panel {
-  padding      : 12px;
-  border       : 1px dashed var(--border);
+  padding      : 14px 16px;
+  border       : 1px solid var(--border);
   border-radius: 10px;
-  background   : #ffffff;
+  background   : #f9fafb;
+  margin-top   : 12px;
 }
 
 .feed-panel-row {
   display      : flex;
-  gap          : 10px;
+  gap          : 12px;
   align-items  : center;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+  flex-wrap    : wrap;
 }
 
 .feed-panel-row:last-child {
@@ -899,19 +945,32 @@ tbody tr.filtered-out {
 }
 
 .feed-radio {
-  display    : inline-flex;
-  gap        : 6px;
-  align-items: center;
-  font-size  : 13px;
+  display      : inline-flex;
+  gap          : 6px;
+  align-items  : center;
+  font-size    : 13px;
+  font-weight  : 500;
+  color        : var(--text-primary);
+  padding      : 6px 10px;
+  border-radius: 6px;
+  transition   : background 0.2s ease;
+  cursor       : pointer;
+}
+
+.feed-radio:hover {
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.feed-radio input[type="radio"]:checked+span {
+  color      : var(--primary);
   font-weight: 600;
-  color      : var(--text-primary);
 }
 
 .feed-duration {
-  margin-left: auto;
   display    : inline-flex;
   gap        : 6px;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .feed-duration-left {
@@ -935,36 +994,56 @@ tbody tr.filtered-out {
 
 #feedTextInput {
   width        : 100%;
-  min-height   : 64px;
+  min-height   : 70px;
   resize       : vertical;
-  padding      : 10px;
+  padding      : 10px 12px;
   border       : 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
   font-size    : 13px;
+  background   : #ffffff;
+  transition   : all 0.2s ease;
+  line-height  : 1.5;
+}
+
+#feedTextInput:focus {
+  outline     : none;
+  border-color: var(--primary);
+  box-shadow  : 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 #scanTextInput,
 #groupScanUrlInput {
   width        : 100%;
-  min-height   : 96px;
+  min-height   : 80px;
   resize       : vertical;
-  padding      : 10px;
+  padding      : 10px 12px;
   border       : 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
   font-size    : 13px;
-  line-height  : 1.35;
+  line-height  : 1.5;
+  background   : #ffffff;
+  transition   : all 0.2s ease;
+}
+
+#scanTextInput:focus,
+#groupScanUrlInput:focus {
+  outline     : none;
+  border-color: var(--primary);
+  box-shadow  : 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 .feed-panel-actions {
   justify-content: flex-end;
+  gap            : 10px;
 }
 
 .feed-panel-actions button {
-  width    : auto;
-  min-width: 90px;
-  height   : 32px;
-  padding  : 6px 12px;
-  font-size: 13px;
+  width        : auto;
+  min-width    : 100px;
+  height       : 36px;
+  padding      : 8px 16px;
+  font-size    : 13px;
+  border-radius: 8px;
 }
 
 /* Group Scan Form Styles */
@@ -1004,14 +1083,14 @@ tbody tr.filtered-out {
 
 .form-input {
   width        : 100%;
-  height       : 40px;
-  padding      : 10px 14px;
-  border       : 2px solid var(--border);
-  border-radius: 10px;
-  font-size    : 14px;
+  height       : 36px;
+  padding      : 8px 12px;
+  border       : 1px solid var(--border);
+  border-radius: 8px;
+  font-size    : 13px;
   font-family  : inherit;
   color        : var(--text-primary);
-  background   : var(--card-bg);
+  background   : #ffffff;
   transition   : all 0.2s ease;
 }
 
@@ -1019,6 +1098,7 @@ tbody tr.filtered-out {
   outline     : none;
   border-color: var(--primary);
   box-shadow  : 0 0 0 3px rgba(99, 102, 241, 0.1);
+  border-width: 1px;
 }
 
 .form-input:hover {
@@ -1056,10 +1136,13 @@ tbody tr.filtered-out {
   display        : flex;
   align-items    : center;
   gap            : 8px;
-  padding        : 10px 20px;
-  font-weight    : 600;
-  min-width      : 140px;
+  padding        : 8px 16px;
+  font-weight    : 500;
+  min-width      : 130px;
   justify-content: center;
+  height         : 36px;
+  font-size      : 13px;
+  border-radius  : 8px;
 }
 
 .btn-primary-action .btn-icon {
@@ -1106,13 +1189,16 @@ tbody tr.filtered-out {
 .setting-card-header {
   display        : flex;
   justify-content: space-between;
-  align-items    : center;
-  gap            : 8px;
+  align-items    : flex-start;
+  gap            : 12px;
+  flex-wrap      : wrap;
 }
 
 .setting-card h4 {
-  margin   : 0;
-  font-size: 16px;
+  margin     : 0 0 4px 0;
+  font-size  : 16px;
+  font-weight: 700;
+  color      : var(--text-primary);
 }
 
 .muted {
@@ -1122,8 +1208,9 @@ tbody tr.filtered-out {
 }
 
 .inline-field {
-  display: flex;
-  gap    : 10px;
+  display    : flex;
+  gap        : 10px;
+  align-items: center;
 }
 
 .inline-field input {
@@ -1133,48 +1220,72 @@ tbody tr.filtered-out {
 /* Settings: làm input + button thấp lại (chỉ trong tab Setting profile) */
 #settingsView .inline-field input,
 #settingsView .add-profile-form input {
-  height       : 34px;
-  padding      : 6px 10px;
+  height       : 36px;
+  padding      : 8px 12px;
   font-size    : 13px;
   border-width : 1px;
-  border-radius: 10px;
+  border-radius: 8px;
+  border-color : var(--border);
+  background   : #ffffff;
+  transition   : all 0.2s ease;
+}
+
+#settingsView .inline-field input:focus,
+#settingsView .add-profile-form input:focus {
+  outline     : none;
+  border-color: var(--primary);
+  box-shadow  : 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 #settingsView .profile-id-input {
-  height       : 34px;
-  padding      : 6px 10px;
+  height       : 36px;
+  padding      : 8px 12px;
   flex         : 1;
-  /* ăn toàn bộ phần còn lại */
   min-width    : 0;
   font-size    : 13px;
   border       : 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
   background   : #ffffff;
+  transition   : all 0.2s ease;
+}
+
+#settingsView .profile-id-input:focus {
+  outline     : none;
+  border-color: var(--primary);
+  box-shadow  : 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 #settingsView button {
   width        : auto;
-  height       : 34px;
-  padding      : 6px 12px;
+  height       : 36px;
+  padding      : 8px 16px;
   font-size    : 13px;
-  border-radius: 10px;
+  border-radius: 8px;
+  font-weight  : 500;
+  transition   : all 0.2s ease;
 }
 
 #settingsView .inline-field button {
-  flex     : 0 0 auto;
-  min-width: 120px;
+  flex       : 0 0 auto;
+  min-width  : 110px;
+  white-space: nowrap;
 }
 
 .setting-card-actions {
-  display: flex;
-  gap    : 16px;
+  display    : flex;
+  gap        : 10px;
+  flex-wrap  : wrap;
+  align-items: center;
+  margin-top : 8px;
 }
 
 .setting-card-actions button {
-  padding    : 16px 24px;
-  font-size  : 16px;
+  padding    : 10px 16px;
+  font-size  : 13px;
   font-weight: 600;
-  min-width  : 160px;
+  min-width  : 140px;
+  height     : 36px;
+  white-space: nowrap;
 }
 
 /* Settings: disable state rõ ràng khi chưa tick profile */
@@ -1228,11 +1339,17 @@ tbody tr.filtered-out {
 .profile-row {
   display      : flex;
   align-items  : center;
-  gap          : 8px;
-  padding      : 10px 12px;
+  gap          : 10px;
+  padding      : 12px 14px;
   background   : #ffffff;
   border       : 1px solid var(--border);
   border-radius: 10px;
+  transition   : all 0.2s ease;
+}
+
+.profile-row:hover {
+  border-color: var(--primary);
+  box-shadow  : 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .profile-select {
@@ -1265,15 +1382,17 @@ tbody tr.filtered-out {
 
 .group-textarea {
   width        : 100%;
-  min-height   : 120px;
+  min-height   : 100px;
   resize       : vertical;
-  padding      : 10px;
+  padding      : 10px 12px;
   border       : 1px solid var(--border);
-  border-radius: 10px;
-  font-size    : 12px;
+  border-radius: 8px;
+  font-size    : 13px;
   background   : #ffffff;
   color        : var(--text-primary);
   outline      : none;
+  transition   : all 0.2s ease;
+  line-height  : 1.5;
 }
 
 .group-textarea:focus {
@@ -1308,12 +1427,13 @@ tbody tr.filtered-out {
 
 
 .profile-row .profile-actions button {
-  width    : auto;
-  flex     : 0 0 auto;
-  min-width: 70px;
-  height   : 30px;
-  padding  : 4px 10px;
-  font-size: 12px;
+  width        : auto;
+  flex         : 0 0 auto;
+  min-width    : 75px;
+  height       : 32px;
+  padding      : 6px 12px;
+  font-size    : 12px;
+  border-radius: 6px;
 }
 
 .add-profile-row {
@@ -1332,16 +1452,27 @@ tbody tr.filtered-out {
 
 .add-profile-form input {
   flex         : 1 1 60%;
-  padding      : 12px 14px;
+  padding      : 8px 12px;
   border       : 1px solid var(--border);
   border-radius: 8px;
+  height       : 36px;
+  font-size    : 13px;
+  background   : #ffffff;
+  transition   : all 0.2s ease;
+}
+
+.add-profile-form input:focus {
+  outline     : none;
+  border-color: var(--primary);
+  box-shadow  : 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 .add-profile-form button {
-  min-width: 80px;
-  height   : 30px;
-  padding  : 4px 10px;
-  font-size: 12px;
+  min-width    : 100px;
+  height       : 36px;
+  padding      : 8px 16px;
+  font-size    : 13px;
+  border-radius: 8px;
 }
 
 .empty-state-box {
@@ -1369,6 +1500,12 @@ tbody tr.filtered-out {
   pointer-events: none;
 }
 
+/* Toast error nổi bật hơn, z-index cao hơn để luôn hiển thị trên cùng */
+.toast-container .toast.error {
+  z-index : 10001;
+  position: relative;
+}
+
 .toast {
   pointer-events: none;
   min-width     : 260px;
@@ -1376,13 +1513,15 @@ tbody tr.filtered-out {
   background    : rgba(17, 24, 39, 0.92);
   color         : #fff;
   border-radius : 12px;
-  padding       : 10px 12px;
+  padding       : 12px 16px;
   box-shadow    : 0 10px 30px rgba(0, 0, 0, 0.25);
   font-size     : 13px;
-  line-height   : 1.35;
+  line-height   : 1.5;
   opacity       : 0;
   transform     : translateY(-6px);
   transition    : opacity 180ms ease, transform 180ms ease;
+  white-space   : pre-line;
+  word-wrap     : break-word;
 }
 
 .toast.show {
@@ -1395,7 +1534,11 @@ tbody tr.filtered-out {
 }
 
 .toast.error {
-  background: rgba(239, 68, 68, 0.92);
+  background : rgba(239, 68, 68, 0.95);
+  z-index    : 10000;
+  box-shadow : 0 8px 32px rgba(239, 68, 68, 0.4);
+  border     : 2px solid rgba(255, 255, 255, 0.3);
+  font-weight: 600;
 }
 
 #settingsPreview {
@@ -2137,28 +2280,44 @@ td:nth-child(5) {
 }
 
 
-#scanRunMinutesInput {
-  border-radius: 5px;
-  border       : 1px solid var(--border);
-  padding      : 4px;
-}
-
+#scanRunMinutesInput,
 #scanRestMinutesInput {
-  border-radius: 5px;
+  width        : 80px;
+  height       : 32px;
+  padding      : 6px 8px;
   border       : 1px solid var(--border);
-  padding      : 4px;
+  border-radius: 8px;
+  font-size    : 13px;
+  text-align   : center;
+  background   : #ffffff;
+  transition   : all 0.2s ease;
 }
 
-#feedRunMinutesInput {
-  border-radius: 5px;
-  border       : 1px solid var(--border);
-  padding      : 4px;
+#scanRunMinutesInput:focus,
+#scanRestMinutesInput:focus {
+  outline     : none;
+  border-color: var(--primary);
+  box-shadow  : 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
+#feedRunMinutesInput,
 #feedRestMinutesInput {
-  border-radius: 5px;
+  width        : 80px;
+  height       : 32px;
+  padding      : 6px 8px;
   border       : 1px solid var(--border);
-  padding      : 4px;
+  border-radius: 8px;
+  font-size    : 13px;
+  text-align   : center;
+  background   : #ffffff;
+  transition   : all 0.2s ease;
+}
+
+#feedRunMinutesInput:focus,
+#feedRestMinutesInput:focus {
+  outline     : none;
+  border-color: var(--primary);
+  box-shadow  : 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 /* Date Range Buttons & Picker */
@@ -2357,12 +2516,13 @@ td:nth-child(5) {
 }
 
 /* Export Button - Inline with time filter */
-.export-btn-inline-time {
+.export-btn-inline-time,
+.start-scan-btn-inline,
+.stop-scan-btn-inline {
   padding        : 12px 16px;
   font-size      : 16px;
   font-weight    : 500;
   border-radius  : 6px;
-  background     : linear-gradient(135deg, var(--success) 0%, #059669 100%);
   color          : white;
   transition     : all 0.2s ease;
   cursor         : pointer;
@@ -2371,16 +2531,36 @@ td:nth-child(5) {
   gap            : 6px;
   width          : 200px;
   justify-content: center;
-  margin-left    : auto;
-  box-shadow     : 0 2px 6px rgba(16, 185, 129, 0.15);
+  box-shadow     : 0 2px 6px rgba(99, 102, 241, 0.15);
   border         : none;
 }
 
-.export-btn-inline-time:hover {
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+.export-btn-inline-time {
+  background: green
+}
+
+.start-scan-btn-inline {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+}
+
+.stop-scan-btn-inline {
+  background: linear-gradient(135deg, var(--danger) 0%, var(--danger-dark) 100%);
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.15);
+}
+
+.export-btn-inline-time:hover,
+.start-scan-btn-inline:hover {
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
   transform : translateY(-1px);
 }
 
-.export-btn-inline-time:active {
+.stop-scan-btn-inline:hover {
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
+  transform : translateY(-1px);
+}
+
+.export-btn-inline-time:active,
+.start-scan-btn-inline:active,
+.stop-scan-btn-inline:active {
   transform: translateY(0);
 }

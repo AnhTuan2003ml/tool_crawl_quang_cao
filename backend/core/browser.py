@@ -14,6 +14,77 @@ from core.paths import get_data_dir
 
 # Lock để bảo vệ việc ghi settings.json (tránh race condition khi nhiều profile cùng lưu cookie)
 _settings_write_lock = threading.Lock()
+
+
+def _acquire_post_ids_lock_browser(lock_file, timeout_seconds: float = 10.0, poll: float = 0.1):
+    """Lock file đơn giản (cross-platform)"""
+    start = time.time()
+    while True:
+        try:
+            fd = os.open(str(lock_file), os.O_CREAT | os.O_EXCL | os.O_RDWR)
+            return fd
+        except FileExistsError:
+            if timeout_seconds and timeout_seconds > 0 and (time.time() - start >= timeout_seconds):
+                return None
+            time.sleep(poll)
+        except Exception:
+            return None
+
+
+def _release_post_ids_lock_browser(fd, lock_file):
+    """Release lock file"""
+    try:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except Exception:
+                pass
+        try:
+            if lock_file.exists():
+                lock_file.unlink()
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def _save_post_ids_file_safe_browser(filepath, data):
+    """Lưu file post_ids JSON an toàn với lock"""
+    from pathlib import Path
+    lock_file = Path(str(filepath) + ".lock")
+    
+    fd = _acquire_post_ids_lock_browser(lock_file, timeout_seconds=10.0)
+    if fd is None:
+        print(f"⚠️ Không lấy được lock để lưu {filepath}, bỏ qua")
+        return
+    
+    try:
+        # Đọc lại file hiện có trong lock
+        existing_data = []
+        if filepath.exists():
+            try:
+                with filepath.open("r", encoding="utf8") as f:
+                    existing_data = json.load(f)
+            except Exception:
+                existing_data = []
+        
+        # Merge với dữ liệu mới (tránh trùng)
+        existing_ids = {item.get('id') or item.get('post_id') for item in existing_data if item.get('id') or item.get('post_id')}
+        new_items = [item for item in data if (item.get('id') or item.get('post_id')) not in existing_ids]
+        merged_data = existing_data + new_items
+        
+        # Atomic write
+        tmp_file = Path(str(filepath) + ".tmp")
+        with tmp_file.open("w", encoding="utf8") as f:
+            json.dump(merged_data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        
+        os.replace(str(tmp_file), str(filepath))
+    except Exception as e:
+        print(f"⚠️ Lỗi khi lưu file {filepath}: {e}")
+    finally:
+        _release_post_ids_lock_browser(fd, lock_file)
 # ==============================================================================
 # JS TOOLS & HELPER FUNCTIONS
 # ==============================================================================
@@ -415,8 +486,8 @@ class FBController:
 
             data.append(record)
 
-            with filepath.open("w", encoding="utf8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            # Lưu file với lock để tránh conflict khi nhiều luồng cùng ghi
+            _save_post_ids_file_safe_browser(filepath, data)
 
             print(f"💾 Đã lưu Post {post_id} | Chủ bài: {owning_profile.get('name', 'N/A')}")
             

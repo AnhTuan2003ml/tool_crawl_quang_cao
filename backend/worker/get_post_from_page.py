@@ -2,6 +2,7 @@ import requests
 import json
 import sys
 import os
+import time
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from urllib.parse import urlparse, parse_qs
@@ -134,6 +135,95 @@ def convert_to_vietnam_datetime(dt_string):
     except Exception as e:
         print(f"⚠️ Lỗi khi chuyển đổi datetime '{dt_string}' sang giờ Việt Nam: {e}")
         return None
+
+
+def _acquire_post_ids_lock(lock_file: Path, timeout_seconds: float = 10.0, poll: float = 0.1):
+    """
+    Lock file đơn giản (cross-platform): tạo file .lock bằng O_EXCL để chống ghi đè khi nhiều process cùng ghi.
+    """
+    start = time.time()
+    while True:
+        try:
+            fd = os.open(str(lock_file), os.O_CREAT | os.O_EXCL | os.O_RDWR)
+            return fd
+        except FileExistsError:
+            # timeout_seconds <= 0 => chờ vô hạn
+            if timeout_seconds and timeout_seconds > 0 and (time.time() - start >= timeout_seconds):
+                return None
+            time.sleep(poll)
+        except Exception:
+            return None
+
+
+def _release_post_ids_lock(fd, lock_file: Path) -> None:
+    """Release lock file"""
+    try:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except Exception:
+                pass
+        try:
+            if lock_file.exists():
+                lock_file.unlink()
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def _save_post_ids_file_safe(post_ids_file: Path, data: list, max_retries: int = 3):
+    """
+    Lưu file post_ids JSON an toàn với lock để tránh conflict khi nhiều luồng cùng ghi.
+    Sử dụng atomic write: temp file rồi replace.
+    """
+    lock_file = post_ids_file.parent / f"{post_ids_file.name}.lock"
+    
+    for attempt in range(max_retries):
+        fd = _acquire_post_ids_lock(lock_file, timeout_seconds=10.0)
+        if fd is None:
+            if attempt < max_retries - 1:
+                print(f"⚠️ Không lấy được lock, retry {attempt + 1}/{max_retries}...")
+                time.sleep(0.5)
+                continue
+            else:
+                print(f"⚠️ Không lấy được lock sau {max_retries} lần thử, bỏ qua lưu file")
+                return
+        
+        try:
+            # Đọc lại file hiện có trong lock để đảm bảo có dữ liệu mới nhất
+            existing_data = []
+            if post_ids_file.exists():
+                try:
+                    with open(post_ids_file, 'r', encoding='utf-8') as f:
+                        existing_data = json.load(f)
+                except Exception:
+                    existing_data = []
+            
+            # Merge với dữ liệu mới (tránh trùng)
+            existing_ids = {item.get('id') for item in existing_data if item.get('id')}
+            new_items = [item for item in data if item.get('id') not in existing_ids]
+            merged_data = existing_data + new_items
+            
+            # Atomic write: temp file rồi replace
+            tmp_file = post_ids_file.parent / f"{post_ids_file.name}.tmp"
+            with open(tmp_file, 'w', encoding='utf-8') as f:
+                json.dump(merged_data, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())  # Force write to disk
+            
+            # Replace atomically
+            os.replace(str(tmp_file), str(post_ids_file))
+            return
+            
+        except Exception as e:
+            print(f"⚠️ Lỗi khi lưu file: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            _release_post_ids_lock(fd, lock_file)
+    
+    print(f"❌ Không thể lưu file sau {max_retries} lần thử")
 
 
 def parse_vietnam_datetime(date_str, is_end_of_day=False):
@@ -567,11 +657,9 @@ def get_posts_from_page(page_id, profile_id, start_date=None, end_date=None, lim
         # Gộp dữ liệu mới với dữ liệu hiện có
         all_post_data = existing_data + new_posts
 
-        # Lưu file JSON
+        # Lưu file JSON với lock để tránh conflict khi nhiều luồng cùng ghi
         if new_posts:
-            with open(post_ids_file, 'w', encoding='utf-8') as f:
-                json.dump(all_post_data, f, ensure_ascii=False, indent=2)
-
+            _save_post_ids_file_safe(post_ids_file, all_post_data)
             print(f"\n💾 Đã lưu {len(new_posts)} posts mới vào: {post_ids_file}")
             print(f"   Tổng cộng: {len(all_post_data)} posts")
         else:

@@ -46,3 +46,5 @@
 
 - Khi chạy backend từ IDE/terminal khác, vẫn cần kích hoạt đúng venv: `.\\venv\\Scripts\\Activate.ps1`.
 - Nếu đổi port hoặc host, cập nhật `API_BASE` trong `frontend/script.js` cho khớp.
+
+cd backend; .\venv\Scripts\Activate.ps1; .\build.bat

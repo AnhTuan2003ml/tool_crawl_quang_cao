@@ -588,6 +588,19 @@ class RunRequest(BaseModel):
     mode: Optional[str] = None
 
 
+class RunMultiThreadRequest(BaseModel):
+    """Request cho multi-thread runner (feed+search + group scan song song)"""
+    run_minutes: Optional[float] = None
+    rest_minutes: Optional[float] = None
+    profile_ids: Optional[list[str]] = None
+    text: Optional[str] = None
+    mode: Optional[str] = None
+    # Group scan params
+    post_count: Optional[int] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+
 ## NOTE: AppRunner mode đã được thay bằng bot per-profile độc lập (xem _run_bot_profile_loop)
 
 
@@ -2591,4 +2604,103 @@ def get_scan_groups_status() -> dict:
             "queue_length": len(_group_scan_queue),
             "queue": _group_scan_queue.copy()
         }
+
+
+@app.post("/run-multi-thread")
+def run_multi_thread(payload: Optional[RunMultiThreadRequest] = Body(None)) -> dict:
+    """
+    Chạy song song quét feed+search và quét group bằng multi_thread runner
+    """
+    try:
+        from worker.multi_thread import start_multi_thread
+        
+        run_minutes = payload.run_minutes if payload else None
+        rest_minutes = payload.rest_minutes if payload else None
+        profile_ids = payload.profile_ids if payload else None
+        text = payload.text if payload else None
+        mode = payload.mode if payload else None
+        post_count = payload.post_count if payload else None
+        start_date = payload.start_date if payload else None
+        end_date = payload.end_date if payload else None
+        
+        # Validate profile_ids
+        if not profile_ids:
+            raise HTTPException(status_code=400, detail="profile_ids rỗng")
+        pids = [_norm_profile_id(x) for x in (profile_ids or [])]
+        pids = [p for p in pids if p]
+        if not pids:
+            raise HTTPException(status_code=400, detail="profile_ids không hợp lệ")
+        
+        # Validate mode và text
+        m = str(mode or "feed+search").strip().lower()
+        if m not in ("feed", "search", "feed+search", "feed_search"):
+            m = "feed+search"
+        if m in ("search", "feed+search", "feed_search") and not str(text or "").strip():
+            raise HTTPException(status_code=400, detail="Search và Feed+Search cần text")
+        
+        # Validate group scan params (nếu có)
+        if start_date and end_date:
+            try:
+                from datetime import datetime
+                datetime.strptime(start_date, "%Y-%m-%d")
+                datetime.strptime(end_date, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Định dạng ngày không hợp lệ. Phải là YYYY-MM-DD")
+        
+        # Reset control state
+        try:
+            control_state.set_global_pause(False)
+            stop, _paused, reason = control_state.check_flags(None)
+            if stop:
+                print(f"🟡 [/run-multi-thread] GLOBAL_EMERGENCY_STOP đang bật ({reason}) -> auto reset để chạy")
+                control_state.reset_emergency_stop(clear_stopped_profiles=False)
+            control_state.resume_profiles(pids)
+        except Exception as _e:
+            pass
+        
+        # Gọi multi-thread runner
+        result = start_multi_thread(
+            profile_ids=pids,
+            run_minutes=float(run_minutes or 30.0),
+            rest_minutes=float(rest_minutes or 120.0),
+            text=str(text or ""),
+            mode=m,
+            post_count=int(post_count or 10) if post_count else 10,
+            start_date=str(start_date or ""),
+            end_date=str(end_date or "")
+        )
+        
+        return result
+        
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=f"Không thể import multi_thread module: {e}")
+    except Exception as e:
+        import traceback
+        print(f"❌ Lỗi trong /run-multi-thread: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Lỗi khi chạy multi-thread: {str(e)}")
+
+
+@app.get("/run-multi-thread/status")
+def get_multi_thread_status() -> dict:
+    """Lấy trạng thái multi-thread runner"""
+    try:
+        from worker.multi_thread import get_multi_thread_status
+        return get_multi_thread_status()
+    except ImportError:
+        return {"status": "error", "message": "Multi-thread module không khả dụng"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.post("/run-multi-thread/stop")
+def stop_multi_thread() -> dict:
+    """Dừng multi-thread runner"""
+    try:
+        from worker.multi_thread import stop_multi_thread
+        return stop_multi_thread()
+    except ImportError:
+        raise HTTPException(status_code=500, detail="Multi-thread module không khả dụng")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi khi dừng multi-thread: {str(e)}")
 

@@ -14,12 +14,24 @@ import threading
 import time
 import logging
 import json
+import sys
 from typing import List, Optional, Dict, Any, Callable
 from multiprocessing import Process
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from datetime import datetime
 import traceback
+
+# ====== FIX IMPORT PATH KHI CHẠY TRỰC TIẾP ======
+# Nếu chạy trực tiếp từ thư mục worker, thêm parent directory vào sys.path
+if __name__ == "__main__" or not any("backend" in str(p) for p in sys.path):
+    current_file = Path(__file__).resolve()
+    # Tìm backend directory (parent của worker)
+    backend_dir = current_file.parent.parent
+    if backend_dir.exists() and backend_dir.name == "backend":
+        backend_path = str(backend_dir)
+        if backend_path not in sys.path:
+            sys.path.insert(0, backend_path)
 
 # Setup logging
 logging.basicConfig(
@@ -40,12 +52,11 @@ try:
         _bot_lock,
         _bot_processes,
         _prune_bot_processes,
-        control_state,
-        get_config_dir,
-        get_settings
+        control_state
     )
+    from ..core.paths import get_data_dir, get_config_dir
+    from ..core.settings import get_settings
     from .get_post_from_page import get_posts_from_page
-    from ..core.paths import get_data_dir
 except ImportError:
     # Fallback imports nếu chạy độc lập
     try:
@@ -58,14 +69,24 @@ except ImportError:
             _bot_lock,
             _bot_processes,
             _prune_bot_processes,
-            control_state,
-            get_config_dir,
-            get_settings
+            control_state
         )
+        from core.paths import get_data_dir, get_config_dir
+        from core.settings import get_settings
         from worker.get_post_from_page import get_posts_from_page
-        from core.paths import get_data_dir
     except ImportError as e:
         logger.error(f"Failed to import required modules: {e}")
+        logger.error(f"Current sys.path: {sys.path}")
+        logger.error("=" * 60)
+        logger.error("LƯU Ý: File này cần được chạy trong môi trường có đầy đủ dependencies:")
+        logger.error("  - fastapi")
+        logger.error("  - playwright")
+        logger.error("  - và các dependencies khác trong requirements.txt")
+        logger.error("=" * 60)
+        logger.error("Để test, hãy:")
+        logger.error("  1. Kích hoạt virtual environment: venv\\Scripts\\activate")
+        logger.error("  2. Hoặc chạy từ FastAPI server (không chạy trực tiếp file này)")
+        logger.error("=" * 60)
         raise
 
 
@@ -697,10 +718,11 @@ class MultiThreadRunner:
             self.stats.end_time = datetime.now()
 
             duration = time.time() - start_time
-            logger.info(".2f"
+            
             return {
                 "status": "ok",
-                "message": ".2f",
+                "message": f"Dừng multi-thread runner trong {duration:.2f}s",
+                "duration_seconds": round(duration, 2),
                 "stats": self.stats.to_dict()
             }
 

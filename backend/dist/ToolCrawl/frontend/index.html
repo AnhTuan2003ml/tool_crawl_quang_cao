@@ -39,17 +39,10 @@
           </div>
         </div>
       </div>
-      <!-- Toast số bài đã quét được -->
-      <div id="scanStatsToast" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); padding: 20px; border: 2px solid #5a67d8; position: relative; overflow: hidden; display: none;">
-        <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);"></div>
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-          <div style="width: 45px; height: 45px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;">
-            📊
-          </div>
-          <div style="font-weight: bold; color: white; font-size: 16px;">Số bài đã quét được</div>
-        </div>
-        <div id="scanStatsToastList" style="background: rgba(255,255,255,0.95); padding: 12px; border-radius: 8px; max-height: 200px; overflow-y: auto;"></div>
-      </div>
+    </div>
+    <!-- Toast số bài đã quét được - Đặt riêng ở góc trên bên trái -->
+    <div id="scanStatsToast" style="position: fixed; top: 14px; left: 14px; z-index: 1999; max-width: 400px; display: none;">
+      <div id="scanStatsToastList" style="display: flex; flex-direction: column; gap: 6px;"></div>
     </div>
     <header class="header">
       <div class="header-content">
@@ -124,11 +117,21 @@
                   <button id="clearTimeFilterBtn" class="time-filter-btn-compact time-filter-clear-compact" title="Xóa">
                     <span>✗</span>
                   </button>
-                <!-- Export Button - Bên phải trong hàng lọc thời gian -->
-                <button id="exportExcelBtn" class="btn-success export-btn-inline-time">
-                  <span class="btn-icon">📊</span>
-                  <span>Xuất Excel</span>
-                </button>
+                <!-- Action Buttons - Bên phải trong hàng lọc thời gian -->
+                <div class="action-buttons-group">
+                  <button id="startScanBtn" class="btn-primary start-scan-btn-inline">
+                    <span class="btn-icon">▶️</span>
+                    <span>Bắt đầu</span>
+                  </button>
+                  <button id="stopScanBtn" class="btn-danger stop-scan-btn-inline">
+                    <span class="btn-icon">⏹️</span>
+                    <span>Dừng</span>
+                  </button>
+                  <button id="exportExcelBtn" class="btn-success export-btn-inline-time">
+                    <span class="btn-icon">📊</span>
+                    <span>Xuất Excel</span>
+                  </button>
+                </div>
                 </div>
               </div>
             </div>
@@ -155,7 +158,7 @@
                     <!-- Files will be populated here -->
                   </div>
                   <div class="file-selector-actions">
-                    <button id="cancelFileSelection" class="btn-secondary">Hủy</button>
+                    <button id="cancelFileSelection" class="btn-primary">Hủy</button>
                   </div>
                 </div>
               </div>
@@ -207,38 +210,26 @@
 
         <!-- View: Setting profile -->
         <div id="settingsView" style="display:none;">
-          <div class="settings-stack">
-            <div class="setting-card">
-              <div class="setting-card-header">
-                <div>
-                  <h4>API Key</h4>
-
+          <div class="settings-grid">
+            <!-- Cột trái: Actions và Config Panels -->
+            <div class="settings-left-column">
+              <div class="setting-card">
+                <div class="setting-card-header">
+                  <div>
+                    <h4>Danh sách profile</h4>
+                    <p class="muted">Thêm profile_id và thao tác nhanh</p>
+                  </div>
+                  <div class="setting-card-actions">
+                    <button id="runAllInfoBtn" class="btn-primary" type="button">Lấy thông tin toàn bộ</button>
+                    <button id="runSelectedInfoBtn" class="btn-primary" type="button">Lấy thông tin profile đã chọn</button>
+                    <button id="scanPostsSettingBtn" class="btn-primary" type="button">Quét bài viết</button>
+                    <button id="scanGroupSettingBtn" class="btn-primary" type="button">Quét theo group</button>
+                    <button id="feedAccountSettingBtn" class="btn-primary" type="button">Nuôi acc theo kịch bản</button>
+                    <button id="autoJoinGroupBtn" class="btn-primary" type="button">Tự động tham gia group</button>            
+                    <button id="stopAllSettingBtn" class="btn-danger" type="button">Dừng tất cả</button>
+                  </div>
                 </div>
-              </div>
-              <div class="inline-field">
-                <input id="settingApiKey" type="text" placeholder="Nhập API Key" />
-                <button id="saveApiKeyBtn" class="btn-primary" type="button">Lưu API Key</button>
-              </div>
-              <p class="hint">API Key được lưu trên trình duyệt; đổi thì nhập mới rồi bấm Lưu.</p>
-            </div>
-
-            <div class="setting-card">
-              <div class="setting-card-header">
-                <div>
-                  <h4>Danh sách profile</h4>
-                  <p class="muted">Thêm profile_id và thao tác nhanh</p>
-                </div>
-                <div class="setting-card-actions">
-                  <button id="runAllInfoBtn" class="btn-primary" type="button">Lấy thông tin toàn bộ</button>
-                  <button id="runSelectedInfoBtn" class="btn-secondary" type="button">Lấy thông tin profile đã chọn</button>
-                  <button id="scanPostsSettingBtn" class="btn-success" type="button">Quét bài viết</button>
-                  <button id="scanGroupSettingBtn" class="btn-yellow" type="button">Quét theo group</button>
-                  <button id="autoJoinGroupBtn" class="btn-primary" type="button">Tự động tham gia group</button>
-                  <button id="feedAccountSettingBtn" class="btn-nuoiacc" type="button">Nuôi acc</button>
-                  <button id="stopAllSettingBtn" class="btn-danger" type="button">Dừng tất cả</button>
-                </div>
-              </div>
-              <div id="feedConfigPanel" class="feed-panel" style="display:none;">
+                <div id="feedConfigPanel" class="feed-panel" style="display:none;">
                 <div class="feed-panel-row">
                   <label class="feed-radio">
                     <input type="radio" name="feedMode" value="feed" checked />
@@ -248,9 +239,13 @@
                     <input type="radio" name="feedMode" value="search" />
                     <span>Search</span>
                   </label>
+                  <label class="feed-radio">
+                    <input type="radio" name="feedMode" value="feed+search" />
+                    <span>Feed+Search</span>
+                  </label>
                   <div class="feed-duration">
                     <span class="feed-label">Chạy (phút)</span>
-                    <input id="feedRunMinutesInput" type="number" min="1" value="30" />
+                    <input id="feedRunMinutesInput" type="number" min="0.1" step="0.1" value="30" />
                   </div>
                   <div class="feed-duration">
                     <span class="feed-label">Thời gian lặp lại (phút)</span>
@@ -262,8 +257,8 @@
                     placeholder="Nhập text. VD: bắc ninh , bắc giang  |  hoặc: tuyển dụng bắc ninh , bắc giang"></textarea>
                 </div>
                 <div class="feed-panel-row feed-panel-actions">
-                  <button id="feedStartBtn" class="btn-success" type="button">Chạy</button>
-                  <button id="feedCancelBtn" class="btn-secondary" type="button">Hủy</button>
+                  <button id="feedStartBtn" class="btn-primary" type="button">Chạy</button>
+                  <button id="feedCancelBtn" class="btn-primary" type="button">Hủy</button>
                 </div>
                 <p class="hint">
                   Rule like: bài phải có (tuyển dụng/tuyển gấp/tuyển nhân viên) <b>và</b> có (bắc ninh <b>hoặc</b> bắc
@@ -282,9 +277,13 @@
                     <input type="radio" name="scanMode" value="search" />
                     <span>Search</span>
                   </label>
+                  <label class="feed-radio">
+                    <input type="radio" name="scanMode" value="feed+search" />
+                    <span>Feed+Search</span>
+                  </label>
                   <div class="feed-duration">
                     <span class="feed-label">Chạy (phút)</span>
-                    <input id="scanRunMinutesInput" type="number" min="1" value="30" />
+                    <input id="scanRunMinutesInput" type="number" min="0.1" step="0.1" value="30" />
                   </div>
                   <div class="feed-duration">
                     <span class="feed-label">Thời gian lặp lại (phút)</span>
@@ -296,8 +295,8 @@
                     placeholder="Nhập text. VD: bắc ninh , bắc giang  |  hoặc: tuyển dụng bắc ninh , bắc giang"></textarea>
                 </div>
                 <div class="feed-panel-row feed-panel-actions">
-                  <button id="scanStartBtn" class="btn-success" type="button">Chạy</button>
-                  <button id="scanCancelBtn" class="btn-secondary" type="button">Hủy</button>
+                  <button id="scanStartBtn" class="btn-primary" type="button">Chạy</button>
+                  <button id="scanCancelBtn" class="btn-primary" type="button">Hủy</button>
                 </div>
                 <p class="hint">
                   Rule scan: bài phải có keyword mặc định (tuyển dụng/lương/...) <b>và</b> có ít nhất 1 cụm từ trong
@@ -336,11 +335,11 @@
                   </div>
                   
                   <div class="form-actions">
-                    <button id="groupScanStartBtn" class="btn-success btn-primary-action" type="button">
+                    <button id="groupScanStartBtn" class="btn-primary btn-primary-action" type="button">
                       <span class="btn-icon">▶️</span>
                       <span>Bắt đầu quét</span>
                     </button>
-                    <button id="groupScanCancelBtn" class="btn-secondary" type="button">
+                    <button id="groupScanCancelBtn" class="btn-primary" type="button">
                       <span>Đóng</span>
                     </button>
                   </div>
@@ -351,13 +350,37 @@
                   </p>
                 </div>
               </div>
+              </div>
+            </div>
 
-              <div id="profileList" class="profile-list empty-state-box">
-                <p class="muted">Chưa có profile nào</p>
+            <!-- Cột phải: API Key và Profile List -->
+            <div class="settings-right-column">
+              <div class="setting-card">
+                <div class="setting-card-header">
+                  <div>
+                    <h4>API Key</h4>
+                  </div>
+                </div>
+                <div class="inline-field">
+                  <input id="settingApiKey" type="text" placeholder="Nhập API Key" />
+                  <button id="saveApiKeyBtn" class="btn-primary" type="button">Lưu API Key</button>
+                </div>
+                <p class="hint">API Key được lưu trên trình duyệt; đổi thì nhập mới rồi bấm Lưu.</p>
               </div>
 
-              <div class="add-profile-row">
-                <button id="addProfileRowBtn" class="btn-success" type="button">+ Thêm profile</button>
+              <div class="setting-card">
+                <div class="setting-card-header">
+                  <div>
+                    <h4>Danh sách profile</h4>
+                  </div>
+                </div>
+                <div id="profileList" class="profile-list empty-state-box">
+                  <p class="muted">Chưa có profile nào</p>
+                </div>
+
+                <div class="add-profile-row">
+                  <button id="addProfileRowBtn" class="btn-primary" type="button">+ Thêm profile</button>
+                </div>
               </div>
             </div>
           </div>

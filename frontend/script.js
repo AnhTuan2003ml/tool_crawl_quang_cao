@@ -2842,6 +2842,99 @@ async function runInfoCollectorAndWait(mode = 'selected') {
   });
 }
 
+// Start quét bài viết với multi-thread (feed+search + group scan song song)
+async function startScanFlowMultiThread(options = {}) {
+  // Nếu đang quét thì không cho chạy lại
+  if (isScanning) {
+    showToast('Đang quét, vui lòng đợi hoặc bấm dừng trước', 'warning');
+    return;
+  }
+  
+  const {
+    runMinutes,
+    restMinutes,
+    text,
+    mode,
+    postCount,
+    startDate,
+    endDate
+  } = options || {};
+  
+  try {
+    // Load và hiển thị tất cả dữ liệu từ all_results_summary.json ngay lập tức
+    await loadInitialData();
+
+    // Nếu đang có interval check data cũ thì clear trước để tránh setInterval chồng
+    if (dataCheckInterval) {
+      clearInterval(dataCheckInterval);
+      dataCheckInterval = null;
+    }
+
+    // Gọi multi-thread endpoint
+    const selected = Object.keys(profileState.selected || {}).filter((pid) => profileState.selected[pid]);
+    if (selected.length === 0) {
+      showToast('Chọn (tick) ít nhất 1 profile để quét bài viết.', 'error');
+      setScanning(false);
+      return;
+    }
+
+    const payload = {
+      profile_ids: selected,
+      run_minutes: runMinutes,
+      rest_minutes: restMinutes,
+      text: text,
+      mode: mode
+    };
+
+    // Thêm group scan params nếu có
+    if (postCount && startDate && endDate) {
+      payload.post_count = postCount;
+      payload.start_date = startDate;
+      payload.end_date = endDate;
+    }
+
+    const data = await callBackend('/run-multi-thread', {
+      body: JSON.stringify(payload),
+    });
+
+    if (data.status === 'error' || data.status === 'partial') {
+      const errorMsg = data.message || 'Lỗi không xác định';
+      showToast(`❌ ${errorMsg}`, 'error', 4000);
+      if (data.errors) {
+        console.error('Multi-thread errors:', data.errors);
+      }
+      setScanning(false);
+      return;
+    }
+
+    showToast('✅ Đã khởi động quét song song (feed+search + group)', 'success', 3000);
+
+    // Tự động kiểm tra dữ liệu mới mỗi 5 giây
+    const checkInterval = 5000;
+    dataCheckInterval = setInterval(checkForNewData, checkInterval);
+
+    setScanning(true);
+    
+    // Reset danh sách profile die đã toast khi bắt đầu quét mới
+    notifiedDeadProfiles.clear();
+    polledBannedProfiles.clear();
+    
+    // Bắt đầu poll số bài đã quét được
+    if (scanStatsInterval) clearInterval(scanStatsInterval);
+    updateScanStats(); // Cập nhật ngay lập tức
+    scanStatsInterval = setInterval(updateScanStats, 3000); // Poll mỗi 3 giây
+    
+    // Poll /run-multi-thread/status để sync UI
+    try { startScanBackendPoll({ silent: true }); } catch (_) { }
+    try { updateStopPauseButtonsByJobs(); } catch (_) { }
+    try { await refreshControlState(); } catch (_) { }
+  } catch (err) {
+    console.error('Lỗi trong startScanFlowMultiThread:', err);
+    setScanning(false);
+    throw err;
+  }
+}
+
 // Start quét bài viết (dùng chung cho nút "Bắt đầu quét" và nút trong tab Setting profile)
 async function startScanFlow(options = {}) {
   // Nếu đang quét thì không cho chạy lại
@@ -3049,9 +3142,23 @@ if (startScanBtn) {
       return;
     }
 
+    // Lấy thông tin group scan (nếu có)
+    const postCount = parseInt(String(groupScanPostCountInput?.value || '0').trim(), 10) || 10;
+    const startDate = String(groupScanStartDateInput?.value || '').trim();
+    const endDate = String(groupScanEndDateInput?.value || '').trim();
+
     setButtonLoading(startScanBtn, true, 'Đang chạy...');
     try {
-      await startScanFlow({ runMinutes, restMinutes, text, mode });
+      // Gọi multi-thread runner để chạy song song feed+search và group scan
+      await startScanFlowMultiThread({ 
+        runMinutes, 
+        restMinutes, 
+        text, 
+        mode,
+        postCount,
+        startDate,
+        endDate
+      });
     } catch (e) {
       showToast('Không chạy được quét bài viết (kiểm tra FastAPI).', 'error');
       setButtonLoading(startScanBtn, false);
