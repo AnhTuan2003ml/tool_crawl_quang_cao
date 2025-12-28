@@ -1,4 +1,4 @@
-('D:\\FreeLand\\tool_crawl_quang_cao\\backend\\build\\build_exe\\ToolCrawl.pkg',
+('D:\\FreeLand\\tool_crawl_quang_cao\\backend\\build\\build_exe\\ToolFacebook.pkg',
  {'BINARY': True,
   'DATA': True,
   'EXECUTABLE': True,

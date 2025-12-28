@@ -15,17 +15,22 @@ echo.
 echo Dang copy du lieu (Config, Data, Frontend)...
 
 :: Copy config (chứa settings.json, groups.json...)
-xcopy "config" "dist\ToolCrawl\config\" /E /I /Y
+xcopy "config" "dist\ToolFacebook\config\" /E /I /Y
 
 :: Copy frontend (HTML/CSS/JS) - lấy từ thư mục cha
-xcopy "..\frontend" "dist\ToolCrawl\frontend\" /E /I /Y
+xcopy "..\frontend" "dist\ToolFacebook\frontend\" /E /I /Y
 
-:: Tạo thư mục data rỗng nếu chưa có
-if not exist "dist\ToolCrawl\data" mkdir "dist\ToolCrawl\data"
+:: Copy toàn bộ data (không tạo mới, copy hết)
+if exist "data" (
+    xcopy "data" "dist\ToolFacebook\data\" /E /I /Y
+) else (
+    echo Warning: Thu muc data khong ton tai, tao thu muc rong...
+    if not exist "dist\ToolFacebook\data" mkdir "dist\ToolFacebook\data"
+)
 
 echo.
 echo ==========================================
 echo BUILD THANH CONG!
-echo File exe nam tai: backend\dist\ToolCrawl\ToolCrawl.exe
+echo File exe nam tai: backend\dist\ToolFacebook\ToolFacebook.exe
 echo ==========================================
 pause

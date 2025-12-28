@@ -1243,7 +1243,7 @@ def replace_profile_groups(profile_id: str, payload: ProfileGroupsReplacePayload
         traceback.print_exc()
         # Không raise error để không ảnh hưởng đến việc lưu vào settings.json
     
-    return {"status": "ok", "profile_id": pid, "groups": cleaned}
+        return {"status": "ok", "profile_id": pid, "groups": cleaned}
 
 
 def _prune_join_group_processes() -> None:
