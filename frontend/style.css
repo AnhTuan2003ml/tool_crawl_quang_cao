@@ -899,7 +899,7 @@ tbody tr.filtered-out {
 
 .settings-grid {
   display              : grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 2fr 3fr;
   gap                  : 16px;
   padding              : 10px;
   align-items          : start;

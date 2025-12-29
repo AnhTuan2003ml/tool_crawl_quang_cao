@@ -887,6 +887,7 @@ class ProfileCreatePayload(BaseModel):
 
 
 class ProfileUpdatePayload(BaseModel):
+    name: Optional[str] = None
     cookie: Optional[str] = None
     access_token: Optional[str] = None
     fb_dtsg: Optional[str] = None
@@ -998,7 +999,11 @@ def get_account_status() -> dict:
     """
     Lấy snapshot trạng thái account (do worker đã ghi ra file).
     Frontend chỉ dùng để hiển thị cảnh báo, không điều khiển luồng.
+    Tự động cleanup các profile_id không còn tồn tại trong settings.json.
     """
+    # Cleanup orphaned profiles trước khi đọc
+    _cleanup_orphaned_profiles()
+    
     status_file = get_data_dir() / "account_status.json"
     if not status_file.exists():
         return {"accounts": {}}
@@ -1066,6 +1071,8 @@ def update_profile(profile_id: str, payload: ProfileUpdatePayload) -> dict:
             cur = {}
             profiles[pid] = cur
 
+        if payload.name is not None:
+            cur["name"] = str(payload.name).strip()
         if payload.cookie is not None:
             cur["cookie"] = str(payload.cookie)
         if payload.access_token is not None:
@@ -1604,7 +1611,13 @@ def _get_frontend_state_path() -> Path:
 
 @app.get("/frontend/state")
 def get_frontend_state() -> dict:
-    """Đọc trạng thái frontend đã lưu."""
+    """
+    Đọc trạng thái frontend đã lưu.
+    Tự động cleanup các profile_id không còn tồn tại trong settings.json.
+    """
+    # Cleanup orphaned profiles trước khi đọc
+    _cleanup_orphaned_profiles()
+    
     path = _get_frontend_state_path()
     if not path.exists():
         return {
@@ -2027,6 +2040,109 @@ def control_reset_stop(payload: Optional[ResetStopPayload] = Body(None)) -> dict
     st = control_state.reset_emergency_stop(clear_stopped_profiles=clear_stopped)
     return {"status": "ok", "state": st}
 
+def _remove_profile_from_data_files(profile_id: str) -> None:
+    """
+    Xóa profile_id khỏi account_status.json và frontend_state.json
+    khi profile_id bị xóa khỏi settings.json
+    """
+    pid = _norm_profile_id(profile_id)
+    if not pid:
+        return
+    
+    try:
+        # 1. Xóa khỏi account_status.json
+        status_file = get_data_dir() / "account_status.json"
+        if status_file.exists():
+            try:
+                with status_file.open("r", encoding="utf-8") as f:
+                    data = json.load(f) or {}
+                if isinstance(data, dict) and pid in data:
+                    del data[pid]
+                    with status_file.open("w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
+                    print(f"🗑️ Đã xóa profile_id {pid} khỏi account_status.json")
+            except Exception as e:
+                print(f"⚠️ Không thể xóa profile_id {pid} khỏi account_status.json: {e}")
+        
+        # 2. Xóa khỏi frontend_state.json (selected_profiles)
+        frontend_state_path = _get_frontend_state_path()
+        if frontend_state_path.exists():
+            try:
+                with frontend_state_path.open("r", encoding="utf-8") as f:
+                    state = json.load(f) or {}
+                if isinstance(state, dict):
+                    selected_profiles = state.get("selected_profiles", {})
+                    if isinstance(selected_profiles, dict) and pid in selected_profiles:
+                        del selected_profiles[pid]
+                        state["selected_profiles"] = selected_profiles
+                        state["last_updated"] = datetime.now().isoformat()
+                        with frontend_state_path.open("w", encoding="utf-8") as f:
+                            json.dump(state, f, ensure_ascii=False, indent=2)
+                        print(f"🗑️ Đã xóa profile_id {pid} khỏi frontend_state.json")
+            except Exception as e:
+                print(f"⚠️ Không thể xóa profile_id {pid} khỏi frontend_state.json: {e}")
+    except Exception as e:
+        print(f"⚠️ Lỗi khi xóa profile_id {pid} khỏi data files: {e}")
+
+
+def _cleanup_orphaned_profiles() -> None:
+    """
+    Cleanup các profile_id không còn tồn tại trong settings.json
+    khỏi account_status.json và frontend_state.json
+    """
+    try:
+        # Lấy danh sách profile_id hợp lệ từ settings.json
+        raw = _read_settings_raw()
+        profiles = raw.get("PROFILE_IDS") or {}
+        if not isinstance(profiles, dict):
+            profiles = {}
+        valid_profile_ids = set(profiles.keys())
+        
+        # 1. Cleanup account_status.json
+        status_file = get_data_dir() / "account_status.json"
+        if status_file.exists():
+            try:
+                with status_file.open("r", encoding="utf-8") as f:
+                    data = json.load(f) or {}
+                if isinstance(data, dict):
+                    removed = []
+                    for pid in list(data.keys()):
+                        if pid not in valid_profile_ids:
+                            del data[pid]
+                            removed.append(pid)
+                    if removed:
+                        with status_file.open("w", encoding="utf-8") as f:
+                            json.dump(data, f, ensure_ascii=False, indent=2)
+                        print(f"🗑️ Đã cleanup {len(removed)} profile_id không hợp lệ khỏi account_status.json: {removed}")
+            except Exception as e:
+                print(f"⚠️ Không thể cleanup account_status.json: {e}")
+        
+        # 2. Cleanup frontend_state.json
+        frontend_state_path = _get_frontend_state_path()
+        if frontend_state_path.exists():
+            try:
+                with frontend_state_path.open("r", encoding="utf-8") as f:
+                    state = json.load(f) or {}
+                if isinstance(state, dict):
+                    selected_profiles = state.get("selected_profiles", {})
+                    if isinstance(selected_profiles, dict):
+                        removed = []
+                        for pid in list(selected_profiles.keys()):
+                            if pid not in valid_profile_ids:
+                                del selected_profiles[pid]
+                                removed.append(pid)
+                        if removed:
+                            state["selected_profiles"] = selected_profiles
+                            state["last_updated"] = datetime.now().isoformat()
+                            with frontend_state_path.open("w", encoding="utf-8") as f:
+                                json.dump(state, f, ensure_ascii=False, indent=2)
+                            print(f"🗑️ Đã cleanup {len(removed)} profile_id không hợp lệ khỏi frontend_state.json: {removed}")
+            except Exception as e:
+                print(f"⚠️ Không thể cleanup frontend_state.json: {e}")
+    except Exception as e:
+        print(f"⚠️ Lỗi khi cleanup orphaned profiles: {e}")
+
+
 @app.delete("/settings/profiles/{profile_id}")
 def delete_profile(profile_id: str) -> dict:
     pid = _norm_profile_id(profile_id)
@@ -2045,7 +2161,11 @@ def delete_profile(profile_id: str) -> dict:
             del profiles[pid]
         raw["PROFILE_IDS"] = profiles
         _write_settings_raw(raw)
-        return {"status": "ok"}
+    
+    # Xóa profile_id khỏi account_status.json và frontend_state.json
+    _remove_profile_from_data_files(pid)
+    
+    return {"status": "ok"}
 
 
 def _fetch_cookie_for_profile(profile_id: str) -> dict:

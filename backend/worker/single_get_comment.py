@@ -475,7 +475,7 @@ if __name__ == "__main__":
     cookies = get_cookies_by_profile_id(profile_id)
     
     if payload_dict and cookies:
-        post_id = "122200444238297334"  # Thay đổi Post ID ở đây
+        post_id = "122200353032297334"  # Thay đổi Post ID ở đây
         comments = get_all_comments_by_post_id(post_id, payload_dict, profile_id, cookies)
         with open("comments.json", "w", encoding="utf-8") as f:
             json.dump(comments, f, ensure_ascii=False, indent=4)

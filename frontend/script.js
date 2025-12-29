@@ -336,6 +336,7 @@ async function tryLoadProfileStateFromBackend() {
       profileIds.forEach((pid) => {
         const key = String(pid || '').trim();
         if (key) nextProfiles[key] = { 
+          name: '',
           cookie: '', 
           access_token: '', 
           fb_dtsg: '', 
@@ -348,6 +349,7 @@ async function tryLoadProfileStateFromBackend() {
     } else if (typeof profileIds === 'string') {
       profileIds.split(',').map((s) => s.trim()).filter(Boolean).forEach((pid) => {
         nextProfiles[pid] = { 
+          name: '',
           cookie: '', 
           access_token: '', 
           fb_dtsg: '', 
@@ -362,6 +364,7 @@ async function tryLoadProfileStateFromBackend() {
         const key = String(pid || '').trim();
         if (!key) return;
         nextProfiles[key] = {
+          name: (cfg && cfg.name) ? String(cfg.name).trim() : '',
           cookie: (cfg && cfg.cookie) ? String(cfg.cookie) : '',
           access_token: (cfg && (cfg.access_token || cfg.accessToken)) ? String(cfg.access_token || cfg.accessToken) : '',
           fb_dtsg: (cfg && cfg.fb_dtsg) ? String(cfg.fb_dtsg) : '',
@@ -672,13 +675,45 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
   selectCb.title = 'Chọn profile';
   selectCb.checked = Boolean(profileState.selected && profileState.selected[currentPid]);
 
+  // Container cho profile_id và name inputs
+  const inputsContainer = document.createElement('div');
+  inputsContainer.style.cssText = 'display: flex; gap: 8px; flex: 1; min-width: 0;';
+
   const pidInput = document.createElement('input');
   pidInput.className = 'profile-id-input';
   pidInput.type = 'text';
   pidInput.value = currentPid;
+  pidInput.placeholder = 'Profile ID';
+  pidInput.style.cssText = 'flex: 2; min-width: 0;';
   pidInput.addEventListener('change', () => {
     wrap.dataset.profileId = String(pidInput.value || '').trim();
   });
+
+  const nameInput = document.createElement('input');
+  nameInput.className = 'profile-name-input';
+  nameInput.type = 'text';
+  nameInput.placeholder = 'Tên profile';
+  nameInput.style.cssText = 'flex: 1; min-width: 0; height: 36px; padding: 8px 12px; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff; transition: all 0.2s ease;';
+  nameInput.addEventListener('focus', () => {
+    nameInput.style.outline = 'none';
+    nameInput.style.borderColor = 'var(--primary)';
+    nameInput.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.1)';
+  });
+  nameInput.addEventListener('blur', () => {
+    nameInput.style.borderColor = '#e2e8f0';
+    nameInput.style.boxShadow = 'none';
+  });
+
+  // Load name từ backend hoặc profileState
+  const loadName = () => {
+    const info = profileState.profiles[currentPid] || {};
+    const name = info.name || '';
+    nameInput.value = name;
+  };
+  loadName();
+  inputsContainer.appendChild(nameInput);
+  inputsContainer.appendChild(pidInput);
+
 
   const actions = document.createElement('div');
   actions.className = 'profile-actions';
@@ -921,7 +956,9 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
     // normalize hiển thị để tránh dính space
     if (pidInput.value !== nextPid) pidInput.value = nextPid;
 
+    const nextName = (nameInput.value || '').trim();
     const cur = profileState.profiles[currentPid] || { 
+      name: '',
       cookie: '', 
       access_token: '', 
       fb_dtsg: '', 
@@ -941,6 +978,7 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
         await callBackend(`/settings/profiles/${encodeURIComponent(nextPid)}`, {
           method: 'PUT',
           body: JSON.stringify({
+            name: nextName || cur.name || '',
             cookie: cur.cookie || '',
             access_token: cur.access_token || '',
             fb_dtsg: cur.fb_dtsg || '',
@@ -957,20 +995,28 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
         await callBackend(`/settings/profiles/${encodeURIComponent(currentPid)}`, { method: 'DELETE' });
 
         delete profileState.profiles[currentPid];
-        profileState.profiles[nextPid] = { ...cur };
-        // chuyển checkbox selection sang key mới
+        profileState.profiles[nextPid] = { ...cur, name: nextName };
+        // Bỏ tick của profile cũ (không chuyển sang profile mới)
         if (profileState.selected && profileState.selected[currentPid]) {
           delete profileState.selected[currentPid];
-          profileState.selected[nextPid] = true;
+        }
+        // Bỏ tick của profile mới nếu có
+        if (profileState.selected && profileState.selected[nextPid]) {
+          delete profileState.selected[nextPid];
         }
         currentPid = nextPid;
         pidInput.value = currentPid;
-        selectCb.checked = Boolean(profileState.selected && profileState.selected[currentPid]);
+        loadName(); // Reload name sau khi đổi profile_id
+        selectCb.checked = false; // Bỏ tick sau khi sửa
+        saveProfileState();
+        saveFrontendState(); // Lưu state vào backend
+        updateSettingsActionButtons();
         updateGroupBtnLabel();
       } else {
         await callBackend(`/settings/profiles/${encodeURIComponent(currentPid)}`, {
           method: 'PUT',
           body: JSON.stringify({
+            name: nextName || '',
             cookie: cur.cookie || '',
             access_token: cur.access_token || '',
             fb_dtsg: cur.fb_dtsg || '',
@@ -979,6 +1025,20 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
             spin_t: cur.spin_t || '',
           }),
         });
+        // Cập nhật name trong profileState
+        if (!profileState.profiles[currentPid]) {
+          profileState.profiles[currentPid] = { ...cur };
+        }
+        profileState.profiles[currentPid].name = nextName;
+        
+        // Bỏ tick của profile sau khi lưu
+        if (profileState.selected && profileState.selected[currentPid]) {
+          delete profileState.selected[currentPid];
+        }
+        selectCb.checked = false; // Bỏ tick sau khi sửa
+        saveProfileState();
+        saveFrontendState(); // Lưu state vào backend
+        updateSettingsActionButtons();
       }
 
       saveProfileState();
@@ -1123,7 +1183,7 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
   actions.appendChild(removeBtn);
   selectWrap.appendChild(selectCb);
   row.appendChild(selectWrap);
-  row.appendChild(pidInput);
+  row.appendChild(inputsContainer);
   row.appendChild(actions);
   wrap.appendChild(row);
   wrap.appendChild(groupPanel);
@@ -1162,10 +1222,23 @@ function showAddProfileRow() {
 
   addRowEl = document.createElement('div');
   addRowEl.className = 'profile-row add-profile-form';
+  addRowEl.style.cssText = 'display: flex; align-items: center; gap: 10px; padding: 12px 14px;';
+
+  const inputsContainer = document.createElement('div');
+  inputsContainer.style.cssText = 'display: flex; gap: 8px; flex: 1; min-width: 0;';
 
   const input = document.createElement('input');
   input.type = 'text';
   input.placeholder = 'Nhập profile_id (UUID)';
+  input.style.cssText = 'flex: 1; min-width: 0; height: 36px; padding: 8px 12px; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff;';
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.placeholder = 'Tên profile (tùy chọn)';
+  nameInput.style.cssText = 'flex: 1; min-width: 0; height: 36px; padding: 8px 12px; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff;';
+  inputsContainer.appendChild(nameInput);
+  inputsContainer.appendChild(input);
+
 
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
@@ -1173,6 +1246,7 @@ function showAddProfileRow() {
   saveBtn.textContent = 'Lưu';
   saveBtn.addEventListener('click', () => {
     const value = (input.value || '').trim();
+    const nameValue = (nameInput.value || '').trim();
     if (!value) {
       showToast('Vui lòng nhập profile_id', 'error');
       return;
@@ -1182,8 +1256,18 @@ function showAddProfileRow() {
       body: JSON.stringify({ profile_id: value }),
     })
       .then(() => {
+        // Lưu name nếu có
+        if (nameValue) {
+          return callBackend(`/settings/profiles/${encodeURIComponent(value)}`, {
+            method: 'PUT',
+            body: JSON.stringify({ name: nameValue }),
+          });
+        }
+      })
+      .then(() => {
         if (!profileState.profiles[value]) {
           profileState.profiles[value] = { 
+            name: nameValue,
             cookie: '', 
             access_token: '', 
             fb_dtsg: '', 
@@ -1192,6 +1276,8 @@ function showAddProfileRow() {
             spin_t: '',
             groups: [] 
           };
+        } else {
+          profileState.profiles[value].name = nameValue;
         }
         saveProfileState();
         // Thêm row mới mà không render lại toàn bộ (tránh nháy)
@@ -1220,7 +1306,7 @@ function showAddProfileRow() {
     }
   });
 
-  addRowEl.appendChild(input);
+  addRowEl.appendChild(inputsContainer);
   addRowEl.appendChild(saveBtn);
   addRowEl.appendChild(cancelBtn);
   // luôn để form ở cuối list
@@ -3916,6 +4002,37 @@ async function updateInfoProgress() {
   }
 }
 
+// Hàm helper để đợi quét xong (bot_running = false)
+async function waitForScanToComplete(maxWaitSeconds = 300) {
+  const startTime = Date.now();
+  const maxWait = maxWaitSeconds * 1000;
+  
+  while (Date.now() - startTime < maxWait) {
+    try {
+      const st = await callBackendNoAlert('/jobs/status', { method: 'GET' });
+      if (st) lastJobsStatus = st;
+      
+      const botHasProfiles = Array.isArray(st && st.bot_profile_ids) && st.bot_profile_ids.length > 0;
+      const running = !!(st && st.bot_running && botHasProfiles);
+      
+      if (!running) {
+        // Quét đã xong
+        return true;
+      }
+      
+      // Đợi 2 giây trước khi check lại
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    } catch (e) {
+      console.warn('Lỗi khi check trạng thái quét:', e);
+      // Nếu lỗi, đợi 2 giây rồi thử lại
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+  
+  // Timeout - quét vẫn chưa xong sau maxWaitSeconds
+  return false;
+}
+
 async function runInfoCollector(mode = 'all') {
   const isSelected = mode === 'selected';
   const btn = isSelected ? runSelectedInfoBtn : runAllInfoBtn;
@@ -3925,6 +4042,34 @@ async function runInfoCollector(mode = 'all') {
     showToast('Chọn (tick) ít nhất 1 profile trước.', 'error');
     try { switchTab('settings'); } catch (_) { }
     return;
+  }
+
+  // Kiểm tra xem quét có đang chạy không
+  try {
+    const st = await callBackendNoAlert('/jobs/status', { method: 'GET' });
+    if (st) lastJobsStatus = st;
+    
+    const botHasProfiles = Array.isArray(st && st.bot_profile_ids) && st.bot_profile_ids.length > 0;
+    const isScanning = !!(st && st.bot_running && botHasProfiles);
+    
+    if (isScanning) {
+      // Quét đang chạy, đợi quét xong
+      setButtonLoading(btn, true, 'Đang đợi quét xong...');
+      showToast('Đang đợi quét bài viết hoàn thành...', 'info', 3000);
+      
+      const scanCompleted = await waitForScanToComplete(60); // Đợi tối đa 1 phút
+      
+      if (!scanCompleted) {
+        showToast('Quét vẫn chưa xong sau 1 phút. Bắt đầu lấy thông tin...', 'warning', 3000);
+      } else {
+        showToast('Quét đã xong. Bắt đầu lấy thông tin...', 'success', 2000);
+        // Đợi thêm 1 giây để đảm bảo quét hoàn toàn xong
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+  } catch (e) {
+    console.warn('Không thể kiểm tra trạng thái quét:', e);
+    // Nếu lỗi, tiếp tục lấy thông tin bình thường
   }
 
   // Đánh dấu đang chạy
