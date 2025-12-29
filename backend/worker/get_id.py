@@ -584,6 +584,6 @@ if __name__ == "__main__":
     # result = get_id_from_url(group_url, profile_id)
     
     # Test với video/post URL
-    url = "https://www.facebook.com/445142479459290_1856605311646326"
+    url = "https://www.facebook.com/share/p/1FJwXaD6EU/"
     result = get_id_from_url(url, profile_id)
     print("heLLO" ,result)
