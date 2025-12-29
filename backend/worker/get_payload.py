@@ -25,11 +25,18 @@ try:
     PAYLOAD_TXT_FILE = get_config_dir() / "payload.txt"
 except ImportError:
     # Fallback nếu không import được core.paths
-    current_file = Path(__file__).resolve()
-    backend_dir = current_file.parent.parent
-    config_dir = backend_dir / "config"
-    SETTINGS_JSON_FILE = config_dir / "settings.json"
-    PAYLOAD_TXT_FILE = config_dir / "payload.txt"
+    if getattr(sys, 'frozen', False):
+        # Đang chạy từ file .exe -> Lấy thư mục chứa file exe
+        config_dir = Path(sys.executable).parent / "config"
+        SETTINGS_JSON_FILE = config_dir / "settings.json"
+        PAYLOAD_TXT_FILE = config_dir / "payload.txt"
+    else:
+        # Đang chạy code python -> Lấy thư mục backend/config
+        current_file = Path(__file__).resolve()
+        backend_dir = current_file.parent.parent
+        config_dir = backend_dir / "config"
+        SETTINGS_JSON_FILE = config_dir / "settings.json"
+        PAYLOAD_TXT_FILE = config_dir / "payload.txt"
 
 
 def _normalize_cookie(cookie: str | None) -> str | None:

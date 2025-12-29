@@ -47,18 +47,22 @@ def get_cookies_by_profile_id(profile_id):
     Returns:
         str: Cookie string hoặc None nếu không tìm thấy
     """
-    # Tìm đường dẫn settings.json từ vị trí hiện tại của file này
-    # Bất kể script được chạy từ đâu, luôn tìm từ thư mục backend/config
-    current_file = Path(__file__).resolve()
+    try:
+        # Sử dụng get_settings_path() từ core.paths để đảm bảo đúng đường dẫn khi chạy exe
+        from core.paths import get_settings_path
+        settings_file = get_settings_path()
+    except ImportError:
+        # Fallback nếu không import được (khi chạy standalone)
+        import sys
+        if getattr(sys, 'frozen', False):
+            # Đang chạy từ file .exe -> Lấy thư mục chứa file exe
+            settings_file = Path(sys.executable).parent / "config" / "settings.json"
+        else:
+            # Đang chạy code python -> Lấy thư mục backend/config
+            current_file = Path(__file__).resolve()
+            backend_dir = current_file.parent.parent
+            settings_file = backend_dir / "config" / "settings.json"
 
-    # Tìm thư mục backend (parent của worker)
-    backend_dir = current_file.parent.parent
-
-    # Đường dẫn settings.json
-    settings_file = backend_dir / "config" / "settings.json"
-
-    print(f"DEBUG: current_file = {current_file}")
-    print(f"DEBUG: backend_dir = {backend_dir}")
     print(f"DEBUG: settings_file = {settings_file}")
 
     try:

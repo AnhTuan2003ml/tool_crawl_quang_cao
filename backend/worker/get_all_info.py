@@ -435,6 +435,7 @@ def process_post_ids_file(file_path):
                 print(f"❌ Lỗi RuntimeError khi xử lý post_id {post_id}: {stp}")
                 result = None
             
+            # Xử lý kết quả thành công
             if result:
                 results.append(result)
                 
@@ -443,22 +444,23 @@ def process_post_ids_file(file_path):
 
                 # Cập nhật tiến trình
                 INFO_PROGRESS["current"] += 1
-
-                # Xóa post_id đã xử lý khỏi file nguồn
-                post_ids.pop(idx)
-                try:
-                    with file_path.open("w", encoding="utf-8") as f:
-                        json.dump(post_ids, f, ensure_ascii=False, indent=2)
-                    print(f"🗑️ Đã xóa post_id {post_id} khỏi {file_name}")
-                except Exception as e:
-                    print(f"⚠️ Không thể ghi lại file {file_name} sau khi xóa post_id: {e}")
-                # không tăng idx vì đã pop, danh sách đã dịch sang trái
-                continue
+                print(f"✅ Đã xử lý thành công post_id {post_id}")
+            else:
+                # Nếu không có result (lỗi) thì vẫn cập nhật tiến trình
+                print(f"⚠️ Post_id {post_id} xử lý không thành công (lỗi hoặc không có dữ liệu)")
+                INFO_PROGRESS["current"] += 1
             
-            # Nếu không có result (lỗi) thì tăng idx để tránh loop vô hạn
-            idx += 1
-            # Vẫn cập nhật tiến trình dù có lỗi
-            INFO_PROGRESS["current"] += 1
+            # LUÔN XÓA post_id đã xử lý khỏi file nguồn (dù thành công hay lỗi)
+            # để tránh file bị kẹt với các post lỗi
+            post_ids.pop(idx)
+            try:
+                with file_path.open("w", encoding="utf-8") as f:
+                    json.dump(post_ids, f, ensure_ascii=False, indent=2)
+                print(f"🗑️ Đã xóa post_id {post_id} khỏi {file_name}")
+            except Exception as e:
+                print(f"⚠️ Không thể ghi lại file {file_name} sau khi xóa post_id: {e}")
+            # không tăng idx vì đã pop, danh sách đã dịch sang trái
+            continue
         
         return results
         
