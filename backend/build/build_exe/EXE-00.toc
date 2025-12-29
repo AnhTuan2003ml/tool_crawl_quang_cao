@@ -70,7 +70,7 @@
  [],
  False,
  False,
- 1767012833,
+ 1767012961,
  [('run.exe',
    'D:\\FreeLand\\tool_crawl_quang_cao\\backend\\venv\\Lib\\site-packages\\PyInstaller\\bootloader\\Windows-64bit-intel\\run.exe',
    'EXECUTABLE')],

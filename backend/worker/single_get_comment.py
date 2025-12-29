@@ -63,59 +63,55 @@ def convert_timestamp_to_vietnam_time(timestamp):
 
 
 # ====== EXTRACT USERS TỪ JSON ======
-def extract_users_from_json(data, users_list, seen_ids):
+def extract_users_from_json(data, users_list, seen_ids, max_words=10):
     """
-    Đệ quy để tìm tất cả các user objects trong JSON structure và lấy text của comment
-    
-    Args:
-        data: JSON data (dict, list, hoặc primitive)
-        users_list: List để lưu các user đã tìm thấy
-        seen_ids: Set để track các id đã thấy, tránh trùng lặp
+    Đệ quy để tìm user và CHỈ lấy comment có số từ <= max_words
     """
     if isinstance(data, dict):
-        # Nếu có key "user" và value là dict có "id" và "name"
         if "user" in data and isinstance(data["user"], dict):
             user = data["user"]
             user_id = user.get("id")
             user_name = user.get("name")
-            
-            # Lấy text từ body nếu có
+
             comment_text = None
             if "body" in data and isinstance(data["body"], dict):
                 comment_text = data["body"].get("text")
-            
-            # Lấy created_time nếu có
+
+            # 🔴 LỌC THEO SỐ TỪ
+            if comment_text:
+                comment_text = comment_text.strip()
+                word_count = len(comment_text.split())
+
+                if word_count > max_words:
+                    return  # ❌ bỏ comment quá 10 từ
+
             created_time = data.get("created_time")
             created_time_vn = None
             if created_time:
                 created_time_vn = convert_timestamp_to_vietnam_time(created_time)
-            
+
             if user_id and user_name:
-                # Tạo key duy nhất từ user_id và text (để tránh trùng comment)
                 unique_key = f"{user_id}_{comment_text}" if comment_text else user_id
-                
-                # Chỉ thêm nếu chưa có trong seen_ids
+
                 if unique_key not in seen_ids:
                     seen_ids.add(unique_key)
                     user_data = {
                         "id": user_id,
                         "name": user_name,
-                        "text": comment_text if comment_text else ""
+                        "text": comment_text or ""
                     }
-                    # Thêm created_time_vn nếu có (chỉ lưu giờ Việt Nam)
+
                     if created_time_vn:
                         user_data["created_time_vn"] = created_time_vn
-                    
+
                     users_list.append(user_data)
-        
-        # Đệ quy vào tất cả các values
+
         for value in data.values():
-            extract_users_from_json(value, users_list, seen_ids)
-    
+            extract_users_from_json(value, users_list, seen_ids, max_words)
+
     elif isinstance(data, list):
-        # Đệ quy vào tất cả các items trong list
         for item in data:
-            extract_users_from_json(item, users_list, seen_ids)
+            extract_users_from_json(item, users_list, seen_ids, max_words)
 
 
 # ================================
@@ -479,7 +475,7 @@ if __name__ == "__main__":
     cookies = get_cookies_by_profile_id(profile_id)
     
     if payload_dict and cookies:
-        post_id = "2672966333102287"  # Thay đổi Post ID ở đây
+        post_id = "122200444238297334"  # Thay đổi Post ID ở đây
         comments = get_all_comments_by_post_id(post_id, payload_dict, profile_id, cookies)
         with open("comments.json", "w", encoding="utf-8") as f:
             json.dump(comments, f, ensure_ascii=False, indent=4)

@@ -4,10 +4,18 @@
   "TARGET_URL": "https://facebook.com",
   "PROFILE_IDS": {
     "b77da63d-af55-43c2-ab7f-364250b20e30": {
+<<<<<<< HEAD
       "cookie": "sb=acBIaQQgqAGBTmbz93PPTcnU; ps_l=1; ps_n=1; datr=acBIabhUTCuJxOkmdTYz8XW-; c_user=61550936585677; ar_debug=1; fr=1qm2Fni07jgRDBujg.AWeWqH21OCPf1WYFFYZwiCEtLqMNG0TF8XHPXB51NQzoJfqr1w8.BpUjyL..AAA.0.0.BpUjyn.AWeenBVgJvpVXCd4W_kmIEbz-rI; xs=17%3A0QkrGXHDi3_nMA%3A2%3A1766993628%3A-1%3A-1%3A%3AAcy29n53efEpWUJVAPyYivijRrhwfdFZwSWQUnORaQ; wd=929x883;",
       "access_token": "EAAGNO4a7r2wBQeZBp8Q5qj7l9OBKz87y1pswToiKfgheS5TTL60cXsrnLv0fDk2c2oU51i2OkRtUa1UjKoOZAKW21xnle8oXAmsnYqoqUs5SOjl64D8PV45uZBgM33DMQNZAMRUYNyuZCR7fnJEFWMwaQmCR5hW2JGQxm3VZAwbce1soqVMCr0cu7EbY0CnwZDZD",
       "fb_dtsg": "NAfsJDr8b8e9ummLIKXK8l92p-iXEXdNFDcEdS3gbjSxusYorKL42lQ:17:1766993628",
       "lsd": "fHWbLaLFurda9bwprpwAwj",
+=======
+      "cookie": "c_user=100013681742807; datr=aybWaNL75XQPdA6NYjjUV_5M; fr=1j5EhNBLkdJyn3fXy.AWdkIPX51EoXOq827kjysFVt8IvERd69hmkFQpEIowIjXHVgkxE.BpUnAy..AAA.0.0.BpUnDC.AWeuTCPZ_Iju3qRURCBU7ZEWW8E; presence=C%7B%22t3%22%3A%5B%5D%2C%22utc3%22%3A1767010117387%2C%22v%22%3A1%7D; ps_l=1; ps_n=1; sb=KBKaaKs-55w3OPrtl37ElZmP; wd=1920x919; xs=49%3Azrre_b0FFQvTYQ%3A2%3A1766748202%3A-1%3A-1%3A%3AAcxi-oR7BxQ8lVAo7UwOqmkWIdeoPZFI2lw3sTuNkNA;",
+      "access_token": "EAAGNO4a7r2wBQUXHJowkv0akBHFjy9CryNPj83Qm22vBmrp7bPGPjz6dPAg3sB07gfd2LUhC1lHR4NQdav2vSvs0U5sSGRzxHQvWO2MRBe5Hj1jf4DKyPKtANePV6Nt3JYflU0x1VVV4Pp1yGyA3VedeidPByauJ5R8VNSvWdF3qaKiPMs5OZArObIKFcGzDqhMZC1nGQ2VfLx7gZDZD",
+      "fb_dtsg": "NAfv6VwJHEZMZNB50eFEN59-sbIfMXLkfsIR4JNwYADnbNT9WpeSBbQ:49:1766748202",
+      "lsd": "DubHwLG6-u7MtLWaVAUqG9",
+
+>>>>>>> aaaa8809bf6e82c55c225e6f25daa0381a178adb
       "spin_r": "1031381813",
       "spin_t": "1766339451",
       "groups": [
@@ -50,6 +58,7 @@
     "ed3bd3bf-d906-42cf-9503-b73dfcfce117": {
       "cookie": "sb=8S49aTAiZ3w4RMwovx4OBN1B; ps_l=1; ps_n=1; datr=5y49aZfRkGHf_LvOOWfa64Ng; c_user=100079747330680; fr=0Fqcgw31yDISaLgD3.AWeejwRhKveRE8979fM76AYpnOzZHLz0ITjegN4sGdKh2KE0rww.BpPS7o..AAA.0.0.BpUPYP.AWecoZx8gAFPWh65RvoxcCowA_k; xs=42%3AXU-qmZrLp9rZhw%3A2%3A1765617781%3A-1%3A-1; wd=929x883;",
       "access_token": "EAAGNO4a7r2wBQcOeSvfeOXjt3mnEA03qqEcbwTImgLVzUyofBtA4aK4xHWYXWgLIMXz9YiGfH6ohm5BD4rVOyFJOhuqiTNZB2mglCQa47wdDnGEl37TzMJgn2yOHfCBWmv6siZBpwvnZAMyWzZAC90DLiznjheOswByUX6gY49wkd2LozWT1AeRB8QhVokliABhC1wZDZD",
+
       "fb_dtsg": "NAfu29YJvi_1RzbzZWrSlZ3JOPAtlb2YrVQWjwmitp5kE0FtpiCo0gg:44:1766410069",
       "lsd": "JxUArcF13Kgs6kRC1Z8iwU",
       "spin_r": "1031381813",
