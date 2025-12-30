@@ -2431,6 +2431,76 @@ def get_post_ids_list() -> dict:
     }
 
 
+@app.post("/cleanup/by-date")
+def cleanup_files_by_date(request: dict) -> dict:
+    """Xóa file JSON theo ngày cụ thể"""
+    date_str = request.get('date')
+    if not date_str:
+        return {"deleted_count": 0, "message": "Thiếu tham số date"}
+
+    try:
+        # Parse date (YYYY-MM-DD)
+        target_date = datetime.fromisoformat(date_str).date()
+
+        results_dir = Path("backend/data/results")
+        if not results_dir.exists():
+            return {"deleted_count": 0, "message": "Thư mục results không tồn tại"}
+
+        deleted_count = 0
+        deleted_files = []
+
+        # Duyệt tất cả file .json
+        for file_path in results_dir.glob("*.json"):
+            try:
+                # Extract date from filename (format: all_results_YYYYMMDD_HHMMSS.json)
+                filename = file_path.name
+                if filename.startswith('all_results_') and filename.endswith('.json'):
+                    date_part = filename.split('_')[2][:8]  # YYYYMMDD
+                    file_date = datetime.strptime(date_part, '%Y%m%d').date()
+
+                    # Nếu ngày file trùng với ngày được chọn thì xóa
+                    if file_date == target_date:
+                        file_path.unlink()
+                        deleted_count += 1
+                        deleted_files.append(filename)
+            except (ValueError, IndexError):
+                # Bỏ qua file có tên không đúng format
+                continue
+
+        return {
+            "deleted_count": deleted_count,
+            "deleted_files": deleted_files,
+            "message": f"Đã xóa {deleted_count} file JSON của ngày {date_str}"
+        }
+
+    except Exception as e:
+        return {"deleted_count": 0, "message": f"Lỗi: {str(e)}"}
+
+
+@app.post("/cleanup/all-files")
+def cleanup_all_files() -> dict:
+    """Xóa tất cả file JSON trong thư mục results"""
+    results_dir = Path("backend/data/results")
+
+    if not results_dir.exists():
+        return {"deleted_count": 0, "message": "Thư mục results không tồn tại"}
+
+    deleted_count = 0
+    deleted_files = []
+
+    # Xóa tất cả file .json
+    for file_path in results_dir.glob("*.json"):
+        file_path.unlink()
+        deleted_count += 1
+        deleted_files.append(file_path.name)
+
+    return {
+        "deleted_count": deleted_count,
+        "deleted_files": deleted_files,
+        "message": f"Đã xóa {deleted_count} file JSON"
+    }
+
+
 @app.post("/cleanup/old-files")
 def cleanup_old_files(max_days: int = 3) -> dict:
     """
@@ -2644,6 +2714,57 @@ def get_files_in_date_range(request: dict) -> dict:
             "to_timestamp": to_timestamp
         }
     }
+
+
+@app.delete("/data/files")
+def delete_data_files(request: dict) -> dict:
+    """
+    Xóa các file JSON theo danh sách filenames được chỉ định
+    """
+    from pathlib import Path
+    import os
+
+    RESULTS_DIR = get_data_dir() / "results"
+
+    filenames = request.get("filenames", [])
+    if not filenames:
+        raise HTTPException(status_code=400, detail="Thiếu danh sách filenames để xóa")
+
+    if not isinstance(filenames, list):
+        raise HTTPException(status_code=400, detail="filenames phải là mảng")
+
+    deleted_files = []
+    failed_files = []
+
+    for filename in filenames:
+        if not isinstance(filename, str):
+            failed_files.append({"filename": filename, "error": "Tên file phải là chuỗi"})
+            continue
+
+        # Kiểm tra tên file hợp lệ (chỉ cho phép file JSON trong thư mục results)
+        if not filename.endswith('.json') or '..' in filename or '/' in filename or '\\' in filename:
+            failed_files.append({"filename": filename, "error": "Tên file không hợp lệ"})
+            continue
+
+        file_path = RESULTS_DIR / filename
+
+        try:
+            if file_path.exists():
+                os.remove(file_path)
+                deleted_files.append(filename)
+                print(f"🗑️ Đã xóa file: {filename}")
+            else:
+                failed_files.append({"filename": filename, "error": "File không tồn tại"})
+        except Exception as e:
+            failed_files.append({"filename": filename, "error": str(e)})
+
+    return {
+        "deleted_files": deleted_files,
+        "failed_files": failed_files,
+        "total_deleted": len(deleted_files),
+        "total_failed": len(failed_files)
+    }
+
 
 class ScanGroupsRequest(BaseModel):
     profile_ids: list[str]

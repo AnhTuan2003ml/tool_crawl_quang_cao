@@ -140,15 +140,40 @@
               </div>
             </div>
 
+            <!-- Current Time Display -->
+            <div id="currentTimeDisplay" class="current-time-display" title="Thời gian của file đã chọn">
+              <div class="time-icon">📄</div>
+              <div class="time-text" id="currentTimeText">Chưa chọn file</div>
+            </div>
+
             <!-- Date Range Buttons -->
             <div class="date-range-container">
               <div class="date-range-buttons">
                 <button id="todayBtn" class="date-btn" title="Chọn file data ngày hôm nay">
                   📅 Ngày hôm nay
                 </button>
-                <button id="threeDaysBtn" class="date-btn" title="Chọn file data 3 ngày gần nhất">
-                  📊 3 ngày
+                <div class="dropdown-container">
+                  <button id="selectDateBtn" class="date-btn date-dropdown-btn" title="Chọn số ngày trước">
+                    <span>📅 Chọn ngày</span>
+                    <span class="dropdown-arrow">▼</span>
+                  </button>
+                  <div id="dateDropdown" class="dropdown-menu hidden">
+                    <div class="dropdown-item" data-days="1" id="dateItem1"></div>
+                    <div class="dropdown-item" data-days="2" id="dateItem2"></div>
+                    <div class="dropdown-item" data-days="3" id="dateItem3"></div>
+                    <div class="dropdown-item" data-days="4" id="dateItem4"></div>
+                    <div class="dropdown-item" data-days="5" id="dateItem5"></div>
+                    <div class="dropdown-item" data-days="6" id="dateItem6"></div>
+                    <div class="dropdown-item" data-days="7" id="dateItem7"></div>
+                    <div class="dropdown-item" data-days="8" id="dateItem8"></div>
+                    <div class="dropdown-item" data-days="9" id="dateItem9"></div>
+                    <div class="dropdown-item" data-days="10" id="dateItem10"></div>
+                  </div>
+                </div>
+                <button id="deleteDataBtn" class="date-btn date-delete-btn" title="Xóa dữ liệu theo ngày">
+                  <span>🗑️ Xóa dữ liệu</span>
                 </button>
+
               </div>
 
               <!-- File Selector Dropdown -->
@@ -219,18 +244,70 @@
             <div class="settings-left-column">
               <div class="setting-card">
                 <div class="setting-card-header">
-                  <div>
-                    <h4>Danh sách profile</h4>
-                    <p class="muted">Thêm profile_id và thao tác nhanh</p>
-                  </div>
-                  <div class="setting-card-actions">
-                    <button id="runAllInfoBtn" class="btn-primary" type="button">Lấy thông tin toàn bộ</button>
-                    <button id="runSelectedInfoBtn" class="btn-primary" type="button">Lấy thông tin profile đã chọn</button>
-                    <button id="scanPostsSettingBtn" class="btn-primary" type="button">Quét bài viết</button>
-                    <button id="scanGroupSettingBtn" class="btn-primary" type="button">Quét theo group</button>
-                    <button id="feedAccountSettingBtn" class="btn-primary" type="button">Nuôi acc theo kịch bản</button>
-                    <button id="autoJoinGroupBtn" class="btn-primary" type="button">Tự động tham gia group</button>            
-                    <button id="stopAllSettingBtn" class="btn-danger" type="button">Dừng tất cả</button>
+               
+                  <!-- Action Groups Container -->
+                  <div class="action-groups-container">
+                    <!-- Profile Operations -->
+                    <div class="action-group profile-group">
+                      <div class="group-header">
+                        <span class="group-icon">👤</span>
+                        <span class="group-title">Profile Operations</span>
+                      </div>
+                      <div class="group-buttons">
+                        <button id="runAllInfoBtn" class="action-btn action-btn-primary" type="button">
+                          <span class="btn-icon">📊</span>
+                          <span>Lấy thông tin toàn bộ</span>
+                        </button>
+                        <button id="runSelectedInfoBtn" class="action-btn action-btn-primary" type="button">
+                          <span class="btn-icon">🎯</span>
+                          <span>Lấy thông tin profile đã chọn</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Scan Operations -->
+                    <div class="action-group scan-group">
+                      <div class="group-header">
+                        <span class="group-icon">🔍</span>
+                        <span class="group-title">Scan Operations</span>
+                      </div>
+                      <div class="group-buttons">
+                        <button id="scanPostsSettingBtn" class="action-btn action-btn-success" type="button">
+                          <span class="btn-icon">📝</span>
+                          <span>Quét bài viết</span>
+                        </button>
+                        <button id="scanGroupSettingBtn" class="action-btn action-btn-success" type="button">
+                          <span class="btn-icon">👥</span>
+                          <span>Quét theo group</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Account Management -->
+                    <div class="action-group account-group">
+                      <div class="group-header">
+                        <span class="group-icon">🤖</span>
+                        <span class="group-title">Account Management</span>
+                      </div>
+                      <div class="group-buttons">
+                        <button id="feedAccountSettingBtn" class="action-btn action-btn-info" type="button">
+                          <span class="btn-icon">🌱</span>
+                          <span>Nuôi acc theo kịch bản</span>
+                        </button>
+                        <button id="autoJoinGroupBtn" class="action-btn action-btn-info" type="button">
+                          <span class="btn-icon">➕</span>
+                          <span>Tự động tham gia group</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Control Panel -->
+                    <div class="control-panel">
+                      <button id="stopAllSettingBtn" class="control-btn control-btn-danger" type="button">
+                        <span class="btn-icon">⏹️</span>
+                        <span>Dừng tất cả</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <div id="feedConfigPanel" class="feed-panel" style="display:none;">
@@ -359,31 +436,66 @@
 
             <!-- Cột phải: API Key và Profile List -->
             <div class="settings-right-column">
-              <div class="setting-card">
-                <div class="setting-card-header">
+              <!-- API Key Section -->
+              <div class="setting-card api-key-card">
+                <div class="card-header-with-icon">
+                  <span class="card-icon">🔑</span>
                   <div>
-                    <h4>API Key</h4>
+                    <h4>API Key Configuration</h4>
+                    <p class="muted">Cấu hình API Key để kết nối với hệ thống</p>
                   </div>
                 </div>
-                <div class="inline-field">
-                  <input id="settingApiKey" type="text" placeholder="Nhập API Key" />
-                  <button id="saveApiKeyBtn" class="btn-primary" type="button">Lưu API Key</button>
+                <div class="card-content">
+                  <div class="input-section">
+                    <label class="input-label">NST BROWSER API Key</label>
+                    <div class="input-with-action">
+                      <input id="settingApiKey" type="password" placeholder="Nhập API Key của bạn" class="api-input" />
+                      <button id="saveApiKeyBtn" class="btn-save-api" type="button">
+                        <span class="btn-icon">💾</span>
+                        <span>Lưu</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="security-note">
+                    <span class="note-icon">🔒</span>
+                    <span>API Key được lưu an toàn trên trình duyệt của bạn</span>
+                  </div>
                 </div>
-                <p class="hint">API Key được lưu trên trình duyệt; đổi thì nhập mới rồi bấm Lưu.</p>
               </div>
 
-              <div class="setting-card">
-                <div class="setting-card-header">
+              <!-- Profile Management Section -->
+              <div class="setting-card profile-card">
+                <div class="card-header-with-icon">
+                  <span class="card-icon">👥</span>
                   <div>
-                    <h4>Danh sách profile</h4>
+                    <h4>Profile Management</h4>
+                    <p class="muted">Quản lý các profile Facebook của bạn</p>
                   </div>
                 </div>
-                <div id="profileList" class="profile-list empty-state-box">
-                  <p class="muted">Chưa có profile nào</p>
-                </div>
+                <div class="card-content">
+                  <!-- Profile List Container -->
+                  <div class="profile-section">
+                    <div class="section-label">
+                      <span class="section-icon">📋</span>
+                      <span>Danh sách profile</span>
+                    </div>
+                    <div id="profileList" class="profile-container">
+                      <div class="empty-profile-state">
+                        <div class="empty-icon">👤</div>
+                        <h5>Chưa có profile nào</h5>
+                        <p class="empty-description">Thêm profile Facebook để bắt đầu sử dụng hệ thống</p>
+                      </div>
+                    </div>
+                  </div>
 
-                <div class="add-profile-row">
-                  <button id="addProfileRowBtn" class="btn-primary" type="button">+ Thêm profile</button>
+                  <!-- Add Profile Section -->
+                  <div class="add-profile-section">
+                    <button id="addProfileRowBtn" class="btn-add-profile" type="button">
+                      <span class="btn-icon">➕</span>
+                      <span>Thêm profile mới</span>
+                    </button>
+                    <p class="add-hint">Nhấp để thêm profile_id và bắt đầu quản lý tài khoản</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -457,7 +569,31 @@
     </a>
   </div>
 
+  <!-- Modal Xóa Dữ Liệu -->
+  <div id="deleteDataModal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>🗑️ Xóa Dữ Liệu Theo Ngày</h3>
+        <button class="modal-close" id="deleteDataModalClose">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-description">Click vào ngày để xem danh sách file, sau đó tick chọn file cần xóa:</p>
+        <div id="deleteDateList" class="delete-date-list">
+          <!-- Danh sách ngày sẽ được tạo động -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="deleteSelectedBtn" class="btn-delete-modal" disabled>
+          <span class="btn-icon">🗑️</span>
+          <span>Xóa các file đã chọn</span>
+        </button>
+        <button id="deleteDataModalCancel" class="btn-secondary">Hủy</button>
+      </div>
+    </div>
+  </div>
+
   <script src="script.js"></script>
 </body>
 
+</html>
 </html>
