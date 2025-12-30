@@ -3148,18 +3148,14 @@ async def sterilize_excel(background_tasks: BackgroundTasks, files: list[UploadF
     
     try:
         from worker.sterilization import (
-            read_xlsx,
+            sterilize_xlsx_files,
             detect_columns,
-            dedupe_by_user_id,
+            format_id_as_fb_hyperlink,
+            export_clickable_ids_xlsx,
         )
         import pandas as pd
         
-        # Lưu các file tạm thời
-        frames = []
-        user_id_col = None
-        post_id_col = None
-        
-        # Đọc các file Excel đã upload
+        # Lưu các file Excel đã upload vào temp files
         for file in files:
             if not file.filename.lower().endswith('.xlsx'):
                 raise HTTPException(status_code=400, detail=f"File {file.filename} không phải file .xlsx")
@@ -3170,35 +3166,21 @@ async def sterilize_excel(background_tasks: BackgroundTasks, files: list[UploadF
             content = await file.read()
             temp_file.write(content)
             temp_file.close()
-            
-            # Đọc file Excel
-            df = read_xlsx(temp_file.name)
-            if df.empty:
-                continue
-            
-            # Detect columns
-            ucol, pcol = detect_columns(df)
-            
-            # Đảm bảo cùng cột ID User giữa các file
-            if user_id_col is None:
-                user_id_col, post_id_col = ucol, pcol
-            
-            # Đổi tên cột nếu khác
-            if ucol != user_id_col:
-                df = df.rename(columns={ucol: user_id_col})
-            if post_id_col is not None and pcol is not None and pcol != post_id_col:
-                df = df.rename(columns={pcol: post_id_col})
-            
-            frames.append(df)
         
-        if not frames:
-            raise HTTPException(status_code=400, detail="Tất cả file đều rỗng hoặc không đọc được")
+        if not temp_files:
+            raise HTTPException(status_code=400, detail="Không có file hợp lệ để xử lý")
         
-        # Lọc trùng theo ID User
-        merged = dedupe_by_user_id(frames, user_id_col=user_id_col)
+        # Sử dụng sterilize_xlsx_files để lọc trùng (giống như hàm main)
+        merged = sterilize_xlsx_files(temp_files)
         
         if merged.empty:
             raise HTTPException(status_code=400, detail="Không có dòng hợp lệ sau khi lọc")
+        
+        # Detect columns để biết cột ID User và ID Post
+        user_id_col = None
+        post_id_col = None
+        if not merged.empty:
+            user_id_col, post_id_col = detect_columns(merged)
         
         # Tạo file output tạm thời
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -3206,8 +3188,17 @@ async def sterilize_excel(background_tasks: BackgroundTasks, files: list[UploadF
         output_path = output_file.name
         output_file.close()
         
-        # Ghi file Excel đã lọc
-        merged.to_excel(output_path, index=False)
+        # Format ID User và ID Post thành hyperlink (giống như hàm main)
+        merged = format_id_as_fb_hyperlink(merged, user_id_col)
+        if post_id_col and post_id_col in merged.columns:
+            merged = format_id_as_fb_hyperlink(merged, post_id_col)
+        
+        # Export với clickable links (giống như hàm main)
+        cols_to_link = [user_id_col]
+        if post_id_col and post_id_col in merged.columns:
+            cols_to_link.append(post_id_col)
+        
+        export_clickable_ids_xlsx(merged, output_path, id_cols=cols_to_link)
         
         # Thêm task để xóa file sau khi response được gửi
         background_tasks.add_task(_cleanup_temp_file, output_path)

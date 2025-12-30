@@ -369,9 +369,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 if __name__ == "__main__":
     files = [
-    "danh_sach_quet_2025-12-29T14-13-02.xlsx",
-    "danh_sach_quet_2025-12-30T06-23-05.xlsx",
-    "danh_sach_quet_2025-12-30T09-21-44.xlsx"
+    "D:\\FreeLand\\tool_crawl_quang_cao\\danh_sach_quet_2025-12-29T14-13-02.xlsx",
+    "D:\\FreeLand\\tool_crawl_quang_cao\\danh_sach_quet_2025-12-30T06-23-05.xlsx",
+    "D:\\FreeLand\\tool_crawl_quang_cao\\danh_sach_quet_2025-12-30T09-21-44.xlsx"
     ]
     main(files)
 
