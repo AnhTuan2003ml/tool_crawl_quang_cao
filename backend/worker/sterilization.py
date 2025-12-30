@@ -151,6 +151,98 @@ def sterilize_xlsx_files(
 
     return dedupe_by_user_id(frames, user_id_col=user_id_col)
 
+def format_id_as_fb_hyperlink(
+    df: pd.DataFrame,
+    col: str,
+    *,
+    url_prefix: str = "https://fb.com/",
+    url_col_suffix: str = "__url"
+) -> pd.DataFrame:
+    """
+    - Cột `col`: chỉ hiển thị ID (text), không .0, không scientific notation
+    - Tạo cột URL phụ: f"{col}__url" = "https://fb.com/{id}"
+    """
+    if col not in df.columns:
+        return df
+
+    def _to_digits(v) -> str:
+        if pd.isna(v):
+            return ""
+        s = str(v).strip()
+        if not s:
+            return ""
+
+        # float kiểu 12345.0
+        if s.endswith(".0"):
+            s = s[:-2]
+
+        # scientific notation: 1.234e+15
+        if "e" in s.lower():
+            try:
+                s = str(int(float(s)))
+            except Exception:
+                pass
+
+        # nếu còn dạng "12345.00"
+        if "." in s and s.replace(".", "", 1).isdigit():
+            s = s.split(".", 1)[0]
+
+        return s.strip()
+
+    df[col] = df[col].apply(_to_digits)
+
+    url_col = f"{col}{url_col_suffix}"
+    df[url_col] = df[col].apply(lambda x: f"{url_prefix}{x}" if x else "")
+
+    return df
+def export_clickable_ids_xlsx(
+    df: pd.DataFrame,
+    out_path: str,
+    *,
+    id_cols: List[str],
+    url_col_suffix: str = "__url"
+) -> None:
+    """
+    Ghi Excel sao cho:
+    - Ô cột ID hiển thị đúng ID
+    - Click vào mở URL tương ứng (lấy từ cột <ID>__url)
+    - Cột URL phụ sẽ bị ẩn đi
+    """
+    out_df = df.copy()
+
+    # đảm bảo các cột URL phụ tồn tại
+    for c in id_cols:
+        if c in out_df.columns:
+            out_df = format_id_as_fb_hyperlink(out_df, c, url_col_suffix=url_col_suffix)
+
+    with pd.ExcelWriter(out_path, engine="xlsxwriter") as writer:
+        out_df.to_excel(writer, index=False, sheet_name="Sheet1")
+        workbook = writer.book
+        ws = writer.sheets["Sheet1"]
+
+        text_fmt = workbook.add_format({"num_format": "@"})  # ép dạng text để không scientific
+        col_index = {name: i for i, name in enumerate(out_df.columns)}
+
+        for c in id_cols:
+            url_c = f"{c}{url_col_suffix}"
+            if c not in col_index or url_c not in col_index:
+                continue
+
+            cidx = col_index[c]
+            uidx = col_index[url_c]
+
+            # set format cột ID và URL phụ
+            ws.set_column(cidx, cidx, 22, text_fmt)
+            ws.set_column(uidx, uidx, 30, None, {"hidden": True})
+
+            # write_url từ row=1 (row=0 là header)
+            disp_vals = out_df[c].tolist()
+            url_vals = out_df[url_c].tolist()
+
+            for r, (disp, url) in enumerate(zip(disp_vals, url_vals), start=1):
+                if disp and url:
+                    ws.write_url(r, cidx, url, text_fmt, string=str(disp))
+
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
@@ -247,11 +339,23 @@ def main(argv: Optional[List[str]] = None) -> int:
         out_path = os.path.abspath(f"sterilized_{ts}.xlsx")
 
     # Ghi file
+    # Format ID User / ID Post thành hyperlink fb
+    merged = format_id_as_fb_hyperlink(merged, user_id_col)
+    if post_id_col and post_id_col in merged.columns:
+        merged = format_id_as_fb_hyperlink(merged, post_id_col)
+
+    # Ghi file
+    # Ghi file: hiển thị ID + click mở fb
     try:
-        merged.to_excel(out_path, index=False)
+        cols_to_link = [user_id_col]
+        if post_id_col and post_id_col in merged.columns:
+            cols_to_link.append(post_id_col)
+
+        export_clickable_ids_xlsx(merged, out_path, id_cols=cols_to_link)
     except Exception as e:
         print(f"Lỗi ghi output: {out_path}\n{e}", file=sys.stderr)
         return 4
+
 
     total_in = sum(len(df) for df in frames if df is not None)
     total_out = len(merged)
@@ -269,8 +373,5 @@ if __name__ == "__main__":
     "danh_sach_quet_2025-12-30T06-23-05.xlsx",
     "danh_sach_quet_2025-12-30T09-21-44.xlsx"
     ]
+    main(files)
 
-    df = sterilize_xlsx_files(files)
-
-    print(len(df))
-    df.to_excel("out.xlsx", index=False)
