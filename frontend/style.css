@@ -852,9 +852,12 @@ tbody tr.filtered-out {
 /* Table */
 .table-container {
   overflow-x   : auto;
+  overflow-y   : auto;
+  max-height   : calc(100vh - 220px);
   border-radius: 12px;
   border       : 1px solid var(--border);
   margin       : 0 10px;
+  position     : relative;
 }
 
 /* Tabs trong header bên phải */
@@ -2063,6 +2066,10 @@ th {
   font-size     : 12px;
   letter-spacing: 0.5px;
   border-bottom : 2px solid var(--border);
+  background    : linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+  position      : sticky;
+  top           : 0;
+  z-index       : 10;
 }
 
 td {

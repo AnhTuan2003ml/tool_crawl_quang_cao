@@ -3907,6 +3907,37 @@ async function updateInfoProgress() {
   }
 }
 
+// Hàm helper để đợi quét xong (bot_running = false)
+async function waitForScanToComplete(maxWaitSeconds = 300) {
+  const startTime = Date.now();
+  const maxWait = maxWaitSeconds * 1000;
+  
+  while (Date.now() - startTime < maxWait) {
+    try {
+      const st = await callBackendNoAlert('/jobs/status', { method: 'GET' });
+      if (st) lastJobsStatus = st;
+      
+      const botHasProfiles = Array.isArray(st && st.bot_profile_ids) && st.bot_profile_ids.length > 0;
+      const running = !!(st && st.bot_running && botHasProfiles);
+      
+      if (!running) {
+        // Quét đã xong
+        return true;
+      }
+      
+      // Đợi 2 giây trước khi check lại
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    } catch (e) {
+      console.warn('Lỗi khi check trạng thái quét:', e);
+      // Nếu lỗi, đợi 2 giây rồi thử lại
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+  
+  // Timeout - quét vẫn chưa xong sau maxWaitSeconds
+  return false;
+}
+
 async function runInfoCollector(mode = 'all') {
   const isSelected = mode === 'selected';
   const btn = isSelected ? runSelectedInfoBtn : runAllInfoBtn;
@@ -3916,6 +3947,34 @@ async function runInfoCollector(mode = 'all') {
     showToast('Chọn (tick) ít nhất 1 profile trước.', 'error');
     try { switchTab('settings'); } catch (_) { }
     return;
+  }
+
+  // Kiểm tra xem quét có đang chạy không
+  try {
+    const st = await callBackendNoAlert('/jobs/status', { method: 'GET' });
+    if (st) lastJobsStatus = st;
+    
+    const botHasProfiles = Array.isArray(st && st.bot_profile_ids) && st.bot_profile_ids.length > 0;
+    const isScanning = !!(st && st.bot_running && botHasProfiles);
+    
+    if (isScanning) {
+      // Quét đang chạy, đợi quét xong
+      setButtonLoading(btn, true, 'Đang đợi quét xong...');
+      showToast('Đang đợi quét bài viết hoàn thành...', 'info', 3000);
+      
+      const scanCompleted = await waitForScanToComplete(60); // Đợi tối đa 5 phút
+      
+      if (!scanCompleted) {
+        showToast('Quét vẫn chưa xong sau 1 phút. Bắt đầu lấy thông tin...', 'warning', 3000);
+      } else {
+        showToast('Quét đã xong. Bắt đầu lấy thông tin...', 'success', 2000);
+        // Đợi thêm 1 giây để đảm bảo quét hoàn toàn xong
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+  } catch (e) {
+    console.warn('Không thể kiểm tra trạng thái quét:', e);
+    // Nếu lỗi, tiếp tục lấy thông tin bình thường
   }
 
   // Đánh dấu đang chạy
