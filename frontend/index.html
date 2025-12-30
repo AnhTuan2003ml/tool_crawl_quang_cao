@@ -242,71 +242,6 @@
           <div class="settings-grid">
             <!-- Cột trái: Actions và Config Panels -->
             <div class="settings-left-column">
-              <!-- Action Groups Container -->
-              <div class="action-groups-container">
-                <!-- Profile Operations -->
-                <div class="action-group profile-group">
-                  <div class="group-header">
-                    <span class="group-icon">👤</span>
-                    <span class="group-title">Profile Operations</span>
-                  </div>
-                  <div class="group-buttons">
-                    <button id="runAllInfoBtn" class="action-btn action-btn-primary" type="button">
-                      <span class="btn-icon">📊</span>
-                      <span>Lấy thông tin toàn bộ</span>
-                    </button>
-                    <button id="runSelectedInfoBtn" class="action-btn action-btn-primary" type="button">
-                      <span class="btn-icon">🎯</span>
-                      <span>Lấy thông tin profile đã chọn</span>
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Scan Operations -->
-                <div class="action-group scan-group">
-                  <div class="group-header">
-                    <span class="group-icon">🔍</span>
-                    <span class="group-title">Scan Operations</span>
-                  </div>
-                  <div class="group-buttons">
-                    <button id="scanPostsSettingBtn" class="action-btn action-btn-success" type="button">
-                      <span class="btn-icon">📝</span>
-                      <span>Quét bài viết</span>
-                    </button>
-                    <button id="scanGroupSettingBtn" class="action-btn action-btn-success" type="button">
-                      <span class="btn-icon">👥</span>
-                      <span>Quét theo group</span>
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Account Management -->
-                <div class="action-group account-group">
-                  <div class="group-header">
-                    <span class="group-icon">🤖</span>
-                    <span class="group-title">Account Management</span>
-                  </div>
-                  <div class="group-buttons">
-                    <button id="feedAccountSettingBtn" class="action-btn action-btn-info" type="button">
-                      <span class="btn-icon">🌱</span>
-                      <span>Nuôi acc theo kịch bản</span>
-                    </button>
-                    <button id="autoJoinGroupBtn" class="action-btn action-btn-info" type="button">
-                      <span class="btn-icon">➕</span>
-                      <span>Tự động tham gia group</span>
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Control Panel -->
-                <div class="control-panel">
-                  <button id="stopAllSettingBtn" class="control-btn control-btn-danger" type="button">
-                    <span class="btn-icon">⏹️</span>
-                    <span>Dừng tất cả</span>
-                  </button>
-                </div>
-              </div>
-
               <div class="setting-card">
                 <div id="feedConfigPanel" class="feed-panel" style="display:none;">
                 <div class="feed-panel-row">
@@ -394,7 +329,7 @@
                     </label>
                     <input id="groupScanPostCountInput" type="number" min="0" value="0" placeholder="VD: 100" class="form-input" />
                   </div>
-                  
+
                   <div class="form-group-row">
                     <div class="form-group">
                       <label for="groupScanStartDateInput" class="form-label">
@@ -403,7 +338,7 @@
                       </label>
                       <input id="groupScanStartDateInput" type="date" class="form-input form-input-date" />
                     </div>
-                    
+
                     <div class="form-group">
                       <label for="groupScanEndDateInput" class="form-label">
                         <span class="label-icon">📅</span>
@@ -412,7 +347,7 @@
                       <input id="groupScanEndDateInput" type="date" class="form-input form-input-date" />
                     </div>
                   </div>
-                  
+
                   <div class="form-actions">
                     <button id="groupScanStartBtn" class="btn-primary btn-primary-action" type="button">
                       <span class="btn-icon">▶️</span>
@@ -422,13 +357,78 @@
                       <span>Đóng</span>
                     </button>
                   </div>
-                  
+
                   <p class="hint">
                     <span class="hint-icon">💡</span>
                     Nhập số bài viết theo dõi và khoảng thời gian để quét bài viết từ các group đã cấu hình.
                   </p>
                 </div>
               </div>
+              </div>
+
+              <!-- Action Groups Container -->
+              <div class="action-groups-container">
+                <!-- Profile Operations -->
+                <div class="action-group profile-group">
+                  <div class="group-header">
+                    <span class="group-icon">👤</span>
+                    <span class="group-title">Profile Operations</span>
+                  </div>
+                  <div class="group-buttons">
+                    <button id="runAllInfoBtn" class="action-btn action-btn-primary" type="button">
+                      <span class="btn-icon">📊</span>
+                      <span>Lấy thông tin toàn bộ</span>
+                    </button>
+                    <button id="runSelectedInfoBtn" class="action-btn action-btn-primary" type="button">
+                      <span class="btn-icon">🎯</span>
+                      <span>Lấy thông tin profile đã chọn</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Scan Operations -->
+                <div class="action-group scan-group">
+                  <div class="group-header">
+                    <span class="group-icon">🔍</span>
+                    <span class="group-title">Scan Operations</span>
+                  </div>
+                  <div class="group-buttons">
+                    <button id="scanPostsSettingBtn" class="action-btn action-btn-success" type="button">
+                      <span class="btn-icon">📝</span>
+                      <span>Quét bài viết</span>
+                    </button>
+                    <button id="scanGroupSettingBtn" class="action-btn action-btn-success" type="button">
+                      <span class="btn-icon">👥</span>
+                      <span>Quét theo group</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Account Management -->
+                <div class="action-group account-group">
+                  <div class="group-header">
+                    <span class="group-icon">🤖</span>
+                    <span class="group-title">Account Management</span>
+                  </div>
+                  <div class="group-buttons">
+                    <button id="feedAccountSettingBtn" class="action-btn action-btn-info" type="button">
+                      <span class="btn-icon">🌱</span>
+                      <span>Nuôi acc theo kịch bản</span>
+                    </button>
+                    <button id="autoJoinGroupBtn" class="action-btn action-btn-info" type="button">
+                      <span class="btn-icon">➕</span>
+                      <span>Tự động tham gia group</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Control Panel -->
+                <div class="control-panel">
+                  <button id="stopAllSettingBtn" class="control-btn control-btn-danger" type="button">
+                    <span class="btn-icon">⏹️</span>
+                    <span>Dừng tất cả</span>
+                  </button>
+                </div>
               </div>
             </div>
 
