@@ -58,6 +58,7 @@ release/
 
 # Build outputs
 backend/dist/
+backend/config/
 backend/build/
 backend/out/
 backend/release/

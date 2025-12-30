@@ -6,6 +6,7 @@ import sys
 import os
 from urllib.parse import parse_qs, unquote_plus
 from pathlib import Path
+from playwright.sync_api import sync_playwright
 
 # ====== FIX IMPORT PATH KHI CHẠY TRỰC TIẾP ======
 # Nếu chạy trực tiếp từ thư mục worker, thêm parent directory vào sys.path
@@ -241,17 +242,17 @@ def get_spin_t(html):
 
 def get_fb_dtsg(cookie, profile_id: str | None = None, return_page_source: bool = False):
     """
-    Lấy fb_dtsg từ Facebook.com
-    
+    Lấy fb_dtsg từ Facebook.com sử dụng Playwright
+
     Args:
         cookie (str): Cookie string để sử dụng
-    
+
     Returns:
         str: Giá trị fb_dtsg hoặc None nếu không tìm thấy
     """
     url = "https://www.facebook.com"
 
-    print(f"\n🚀 Bắt đầu headless capture từ: {url} (CHỈ DÙNG Selenium/WebDriver)")
+    print(f"\n🚀 Bắt đầu headless capture từ: {url} (DÙNG Playwright)")
 
     # First: if profile_id provided, try reading fb_dtsg from settings.json
     try:
@@ -269,216 +270,135 @@ def get_fb_dtsg(cookie, profile_id: str | None = None, return_page_source: bool 
     except Exception:
         pass
 
-    # Require Selenium + webdriver-manager; fail loudly if unavailable
+    # Require Playwright; fail loudly if unavailable
     try:
-        from selenium import webdriver
-        from selenium.webdriver.chrome.options import Options
-        from selenium.webdriver.chrome.service import Service
-        from selenium.common.exceptions import WebDriverException
-        from webdriver_manager.chrome import ChromeDriverManager
+        pass  # Playwright already imported at module level
     except Exception as e:
-        print(f"❌ Selenium or webdriver_manager not available: {e}")
+        print(f"❌ Playwright not available: {e}")
         return None
 
-    options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1200,800")
-    options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
+    fb_dtsg = None
+    page_source = ""
 
-    try:
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
-    except WebDriverException as e:
-        print(f"❌ Không thể khởi tạo Chrome WebDriver: {e}")
-        return None
-    except Exception as e:
-        print(f"❌ Lỗi khi cài/chạy ChromeDriver: {e}")
-        return None
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            viewport={"width": 1200, "height": 800},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+        )
 
-    try:
-        try:
-            driver.execute_cdp_cmd("Network.enable", {})
-            driver.execute_cdp_cmd("Network.setExtraHTTPHeaders", {"headers": {"cookie": cookie}})
-        except Exception:
-            pass
+        # Add cookies
+        cookies = []
+        for c in cookie.split(";"):
+            if "=" in c:
+                k, v = c.strip().split("=", 1)
+                cookies.append({
+                    "name": k,
+                    "value": v,
+                    "domain": ".facebook.com",
+                    "path": "/"
+                })
+        context.add_cookies(cookies)
 
-        driver.get(url)
-        time.sleep(3)
+        page = context.new_page()
 
-        fb_dtsg = None
-        try:
-            logs = driver.get_log("performance")
-        except Exception:
-            logs = []
+        # Listen for network requests to capture GraphQL POST data
+        def on_request(request):
+            nonlocal fb_dtsg
+            if (
+                request.method == "POST"
+                and "/api/graphql" in request.url
+                and request.post_data
+            ):
+                post_data = request.post_data
+                # Try to find fb_dtsg in post data
+                m = re.search(r'fb_dtsg["\\\']?\\s*[:=]\\s*["\\\']([^"\\\']+)', post_data)
+                if not m:
+                    m = re.search(r'fb_dtsg=([^&"\\\']+)', post_data)
+                if m:
+                    fb_dtsg = m.group(1)
+                    print(f"✅ Bắt được fb_dtsg từ graphql postData: {fb_dtsg[:50]}...")
 
-        for entry in logs:
-            try:
-                msg = json.loads(entry.get("message", "{}")).get("message", {})
-                method = msg.get("method", "")
-                params = msg.get("params", {}) or {}
-                if method in ("Network.requestWillBeSent", "Network.responseReceived"):
-                    req = params.get("request") or params.get("response") or {}
-                    url_req = req.get("url") or ""
-                    if "api/graphql" in url_req:
-                        postData = req.get("postData") or params.get("request", {}).get("postData", "") or ""
-                        if postData:
-                            m = re.search(r'fb_dtsg["\\\']?\\s*[:=]\\s*["\\\']([^"\\\']+)', postData)
-                            if not m:
-                                m = re.search(r'fb_dtsg=([^&"\\\']+)', postData)
-                            if m:
-                                fb_dtsg = m.group(1)
-                                print(f"✅ Bắt được fb_dtsg từ graphql postData: {fb_dtsg[:50]}...")
-                                break
-            except Exception:
-                continue
-
-        if not fb_dtsg:
-            # last resort: search in rendered page source (still within headless mode)
-            html_content = driver.page_source or ""
-            patterns = [
-                r'"name":"fb_dtsg","value":"([^"]+)"',
-                r'"token":"([^"]+)","type":"fb_dtsg"',
-                r'"fb_dtsg"\\s*:\\s*"([^"]+)"',
-                r'name="fb_dtsg"\\s+value="([^"]+)"',
-                r'DTSGInitData.*?"token":"([^"]+)"'
-            ]
-            for i, pattern in enumerate(patterns, 1):
-                match = re.search(pattern, html_content)
-                if match:
-                    fb_dtsg = match.group(1)
-                    print(f"✅ Tìm thấy fb_dtsg trong page_source với pattern {i}: {fb_dtsg[:50]}...")
-                    break
-
-        if return_page_source:
-            try:
-                page_source = driver.page_source or ""
-            except Exception:
-                page_source = ""
-            return fb_dtsg, page_source
-        return fb_dtsg
-    finally:
-        try:
-            driver.quit()
-        except Exception:
-            pass
-
-
-def capture_graphql_post_payloads(cookie, timeout: int = 6, first_only: bool = True):
-    """
-    Dùng headless Chrome (CDP performance logs) để bắt các request POST tới /api/graphql/
-    Trả về danh sách dict chứa: url, request_id, post_data (raw string), parsed (dict)
-    Chỉ trả các request có response status == 200.
-    """
-    url = "https://www.facebook.com"
-
-    try:
-        from selenium import webdriver
-        from selenium.webdriver.chrome.options import Options
-        from selenium.webdriver.chrome.service import Service
-        from selenium.common.exceptions import WebDriverException
-        from webdriver_manager.chrome import ChromeDriverManager
-    except Exception as e:
-        print(f"❌ Selenium/webdriver_manager unavailable: {e}")
-        return []
-
-    options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1200,800")
-    options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
-
-    try:
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
-    except Exception as e:
-        print(f"❌ Cannot start ChromeDriver: {e}")
-        return []
-
-    try:
-        try:
-            driver.execute_cdp_cmd("Network.enable", {})
-            driver.execute_cdp_cmd("Network.setExtraHTTPHeaders", {"headers": {"cookie": cookie}})
-        except Exception:
-            pass
-
-        driver.get(url)
-        # allow network activity
-        time.sleep(max(2, timeout))
+        page.on("request", on_request)
 
         try:
-            logs = driver.get_log("performance")
-        except Exception:
-            logs = []
+            page.goto(url, timeout=60000)
+            time.sleep(3)  # Wait for page to load and requests to be made
 
-        requests_map = {}
-        responses_map = {}
+            # If not found in network requests, search in page source
+            if not fb_dtsg:
+                page_source = page.content()
+                patterns = [
+                    r'"name":"fb_dtsg","value":"([^"]+)"',
+                    r'"token":"([^"]+)","type":"fb_dtsg"',
+                    r'"fb_dtsg"\\s*:\\s*"([^"]+)"',
+                    r'name="fb_dtsg"\\s+value="([^"]+)"',
+                    r'DTSGInitData.*?"token":"([^"]+)"'
+                ]
+                for i, pattern in enumerate(patterns, 1):
+                    match = re.search(pattern, page_source)
+                    if match:
+                        fb_dtsg = match.group(1)
+                        print(f"✅ Tìm thấy fb_dtsg trong page_source với pattern {i}: {fb_dtsg[:50]}...")
+                        break
 
-        for entry in logs:
-            try:
-                msg = json.loads(entry.get("message", "{}")).get("message", {})
-                method = msg.get("method", "")
-                params = msg.get("params", {}) or {}
-                request_id = params.get("requestId")
+            if return_page_source and not page_source:
+                page_source = page.content()
 
-                if method == "Network.requestWillBeSent":
-                    req = params.get("request", {}) or {}
-                    url_req = req.get("url", "")
-                    meth = req.get("method", "").upper()
-                    if "/api/graphql" in url_req and meth == "POST":
-                        requests_map[request_id] = {
-                            "url": url_req,
-                            "postData": req.get("postData", ""),
-                            "headers": req.get("headers", {})
-                        }
+        except Exception as e:
+            print(f"❌ Lỗi khi navigate hoặc capture: {e}")
+        finally:
+            browser.close()
 
-                elif method == "Network.responseReceived":
-                    resp = params.get("response", {}) or {}
-                    status = resp.get("status")
-                    responses_map[request_id] = status
-            except Exception:
-                continue
+    if return_page_source:
+        return fb_dtsg, page_source
+    return fb_dtsg
 
-        results = []
-        for req_id, req_info in requests_map.items():
-            status = responses_map.get(req_id)
-            if status != 200:
-                continue
-            raw_post = req_info.get("postData", "") or ""
-            # postData may be urlencoded form; parse it
-            parsed_qs = parse_qs(raw_post, keep_blank_values=True)
-            # flatten values to single string
-            parsed = {k: (v[0] if isinstance(v, list) and len(v) > 0 else "") for k, v in parsed_qs.items()}
-            # also decode pluses for safety
-            parsed = {k: unquote_plus(v) if isinstance(v, str) else v for k, v in parsed.items()}
+from urllib.parse import parse_qs, unquote_plus
+import time
 
-            results.append({
-                "request_id": req_id,
-                "url": req_info.get("url"),
-                "raw_post_data": raw_post,
-                "parsed": parsed,
-                "status": status,
-                "headers": req_info.get("headers", {})
-            })
+def capture_graphql_post_payloads(cookie_str, timeout=8):
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
 
-            if first_only and results:
-                break
+        # Inject cookie
+        cookies = []
+        for c in cookie_str.split(";"):
+            if "=" in c:
+                k, v = c.strip().split("=", 1)
+                cookies.append({
+                    "name": k,
+                    "value": v,
+                    "domain": ".facebook.com",
+                    "path": "/"
+                })
+        context.add_cookies(cookies)
 
-        if not results:
-            print("⚠️ Không bắt được POST /api/graphql/ với status 200 trong khoảng thời gian này.")
-        else:
-            print(f"✅ Bắt được {len(results)} POST /api/graphql/ (status=200).")
+        page = context.new_page()
+        payload_found = {}
 
-        return results
-    finally:
-        try:
-            driver.quit()
-        except Exception:
-            pass
+        def on_request(request):
+            if (
+                request.method == "POST"
+                and "/api/graphql" in request.url
+                and request.post_data
+            ):
+                parsed = parse_qs(request.post_data)
+                flat = {
+                    k: unquote_plus(v[0]) if v else ""
+                    for k, v in parsed.items()
+                }
+                payload_found.update(flat)
+
+        page.on("request", on_request)
+        page.goto("https://www.facebook.com", timeout=60000)
+        time.sleep(timeout)
+
+        browser.close()
+        return payload_found or None
+
+
 
 
 def get_all_payload_values(cookie, profile_id: str | None = None):
@@ -590,104 +510,92 @@ def get_all_payload_values(cookie, profile_id: str | None = None):
 
 def capture_graphql_post_payload(cookie, timeout: int = 8):
     """
-    Dùng headless Selenium + performance logs để bắt POST requests tới /api/graphql/
+    Dùng headless Playwright để bắt POST requests tới /api/graphql/
     Trả về dictionary từ postData (form-urlencoded) của request đầu tìm được.
 
     Args:
         cookie (str): Cookie string để inject
-        timeout (int): Số giây chờ sau khi load trang để thu logs
+        timeout (int): Số giây chờ sau khi load trang để thu requests
 
     Returns:
         dict | None: parsed payload (string->string) hoặc None nếu không tìm thấy
     """
     try:
-        from selenium import webdriver
-        from selenium.webdriver.chrome.options import Options
-        from selenium.webdriver.chrome.service import Service
-        from selenium.common.exceptions import WebDriverException
-        from webdriver_manager.chrome import ChromeDriverManager
         from urllib.parse import parse_qs, unquote_plus
     except Exception as e:
-        print(f"❌ Selenium/webdriver_manager hoặc urllib không có: {e}")
+        print(f"❌ Playwright hoặc urllib không có: {e}")
         return None
 
-    options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1200,800")
-    options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
+    payload_found = {}
 
-    try:
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
-    except WebDriverException as e:
-        print(f"❌ Không thể khởi tạo Chrome WebDriver: {e}")
-        return None
-    except Exception as e:
-        print(f"❌ Lỗi khi cài/chạy ChromeDriver: {e}")
-        return None
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            viewport={"width": 1200, "height": 800},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+        )
 
-    try:
+        # Add cookies
+        cookies = []
+        for c in cookie.split(";"):
+            if "=" in c:
+                k, v = c.strip().split("=", 1)
+                cookies.append({
+                    "name": k,
+                    "value": v,
+                    "domain": ".facebook.com",
+                    "path": "/"
+                })
+        context.add_cookies(cookies)
+
+        page = context.new_page()
+
+        def on_request(request):
+            if (
+                request.method == "POST"
+                and "/api/graphql" in request.url
+                and request.post_data
+                and not payload_found  # Only capture the first one
+            ):
+                post_data = request.post_data
+                try:
+                    # postData is form-urlencoded string; parse it
+                    parsed = parse_qs(post_data, keep_blank_values=True)
+                    # flatten values: take first value and url-decode
+                    flat = {k: unquote_plus(v[0]) if isinstance(v, list) and v else (v if isinstance(v, str) else "") for k, v in parsed.items()}
+                    payload_found.update(flat)
+                    print(f"✅ Bắt được graphql POST tại {request.url}, keys: {list(flat.keys())}")
+                except Exception as e:
+                    print(f"⚠️ Lỗi khi parse postData: {e}")
+                    # try manual parse fallback
+                    try:
+                        parts = post_data.split("&")
+                        flat = {}
+                        for p in parts:
+                            if "=" in p:
+                                k, v = p.split("=", 1)
+                                flat[k] = unquote_plus(v)
+                        if flat:
+                            payload_found.update(flat)
+                            print(f"✅ Bắt được graphql POST (manual parse), keys: {list(flat.keys())}")
+                    except Exception:
+                        pass
+
+        page.on("request", on_request)
+
         try:
-            driver.execute_cdp_cmd("Network.enable", {})
-            driver.execute_cdp_cmd("Network.setExtraHTTPHeaders", {"headers": {"cookie": cookie}})
-        except Exception:
-            pass
+            page.goto("https://www.facebook.com", timeout=60000)
+            time.sleep(timeout)  # Wait for requests to be made
+        except Exception as e:
+            print(f"❌ Lỗi khi navigate: {e}")
+        finally:
+            browser.close()
 
-        driver.get("https://www.facebook.com")
-        time.sleep(timeout)
-
-        try:
-            logs = driver.get_log("performance")
-        except Exception:
-            logs = []
-
-        for entry in logs:
-            try:
-                msg = json.loads(entry.get("message", "{}")).get("message", {})
-                method = msg.get("method", "")
-                params = msg.get("params", {}) or {}
-                # requestWillBeSent contains request with postData
-                if method == "Network.requestWillBeSent":
-                    req = params.get("request", {}) or {}
-                    url_req = req.get("url", "") or ""
-                    postData = req.get("postData", "") or ""
-                    if "/api/graphql" in url_req and postData:
-                        # postData is form-urlencoded string; parse it
-                        try:
-                            parsed = parse_qs(postData, keep_blank_values=True)
-                            # flatten values: take first value and url-decode
-                            flat = {k: unquote_plus(v[0]) if isinstance(v, list) and v else (v if isinstance(v, str) else "") for k, v in parsed.items()}
-                            print(f"✅ Bắt được graphql POST tại {url_req}, keys: {list(flat.keys())}")
-                            return flat
-                        except Exception as e:
-                            print(f"⚠️ Lỗi khi parse postData: {e}")
-                            # try manual parse fallback
-                            try:
-                                parts = postData.split("&")
-                                flat = {}
-                                for p in parts:
-                                    if "=" in p:
-                                        k, v = p.split("=", 1)
-                                        flat[k] = unquote_plus(v)
-                                if flat:
-                                    print(f"✅ Bắt được graphql POST (manual parse), keys: {list(flat.keys())}")
-                                    return flat
-                            except Exception:
-                                pass
-                # also consider Network.responseReceived -> might include requestId, skip for now
-            except Exception:
-                continue
-
-        print("⚠️ Không tìm thấy POST tới /api/graphql/ trong performance logs")
+    if payload_found:
+        return payload_found
+    else:
+        print("⚠️ Không tìm thấy POST tới /api/graphql/")
         return None
-    finally:
-        try:
-            driver.quit()
-        except Exception:
-            pass
 
 
 def create_payload_dict(payload_values):
@@ -960,7 +868,7 @@ def ensure_payload_from_bad_response(profile_id: str | None, cookie: str | None,
         return None
 if __name__ == "__main__":
     # Ví dụ sử dụng với profile_id
-    profile_id = "031ca13d-e8fa-400c-a603-df57a2806788"
+    profile_id = "b77da63d-af55-43c2-ab7f-364250b20e30"
     payload_dict = get_payload_by_profile_id(profile_id)
     
     if payload_dict:
