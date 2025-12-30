@@ -14,3 +14,9 @@ logs/
 
 pack_project.py
 FULL_PROJECT_CONTENT.txt
+dist/
+build/
+out/
+release/
+# PyInstaller
+*.spec
