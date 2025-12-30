@@ -74,6 +74,14 @@ const feedRestMinutesInput = document.getElementById('feedRestMinutesInput');
 const feedStartBtn = document.getElementById('feedStartBtn');
 const feedCancelBtn = document.getElementById('feedCancelBtn');
 
+// Delete Data Modal elements
+const deleteDataBtn = document.getElementById('deleteDataBtn');
+const deleteDataModal = document.getElementById('deleteDataModal');
+const deleteDataModalClose = document.getElementById('deleteDataModalClose');
+const deleteDataModalCancel = document.getElementById('deleteDataModalCancel');
+const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+const deleteDateList = document.getElementById('deleteDateList');
+
 const API_BASE = 'http://localhost:8000';
 const SETTINGS_STORAGE_KEY = 'profileSettings';
 const toastContainer = document.getElementById('toastContainer');
@@ -675,45 +683,20 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
   selectCb.title = 'Chọn profile';
   selectCb.checked = Boolean(profileState.selected && profileState.selected[currentPid]);
 
-  // Container cho profile_id và name inputs
-  const inputsContainer = document.createElement('div');
-  inputsContainer.style.cssText = 'display: flex; gap: 8px; flex: 1; min-width: 0;';
+  const nameInput = document.createElement('input');
+  nameInput.className = 'profile-name-input';
+  nameInput.type = 'text';
+  nameInput.placeholder = 'Tên profile';
+  nameInput.value = (initialInfo && initialInfo.name) ? String(initialInfo.name).trim() : '';
+  nameInput.title = 'Tên profile';
 
   const pidInput = document.createElement('input');
   pidInput.className = 'profile-id-input';
   pidInput.type = 'text';
   pidInput.value = currentPid;
-  pidInput.placeholder = 'Profile ID';
-  pidInput.style.cssText = 'flex: 2; min-width: 0;';
   pidInput.addEventListener('change', () => {
     wrap.dataset.profileId = String(pidInput.value || '').trim();
   });
-
-  const nameInput = document.createElement('input');
-  nameInput.className = 'profile-name-input';
-  nameInput.type = 'text';
-  nameInput.placeholder = 'Tên profile';
-  nameInput.style.cssText = 'flex: 1; min-width: 0; height: 36px; padding: 8px 12px; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff; transition: all 0.2s ease;';
-  nameInput.addEventListener('focus', () => {
-    nameInput.style.outline = 'none';
-    nameInput.style.borderColor = 'var(--primary)';
-    nameInput.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.1)';
-  });
-  nameInput.addEventListener('blur', () => {
-    nameInput.style.borderColor = '#e2e8f0';
-    nameInput.style.boxShadow = 'none';
-  });
-
-  // Load name từ backend hoặc profileState
-  const loadName = () => {
-    const info = profileState.profiles[currentPid] || {};
-    const name = info.name || '';
-    nameInput.value = name;
-  };
-  loadName();
-  inputsContainer.appendChild(nameInput);
-  inputsContainer.appendChild(pidInput);
-
 
   const actions = document.createElement('div');
   actions.className = 'profile-actions';
@@ -838,6 +821,7 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
   function setLocalGroups(pid, groups) {
     if (!profileState.profiles[pid]) {
       profileState.profiles[pid] = { 
+        name: '',
         cookie: '', 
         access_token: '', 
         fb_dtsg: '', 
@@ -956,7 +940,6 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
     // normalize hiển thị để tránh dính space
     if (pidInput.value !== nextPid) pidInput.value = nextPid;
 
-    const nextName = (nameInput.value || '').trim();
     const cur = profileState.profiles[currentPid] || { 
       name: '',
       cookie: '', 
@@ -967,6 +950,7 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
       spin_t: '',
       groups: [] 
     };
+    const nameValue = (nameInput.value || '').trim();
     saveBtn.disabled = true;
     try {
       if (nextPid !== currentPid) {
@@ -978,7 +962,7 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
         await callBackend(`/settings/profiles/${encodeURIComponent(nextPid)}`, {
           method: 'PUT',
           body: JSON.stringify({
-            name: nextName || cur.name || '',
+            name: nameValue,
             cookie: cur.cookie || '',
             access_token: cur.access_token || '',
             fb_dtsg: cur.fb_dtsg || '',
@@ -995,28 +979,24 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
         await callBackend(`/settings/profiles/${encodeURIComponent(currentPid)}`, { method: 'DELETE' });
 
         delete profileState.profiles[currentPid];
-        profileState.profiles[nextPid] = { ...cur, name: nextName };
-        // Bỏ tick của profile cũ (không chuyển sang profile mới)
+        profileState.profiles[nextPid] = { ...cur, name: nameValue };
+        // Bỏ tick checkbox khi sửa profile_id (xóa cả selection cũ và mới)
         if (profileState.selected && profileState.selected[currentPid]) {
           delete profileState.selected[currentPid];
         }
-        // Bỏ tick của profile mới nếu có
         if (profileState.selected && profileState.selected[nextPid]) {
           delete profileState.selected[nextPid];
         }
         currentPid = nextPid;
         pidInput.value = currentPid;
-        loadName(); // Reload name sau khi đổi profile_id
-        selectCb.checked = false; // Bỏ tick sau khi sửa
-        saveProfileState();
-        saveFrontendState(); // Lưu state vào backend
-        updateSettingsActionButtons();
+        wrap.dataset.profileId = String(currentPid || '').trim();
+        selectCb.checked = false;
         updateGroupBtnLabel();
       } else {
         await callBackend(`/settings/profiles/${encodeURIComponent(currentPid)}`, {
           method: 'PUT',
           body: JSON.stringify({
-            name: nextName || '',
+            name: nameValue,
             cookie: cur.cookie || '',
             access_token: cur.access_token || '',
             fb_dtsg: cur.fb_dtsg || '',
@@ -1026,22 +1006,19 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
           }),
         });
         // Cập nhật name trong profileState
-        if (!profileState.profiles[currentPid]) {
-          profileState.profiles[currentPid] = { ...cur };
+        if (profileState.profiles[currentPid]) {
+          profileState.profiles[currentPid].name = nameValue;
         }
-        profileState.profiles[currentPid].name = nextName;
-        
-        // Bỏ tick của profile sau khi lưu
+        // Bỏ tick checkbox khi lưu profile_id (dù không đổi ID)
         if (profileState.selected && profileState.selected[currentPid]) {
           delete profileState.selected[currentPid];
         }
-        selectCb.checked = false; // Bỏ tick sau khi sửa
-        saveProfileState();
-        saveFrontendState(); // Lưu state vào backend
-        updateSettingsActionButtons();
+        selectCb.checked = false;
       }
 
       saveProfileState();
+      saveFrontendState(); // Lưu state vào backend
+      updateSettingsActionButtons(); // Cập nhật trạng thái các nút
       tokenBtn.textContent = (profileState.profiles[currentPid]?.access_token) ? 'Cập nhật token' : 'Lấy access_token';
       showToast('Đã lưu', 'success');
     } catch (e) {
@@ -1149,6 +1126,7 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
       // Update local state
       if (!profileState.profiles[currentPid]) {
         profileState.profiles[currentPid] = { 
+          name: '',
           cookie: '', 
           access_token: '', 
           fb_dtsg: '', 
@@ -1183,7 +1161,8 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
   actions.appendChild(removeBtn);
   selectWrap.appendChild(selectCb);
   row.appendChild(selectWrap);
-  row.appendChild(inputsContainer);
+  row.appendChild(nameInput);
+  row.appendChild(pidInput);
   row.appendChild(actions);
   wrap.appendChild(row);
   wrap.appendChild(groupPanel);
@@ -1222,23 +1201,10 @@ function showAddProfileRow() {
 
   addRowEl = document.createElement('div');
   addRowEl.className = 'profile-row add-profile-form';
-  addRowEl.style.cssText = 'display: flex; align-items: center; gap: 10px; padding: 12px 14px;';
-
-  const inputsContainer = document.createElement('div');
-  inputsContainer.style.cssText = 'display: flex; gap: 8px; flex: 1; min-width: 0;';
 
   const input = document.createElement('input');
   input.type = 'text';
   input.placeholder = 'Nhập profile_id (UUID)';
-  input.style.cssText = 'flex: 1; min-width: 0; height: 36px; padding: 8px 12px; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff;';
-
-  const nameInput = document.createElement('input');
-  nameInput.type = 'text';
-  nameInput.placeholder = 'Tên profile (tùy chọn)';
-  nameInput.style.cssText = 'flex: 1; min-width: 0; height: 36px; padding: 8px 12px; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff;';
-  inputsContainer.appendChild(nameInput);
-  inputsContainer.appendChild(input);
-
 
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
@@ -1246,7 +1212,6 @@ function showAddProfileRow() {
   saveBtn.textContent = 'Lưu';
   saveBtn.addEventListener('click', () => {
     const value = (input.value || '').trim();
-    const nameValue = (nameInput.value || '').trim();
     if (!value) {
       showToast('Vui lòng nhập profile_id', 'error');
       return;
@@ -1256,18 +1221,9 @@ function showAddProfileRow() {
       body: JSON.stringify({ profile_id: value }),
     })
       .then(() => {
-        // Lưu name nếu có
-        if (nameValue) {
-          return callBackend(`/settings/profiles/${encodeURIComponent(value)}`, {
-            method: 'PUT',
-            body: JSON.stringify({ name: nameValue }),
-          });
-        }
-      })
-      .then(() => {
         if (!profileState.profiles[value]) {
           profileState.profiles[value] = { 
-            name: nameValue,
+            name: '',
             cookie: '', 
             access_token: '', 
             fb_dtsg: '', 
@@ -1276,8 +1232,6 @@ function showAddProfileRow() {
             spin_t: '',
             groups: [] 
           };
-        } else {
-          profileState.profiles[value].name = nameValue;
         }
         saveProfileState();
         // Thêm row mới mà không render lại toàn bộ (tránh nháy)
@@ -1306,7 +1260,7 @@ function showAddProfileRow() {
     }
   });
 
-  addRowEl.appendChild(inputsContainer);
+  addRowEl.appendChild(input);
   addRowEl.appendChild(saveBtn);
   addRowEl.appendChild(cancelBtn);
   // luôn để form ở cuối list
@@ -1335,54 +1289,6 @@ if (saveApiKeyBtn) {
   });
 }
 
-// Cleanup files button
-const cleanupFilesBtn = document.getElementById('cleanupFilesBtn');
-const cleanupStatus = document.getElementById('cleanupStatus');
-
-if (cleanupFilesBtn) {
-  cleanupFilesBtn.addEventListener('click', async () => {
-    if (!cleanupStatus) return;
-
-    // Disable button và hiển thị loading
-    cleanupFilesBtn.disabled = true;
-    cleanupFilesBtn.textContent = 'Đang dọn dẹp...';
-    cleanupStatus.style.display = 'block';
-    cleanupStatus.className = 'cleanup-status';
-    cleanupStatus.textContent = 'Đang dọn dẹp file cũ...';
-
-    try {
-      const response = await callBackend('/cleanup/old-files', {
-        method: 'POST',
-        body: JSON.stringify({ max_days: 3 })
-      });
-
-      // Hiển thị kết quả
-      cleanupStatus.className = 'cleanup-status success';
-      cleanupStatus.textContent = `✅ ${response.message}`;
-
-      // Hiển thị danh sách file đã xóa nếu có
-      if (response.deleted_files && response.deleted_files.length > 0) {
-        cleanupStatus.innerHTML += '<br><small>Files đã xóa:</small><ul>';
-        response.deleted_files.forEach(filename => {
-          cleanupStatus.innerHTML += `<li>${filename}</li>`;
-        });
-        cleanupStatus.innerHTML += '</ul>';
-      }
-
-      showToast(`Đã dọn dẹp ${response.deleted_count} file cũ`, 'success');
-
-    } catch (error) {
-      console.error('Lỗi khi dọn dẹp file:', error);
-      cleanupStatus.className = 'cleanup-status error';
-      cleanupStatus.textContent = '❌ Lỗi khi dọn dẹp file cũ';
-      showToast('Lỗi khi dọn dẹp file cũ', 'error');
-    } finally {
-      // Reset button
-      cleanupFilesBtn.disabled = false;
-      cleanupFilesBtn.innerHTML = '🗑️ Dọn dẹp ngay';
-    }
-  });
-}
 
 if (addProfileRowBtn) {
   addProfileRowBtn.addEventListener('click', showAddProfileRow);
@@ -3444,7 +3350,6 @@ const helpTooltip = document.getElementById('helpTooltip');
 
 // Date range buttons
 const todayBtn = document.getElementById('todayBtn');
-const threeDaysBtn = document.getElementById('threeDaysBtn');
 
 // File selector dropdown
 const fileSelectorContainer = document.getElementById('fileSelectorContainer');
@@ -4057,7 +3962,7 @@ async function runInfoCollector(mode = 'all') {
       setButtonLoading(btn, true, 'Đang đợi quét xong...');
       showToast('Đang đợi quét bài viết hoàn thành...', 'info', 3000);
       
-      const scanCompleted = await waitForScanToComplete(60); // Đợi tối đa 1 phút
+      const scanCompleted = await waitForScanToComplete(60); // Đợi tối đa 5 phút
       
       if (!scanCompleted) {
         showToast('Quét vẫn chưa xong sau 1 phút. Bắt đầu lấy thông tin...', 'warning', 3000);
@@ -4355,6 +4260,9 @@ async function loadDataFromFile(filename) {
     console.log(`Đã hiển thị ${displayedCount} dòng dữ liệu từ file ${filename}`);
     initialLoaded = true;
 
+    // Cập nhật hiển thị thời gian của file đã chọn
+    updateFileTime(filename);
+
     // Show empty state if no rows
     if (tbody.children.length === 0) {
       emptyState.classList.add('show');
@@ -4376,7 +4284,6 @@ async function showFileSelector(rangeType, fromDate, toDate) {
     // Set title
     let title = '';
     if (rangeType === 'today') title = 'Chọn file data ngày hôm nay';
-    else if (rangeType === '3days') title = 'Chọn file data 3 ngày gần nhất';
     fileSelectorTitle.textContent = title;
 
     // Gọi API để lấy danh sách files
@@ -4411,9 +4318,8 @@ async function showFileSelector(rangeType, fromDate, toDate) {
           fileSelectorContainer.classList.add('hidden');
 
           // Update active button
-          [todayBtn, threeDaysBtn].forEach(btn => btn.classList.remove('active'));
+          [todayBtn].forEach(btn => btn.classList.remove('active'));
           if (rangeType === 'today') todayBtn.classList.add('active');
-          else if (rangeType === '3days') threeDaysBtn.classList.add('active');
         });
 
         fileList.appendChild(fileItem);
@@ -4432,18 +4338,26 @@ async function showFileSelector(rangeType, fromDate, toDate) {
 // Function để set khoảng thời gian cho các nút preset
 function setDateRange(days) {
   const now = new Date();
-  const toDate = new Date(now);
-  const fromDate = new Date(now);
 
   if (days === 'today') {
     // Từ 00:00 hôm nay đến hiện tại
+    const fromDate = new Date(now);
     fromDate.setHours(0, 0, 0, 0);
+    const toDate = new Date(now);
+    return { fromDate, toDate };
   } else {
-    // Từ N ngày trước đến hiện tại
-    fromDate.setDate(fromDate.getDate() - days);
-  }
+    // Khoảng thời gian của N ngày trước (từ 00:00 đến 23:59)
+    const targetDate = new Date(now);
+    targetDate.setDate(targetDate.getDate() - days);
 
-  return { fromDate, toDate };
+    const fromDate = new Date(targetDate);
+    fromDate.setHours(0, 0, 0, 0);
+
+    const toDate = new Date(targetDate);
+    toDate.setHours(23, 59, 59, 999);
+
+    return { fromDate, toDate };
+  }
 }
 
 // Function để load data theo khoảng thời gian (legacy - không dùng nữa)
@@ -4595,23 +4509,6 @@ async function loadDataByDateRange(fromDate, toDate) {
   }
 }
 
-// Function để set khoảng thời gian cho các nút preset
-function setDateRange(days) {
-  const now = new Date();
-  const toDate = new Date(now);
-  const fromDate = new Date(now);
-
-  if (days === 'today') {
-    // Từ 00:00 hôm nay đến hiện tại
-    fromDate.setHours(0, 0, 0, 0);
-  } else {
-    // Từ N ngày trước đến hiện tại
-    fromDate.setDate(fromDate.getDate() - days);
-  }
-
-  return { fromDate, toDate };
-}
-
 // Event listeners cho date buttons
 if (todayBtn) {
   todayBtn.addEventListener('click', async () => {
@@ -4620,10 +4517,182 @@ if (todayBtn) {
   });
 }
 
-if (threeDaysBtn) {
-  threeDaysBtn.addEventListener('click', async () => {
-    const { fromDate, toDate } = setDateRange(3);
-    await showFileSelector('3days', fromDate, toDate);
+
+// Function định dạng ngày thành dd/mm
+function formatDateForDisplay(daysAgo) {
+  const date = new Date();
+  date.setDate(date.getDate() - daysAgo);
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  return `${day}/${month}`;
+}
+
+// Function kiểm tra xem ngày nào có data
+async function checkDateHasData(daysAgo) {
+  try {
+    const now = new Date();
+    const targetDate = new Date(now);
+    targetDate.setDate(targetDate.getDate() - daysAgo);
+
+    // Tạo khoảng thời gian từ 00:00 đến 23:59 của ngày đó
+    const fromDate = new Date(targetDate);
+    fromDate.setHours(0, 0, 0, 0);
+    const toDate = new Date(targetDate);
+    toDate.setHours(23, 59, 59, 999);
+
+    // Gọi API để kiểm tra có file nào trong ngày đó không
+    const res = await callBackend('/data/files-in-range', {
+      method: 'POST',
+      body: JSON.stringify({
+        from_timestamp: Math.floor(fromDate.getTime() / 1000),
+        to_timestamp: Math.floor(toDate.getTime() / 1000)
+      })
+    });
+
+    const files = res.files || [];
+    return files.length > 0;
+  } catch (error) {
+    console.error(`Error checking data for ${daysAgo} days ago:`, error);
+    return false;
+  }
+}
+
+// Date dropdown functionality
+const selectDateBtn = document.getElementById('selectDateBtn');
+const dateDropdown = document.getElementById('dateDropdown');
+const dropdownContainer = selectDateBtn ? selectDateBtn.closest('.dropdown-container') : null;
+
+// File time display
+const currentTimeText = document.getElementById('currentTimeText');
+
+// Function cập nhật thời gian hiện tại (mặc định)
+function updateCurrentTime() {
+  const now = new Date();
+  const timeString = now.toLocaleString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+
+  if (currentTimeText) {
+    currentTimeText.textContent = timeString;
+  }
+}
+
+// Function cập nhật thời gian của file đã chọn
+function updateFileTime(filename) {
+  try {
+    // Parse tên file để lấy date và time
+    // Format: all_results_YYYYMMDD_HHMMSS.json
+    const pattern = /all_results_(\d{8})_(\d{6})\.json$/;
+    const match = filename.match(pattern);
+
+    if (match) {
+      const dateStr = match[1]; // YYYYMMDD
+      const timeStr = match[2]; // HHMMSS
+
+      // Parse thành date object
+      const year = dateStr.substring(0, 4);
+      const month = dateStr.substring(4, 6);
+      const day = dateStr.substring(6, 8);
+      const hour = timeStr.substring(0, 2);
+      const minute = timeStr.substring(2, 4);
+      const second = timeStr.substring(4, 6);
+
+      const fileDate = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}`);
+
+      const timeString = fileDate.toLocaleString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+
+      if (currentTimeText) {
+        currentTimeText.textContent = timeString;
+      }
+    } else {
+      // Nếu không parse được, quay về thời gian hiện tại
+      updateCurrentTime();
+    }
+  } catch (error) {
+    console.error('Error parsing file time:', error);
+    updateCurrentTime();
+  }
+}
+
+// Cập nhật thời gian hiện tại mặc định khi load trang
+updateCurrentTime();
+
+// Cập nhật hiển thị ngày trong dropdown khi trang load
+function updateDateDropdownDisplay() {
+  for (let i = 1; i <= 10; i++) {
+    const dateItem = document.getElementById(`dateItem${i}`);
+    if (dateItem) {
+      dateItem.textContent = formatDateForDisplay(i);
+    }
+  }
+}
+
+// Gọi hàm cập nhật khi trang load
+updateDateDropdownDisplay();
+
+  // Toggle dropdown khi click nút "chọn ngày"
+  if (selectDateBtn && dateDropdown) {
+    selectDateBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = !dateDropdown.classList.contains('hidden');
+
+      // Đóng tất cả dropdowns khác trước
+      document.querySelectorAll('.dropdown-menu').forEach(menu => {
+        if (menu !== dateDropdown) {
+          menu.classList.add('hidden');
+        }
+      });
+
+      // Toggle dropdown hiện tại
+      if (isOpen) {
+        dateDropdown.classList.add('hidden');
+        dropdownContainer.classList.remove('open');
+      } else {
+        dateDropdown.classList.remove('hidden');
+        dropdownContainer.classList.add('open');
+      }
+    });
+  }
+
+
+// Handle click trên dropdown items
+if (dateDropdown) {
+  dateDropdown.addEventListener('click', async (e) => {
+    if (e.target.classList.contains('dropdown-item')) {
+      const days = parseInt(e.target.dataset.days);
+
+      // Kiểm tra xem ngày này có data không
+      const hasData = await checkDateHasData(days);
+
+      if (hasData) {
+        // Nếu có data thì hiển thị file selector
+        const { fromDate, toDate } = setDateRange(days);
+        await showFileSelector(`${days}days`, fromDate, toDate);
+
+        // Đóng dropdown sau khi chọn
+        dateDropdown.classList.add('hidden');
+        dropdownContainer.classList.remove('open');
+      } else {
+        // Nếu không có data thì hiển thị thông báo trong console và không làm gì
+        console.log(`Không có dữ liệu cho ${days} ngày trước`);
+
+        // Đóng dropdown
+        dateDropdown.classList.add('hidden');
+        dropdownContainer.classList.remove('open');
+      }
+    }
   });
 }
 
@@ -4641,11 +4710,18 @@ if (cancelFileSelection) {
   });
 }
 
-// Click outside để đóng file selector
+// Click outside để đóng file selector và dropdown
 document.addEventListener('click', (e) => {
+  // Đóng file selector
   if (!fileSelectorContainer.contains(e.target) &&
       !e.target.matches('.date-btn')) {
     fileSelectorContainer.classList.add('hidden');
+  }
+
+  // Đóng date dropdown
+  if (dropdownContainer && !dropdownContainer.contains(e.target)) {
+    dateDropdown.classList.add('hidden');
+    dropdownContainer.classList.remove('open');
   }
 });
 
@@ -4694,6 +4770,235 @@ if (groupScanStartDateInput) {
 if (groupScanEndDateInput) {
   groupScanEndDateInput.addEventListener('change', () => saveFrontendState());
 }
+
+// ==================== DELETE DATA MODAL ====================
+
+
+// Biến lưu trạng thái expand của các ngày
+let expandedDates = new Set();
+
+// Render danh sách ngày có thể xóa (từ hôm nay đến 10 ngày trước)
+async function renderDeleteDateList() {
+  deleteDateList.innerHTML = '';
+
+  const dates = [];
+  // Sử dụng ngày hiện tại theo múi giờ local
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // Tạo danh sách 11 ngày (hôm nay + 10 ngày trước)
+  for (let i = 0; i <= 10; i++) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - i);
+
+    const dateStr = date.toLocaleDateString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+
+    // Tính timestamp đầu ngày (00:00:00) và cuối ngày (23:59:59)
+    const startOfDay = Math.floor(date.getTime() / 1000);
+    const endOfDay = startOfDay + (24 * 60 * 60) - 1;
+
+    dates.push({
+      date: date,
+      dateStr: dateStr,
+      startTimestamp: startOfDay,
+      endTimestamp: endOfDay
+    });
+  }
+
+  for (const { date, dateStr, startTimestamp, endTimestamp } of dates) {
+    // Chuyển dateStr từ DD/MM/YYYY thành YYYYMMDD để match với tên file
+    const [day, month, year] = dateStr.split('/');
+    const dateKey = `${year}${month}${day}`;
+
+    // Lấy tất cả file trong khoảng 30 ngày trước đến hiện tại
+    let files = [];
+    try {
+      const thirtyDaysAgo = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60);
+      const now = Math.floor(Date.now() / 1000) + (24 * 60 * 60); // Thêm 1 ngày để chắc chắn
+
+      const res = await callBackend('/data/files-in-range', {
+        method: 'POST',
+        body: JSON.stringify({
+          from_timestamp: thirtyDaysAgo,
+          to_timestamp: now
+        })
+      });
+
+      // Filter file theo ngày từ tên file
+      const allFiles = res.files || [];
+      files = allFiles.filter(file => {
+        const filename = file.filename;
+        // Pattern: all_results_YYYYMMDD_HHMMSS.json
+        const match = filename.match(/all_results_(\d{8})_(\d{6})\.json$/);
+        if (match) {
+          const fileDate = match[1]; // YYYYMMDD
+          return fileDate === dateKey;
+        }
+        return false;
+      });
+
+      console.log(`Ngày ${dateStr} (${dateKey}): tìm thấy ${files.length} file`);
+    } catch (error) {
+      console.warn(`Không thể load file cho ngày ${dateStr}:`, error);
+      console.error('Error details:', error);
+    }
+
+    const isExpanded = expandedDates.has(dateStr);
+
+    // Container cho cả ngày và files
+    const dateContainer = document.createElement('div');
+    dateContainer.className = 'delete-date-container';
+
+    // Item ngày
+    const dateItem = document.createElement('div');
+    dateItem.className = 'delete-date-item';
+    dateItem.innerHTML = `
+      <span class="delete-date-expand-icon">${isExpanded ? '▼' : '▶'}</span>
+      <span class="delete-date-text">${dateStr}</span>
+      <span class="delete-date-count">(${files.length} file${files.length !== 1 ? 's' : ''})</span>
+    `;
+
+    // Click để expand/collapse
+    dateItem.addEventListener('click', async (e) => {
+      if (isExpanded) {
+        expandedDates.delete(dateStr);
+      } else {
+        expandedDates.add(dateStr);
+      }
+      await renderDeleteDateList(); // Re-render để cập nhật trạng thái
+    });
+
+    dateContainer.appendChild(dateItem);
+
+    // Nếu expanded, hiển thị danh sách file
+    if (isExpanded && files.length > 0) {
+      const filesContainer = document.createElement('div');
+      filesContainer.className = 'delete-files-container';
+
+      files.forEach(file => {
+        const fileItem = document.createElement('div');
+        fileItem.className = 'delete-file-item';
+        fileItem.innerHTML = `
+          <input type="checkbox" class="delete-file-checkbox" data-filename="${file.filename}">
+          <span class="delete-file-text">${file.filename}</span>
+          <span class="delete-file-time">${new Date(file.timestamp * 1000).toLocaleTimeString('vi-VN')}</span>
+        `;
+
+        fileItem.addEventListener('click', (e) => {
+          if (e.target.type !== 'checkbox') {
+            const checkbox = fileItem.querySelector('.delete-file-checkbox');
+            checkbox.checked = !checkbox.checked;
+          }
+          updateDeleteButtonState();
+        });
+
+        filesContainer.appendChild(fileItem);
+      });
+
+      dateContainer.appendChild(filesContainer);
+    }
+
+    deleteDateList.appendChild(dateContainer);
+  }
+}
+
+// Cập nhật trạng thái nút xóa
+function updateDeleteButtonState() {
+  const checkedBoxes = deleteDateList.querySelectorAll('.delete-file-checkbox:checked');
+  deleteSelectedBtn.disabled = checkedBoxes.length === 0;
+}
+
+// Mở modal xóa dữ liệu
+function openDeleteDataModal() {
+  renderDeleteDateList();
+  deleteDataModal.classList.remove('hidden');
+  updateDeleteButtonState();
+}
+
+// Đóng modal xóa dữ liệu
+function closeDeleteDataModal() {
+  deleteDataModal.classList.add('hidden');
+  // Reset checkboxes và expanded state
+  const checkboxes = deleteDateList.querySelectorAll('.delete-file-checkbox');
+  checkboxes.forEach(cb => cb.checked = false);
+  expandedDates.clear();
+  updateDeleteButtonState();
+}
+
+// Xóa các file đã chọn
+async function deleteSelectedFiles() {
+  const checkedBoxes = deleteDateList.querySelectorAll('.delete-file-checkbox:checked');
+  if (checkedBoxes.length === 0) return;
+
+  const selectedFiles = Array.from(checkedBoxes).map(cb => cb.dataset.filename);
+  const confirmMessage = `Bạn có chắc muốn xóa ${selectedFiles.length} file đã chọn?\n\n${selectedFiles.join('\n')}\n\nHành động này không thể hoàn tác!`;
+
+  if (!confirm(confirmMessage)) return;
+
+  try {
+    setButtonLoading(deleteSelectedBtn, true, 'Đang xóa...');
+
+    const deleteRes = await callBackend('/data/files', {
+      method: 'DELETE',
+      body: JSON.stringify({ filenames: selectedFiles })
+    });
+
+    const deletedCount = deleteRes.total_deleted || 0;
+    const failedCount = deleteRes.total_failed || 0;
+
+    if (deletedCount > 0) {
+      showToast(`Đã xóa thành công ${deletedCount} file`, 'success', 3000);
+      closeDeleteDataModal();
+
+      // Reload data if we're on scan view
+      if (!scanView.classList.contains('hidden')) {
+        await loadInitialData();
+      }
+    }
+
+    if (failedCount > 0) {
+      showToast(`Có ${failedCount} file xóa thất bại`, 'warning', 3000);
+    }
+
+  } catch (error) {
+    console.error('Lỗi khi xóa file:', error);
+    showToast('Lỗi khi xóa file. Vui lòng thử lại.', 'error');
+  } finally {
+    setButtonLoading(deleteSelectedBtn, false);
+  }
+}
+
+// Event listeners cho delete modal
+if (deleteDataBtn) {
+  deleteDataBtn.addEventListener('click', openDeleteDataModal);
+}
+
+if (deleteDataModalClose) {
+  deleteDataModalClose.addEventListener('click', closeDeleteDataModal);
+}
+
+if (deleteDataModalCancel) {
+  deleteDataModalCancel.addEventListener('click', closeDeleteDataModal);
+}
+
+if (deleteSelectedBtn) {
+  deleteSelectedBtn.addEventListener('click', deleteSelectedFiles);
+}
+
+// Đóng modal khi click outside
+if (deleteDataModal) {
+  deleteDataModal.addEventListener('click', (e) => {
+    if (e.target === deleteDataModal) {
+      closeDeleteDataModal();
+    }
+  });
+}
+
+// ==================== END DELETE DATA MODAL ====================
 
 // Khởi tạo: luôn vào tab danh sách quét + load state profile
 let initialTab = 'scan';

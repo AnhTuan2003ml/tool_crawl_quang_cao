@@ -2040,7 +2040,7 @@ def control_reset_stop(payload: Optional[ResetStopPayload] = Body(None)) -> dict
 
 def _remove_profile_from_data_files(profile_id: str) -> None:
     """
-    Xóa profile_id khỏi account_status.json, frontend_state.json và groups.json
+    Xóa profile_id khỏi account_status.json, frontend_state.json, groups.json và post_ids
     khi profile_id bị xóa khỏi settings.json
     """
     pid = _norm_profile_id(profile_id)
@@ -2086,6 +2086,16 @@ def _remove_profile_from_data_files(profile_id: str) -> None:
                         print(f"🗑️ Đã xóa profile_id {pid} khỏi frontend_state.json")
             except Exception as e:
                 print(f"⚠️ Không thể xóa profile_id {pid} khỏi frontend_state.json: {e}")
+        
+        # 4. Xóa file post_ids/{profile_id}.json
+        post_ids_dir = get_data_dir() / "post_ids"
+        post_ids_file = post_ids_dir / f"{pid}.json"
+        if post_ids_file.exists():
+            try:
+                post_ids_file.unlink()
+                print(f"🗑️ Đã xóa file post_ids/{pid}.json")
+            except Exception as e:
+                print(f"⚠️ Không thể xóa file post_ids/{pid}.json: {e}")
     except Exception as e:
         print(f"⚠️ Lỗi khi xóa profile_id {pid} khỏi data files: {e}")
 
