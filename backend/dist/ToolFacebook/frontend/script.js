@@ -3104,6 +3104,126 @@ function exportToExcel() {
 
 exportExcelBtn.addEventListener('click', exportToExcel);
 
+// Nút "Lọc Excel"
+const sterilizeExcelBtn = document.getElementById('sterilizeExcelBtn');
+
+function sterilizeExcel() {
+  // Tạo input file ẩn
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.xlsx';
+  input.multiple = true; // Cho phép chọn nhiều file
+  input.style.display = 'none';
+  
+  let inputCleaned = false;
+  
+  const cleanupInput = () => {
+    if (!inputCleaned) {
+      inputCleaned = true;
+      if (input.parentNode) {
+        input.remove();
+      }
+    }
+  };
+  
+  input.onchange = async (e) => {
+    const files = Array.from(e.target.files);
+    cleanupInput(); // Cleanup ngay sau khi chọn file
+    
+    if (files.length === 0) {
+      return;
+    }
+    
+    // Kiểm tra tất cả file đều là .xlsx
+    const invalidFiles = files.filter(f => !f.name.toLowerCase().endsWith('.xlsx'));
+    if (invalidFiles.length > 0) {
+      showToast('Tất cả file phải có định dạng .xlsx', 'error');
+      return;
+    }
+    
+    const formData = new FormData();
+    files.forEach(file => {
+      formData.append('files', file);
+    });
+    
+    try {
+      // Disable button và hiển thị trạng thái loading
+      sterilizeExcelBtn.disabled = true;
+      const btnText = sterilizeExcelBtn.querySelector('span:last-child');
+      const originalText = btnText.textContent;
+      btnText.textContent = 'Đang lọc...';
+      
+      // Gọi API
+      const response = await fetch('http://localhost:8000/excel/sterilize', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Lỗi không xác định' }));
+        throw new Error(errorData.detail || `HTTP ${response.status}`);
+      }
+      
+      // Lấy file từ response
+      const blob = await response.blob();
+      
+      // Tạo URL tạm thời và download file
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      // Lấy filename từ header hoặc dùng tên mặc định
+      const contentDisposition = response.headers.get('content-disposition');
+      let filename = 'sterilized.xlsx';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1].replace(/['"]/g, '');
+        }
+      }
+      
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      // Hiển thị thông báo thành công
+      showToast(`Đã lọc thành công ${files.length} file(s)`, 'success');
+      btnText.textContent = 'Đã lọc!';
+      
+      setTimeout(() => {
+        btnText.textContent = originalText;
+        sterilizeExcelBtn.disabled = false;
+      }, 2000);
+      
+    } catch (error) {
+      console.error('Lỗi khi lọc Excel:', error);
+      showToast(`Lỗi khi lọc Excel: ${error.message}`, 'error');
+      
+      // Restore button state
+      const btnText = sterilizeExcelBtn.querySelector('span:last-child');
+      const originalText = btnText.textContent;
+      btnText.textContent = 'Lỗi!';
+      setTimeout(() => {
+        btnText.textContent = originalText;
+        sterilizeExcelBtn.disabled = false;
+      }, 2000);
+    }
+  };
+  
+  // Cleanup input sau một khoảng thời gian (nếu user cancel dialog)
+  setTimeout(cleanupInput, 100);
+  
+  // Trigger click để mở file dialog
+  document.body.appendChild(input);
+  input.click();
+}
+
+if (sterilizeExcelBtn) {
+  sterilizeExcelBtn.addEventListener('click', sterilizeExcel);
+}
+
 // Nút "Bắt đầu" trong tab kết quả
 if (startScanBtn) {
   startScanBtn.addEventListener('click', async () => {
