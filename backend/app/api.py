@@ -1217,11 +1217,11 @@ def replace_profile_groups(profile_id: str, payload: ProfileGroupsReplacePayload
         raw["PROFILE_IDS"] = profiles
         _write_settings_raw(raw)
     
-    # Tự động tách page_id từ URL và lưu vào groups.json
+    # Tự động tách page_id từ URL và ghi đè toàn bộ vào groups.json
     try:
-        from core.join_groups import save_group_page_id
+        from core.join_groups import replace_all_groups_for_profile
         
-        saved_count = 0
+        groups_data = []
         for group_url in cleaned:
             page_id = _extract_page_id_from_group_url(group_url)
             if page_id:
@@ -1233,19 +1233,17 @@ def replace_profile_groups(profile_id: str, payload: ProfileGroupsReplacePayload
                     else:
                         normalized_url = f"https://www.facebook.com/groups/{normalized_url}"
                 
-                # Lưu vào groups.json
-                if save_group_page_id(pid, page_id, normalized_url):
-                    saved_count += 1
-                    print(f"✅ Đã lưu group vào groups.json: profile_id={pid}, page_id={page_id}, url={normalized_url}")
-                else:
-                    print(f"⚠️ Không lưu được group: profile_id={pid}, page_id={page_id}, url={normalized_url}")
+                groups_data.append({"page_id": page_id, "url_page": normalized_url})
             else:
                 print(f"⚠️ Không tách được page_id từ URL: {group_url}")
         
-        if saved_count > 0:
-            print(f"✅ Đã lưu {saved_count}/{len(cleaned)} group(s) vào groups.json cho profile {pid}")
+        # Ghi đè toàn bộ groups vào groups.json
+        if replace_all_groups_for_profile(pid, groups_data):
+            print(f"✅ Đã ghi đè {len(groups_data)} group(s) vào groups.json cho profile {pid}")
+        else:
+            print(f"⚠️ Không ghi đè được groups vào groups.json cho profile {pid}")
     except Exception as e:
-        print(f"⚠️ Lỗi khi lưu groups vào groups.json: {e}")
+        print(f"⚠️ Lỗi khi ghi đè groups vào groups.json: {e}")
         import traceback
         traceback.print_exc()
         # Không raise error để không ảnh hưởng đến việc lưu vào settings.json
@@ -2042,7 +2040,7 @@ def control_reset_stop(payload: Optional[ResetStopPayload] = Body(None)) -> dict
 
 def _remove_profile_from_data_files(profile_id: str) -> None:
     """
-    Xóa profile_id khỏi account_status.json và frontend_state.json
+    Xóa profile_id khỏi account_status.json, frontend_state.json và groups.json
     khi profile_id bị xóa khỏi settings.json
     """
     pid = _norm_profile_id(profile_id)
@@ -2064,7 +2062,14 @@ def _remove_profile_from_data_files(profile_id: str) -> None:
             except Exception as e:
                 print(f"⚠️ Không thể xóa profile_id {pid} khỏi account_status.json: {e}")
         
-        # 2. Xóa khỏi frontend_state.json (selected_profiles)
+        # 2. Xóa khỏi groups.json
+        try:
+            from core.join_groups import remove_profile_groups
+            remove_profile_groups(pid)
+        except Exception as e:
+            print(f"⚠️ Không thể xóa profile_id {pid} khỏi groups.json: {e}")
+        
+        # 3. Xóa khỏi frontend_state.json (selected_profiles)
         frontend_state_path = _get_frontend_state_path()
         if frontend_state_path.exists():
             try:

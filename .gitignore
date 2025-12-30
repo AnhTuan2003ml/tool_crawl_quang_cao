@@ -47,3 +47,11 @@ response_debug.txt
 
 # Logs
 *.log
+
+# Build outputs
+dist/
+build/
+out/
+release/
+# PyInstaller
+*.spec

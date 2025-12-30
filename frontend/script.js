@@ -344,6 +344,7 @@ async function tryLoadProfileStateFromBackend() {
       profileIds.forEach((pid) => {
         const key = String(pid || '').trim();
         if (key) nextProfiles[key] = { 
+          name: '',
           cookie: '', 
           access_token: '', 
           fb_dtsg: '', 
@@ -356,6 +357,7 @@ async function tryLoadProfileStateFromBackend() {
     } else if (typeof profileIds === 'string') {
       profileIds.split(',').map((s) => s.trim()).filter(Boolean).forEach((pid) => {
         nextProfiles[pid] = { 
+          name: '',
           cookie: '', 
           access_token: '', 
           fb_dtsg: '', 
@@ -370,6 +372,7 @@ async function tryLoadProfileStateFromBackend() {
         const key = String(pid || '').trim();
         if (!key) return;
         nextProfiles[key] = {
+          name: (cfg && cfg.name) ? String(cfg.name).trim() : '',
           cookie: (cfg && cfg.cookie) ? String(cfg.cookie) : '',
           access_token: (cfg && (cfg.access_token || cfg.accessToken)) ? String(cfg.access_token || cfg.accessToken) : '',
           fb_dtsg: (cfg && cfg.fb_dtsg) ? String(cfg.fb_dtsg) : '',
@@ -680,6 +683,13 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
   selectCb.title = 'Chọn profile';
   selectCb.checked = Boolean(profileState.selected && profileState.selected[currentPid]);
 
+  const nameInput = document.createElement('input');
+  nameInput.className = 'profile-name-input';
+  nameInput.type = 'text';
+  nameInput.placeholder = 'Tên profile';
+  nameInput.value = (initialInfo && initialInfo.name) ? String(initialInfo.name).trim() : '';
+  nameInput.title = 'Tên profile';
+
   const pidInput = document.createElement('input');
   pidInput.className = 'profile-id-input';
   pidInput.type = 'text';
@@ -811,6 +821,7 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
   function setLocalGroups(pid, groups) {
     if (!profileState.profiles[pid]) {
       profileState.profiles[pid] = { 
+        name: '',
         cookie: '', 
         access_token: '', 
         fb_dtsg: '', 
@@ -930,6 +941,7 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
     if (pidInput.value !== nextPid) pidInput.value = nextPid;
 
     const cur = profileState.profiles[currentPid] || { 
+      name: '',
       cookie: '', 
       access_token: '', 
       fb_dtsg: '', 
@@ -938,6 +950,7 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
       spin_t: '',
       groups: [] 
     };
+    const nameValue = (nameInput.value || '').trim();
     saveBtn.disabled = true;
     try {
       if (nextPid !== currentPid) {
@@ -949,6 +962,7 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
         await callBackend(`/settings/profiles/${encodeURIComponent(nextPid)}`, {
           method: 'PUT',
           body: JSON.stringify({
+            name: nameValue,
             cookie: cur.cookie || '',
             access_token: cur.access_token || '',
             fb_dtsg: cur.fb_dtsg || '',
@@ -965,20 +979,24 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
         await callBackend(`/settings/profiles/${encodeURIComponent(currentPid)}`, { method: 'DELETE' });
 
         delete profileState.profiles[currentPid];
-        profileState.profiles[nextPid] = { ...cur };
-        // chuyển checkbox selection sang key mới
+        profileState.profiles[nextPid] = { ...cur, name: nameValue };
+        // Bỏ tick checkbox khi sửa profile_id (xóa cả selection cũ và mới)
         if (profileState.selected && profileState.selected[currentPid]) {
           delete profileState.selected[currentPid];
-          profileState.selected[nextPid] = true;
+        }
+        if (profileState.selected && profileState.selected[nextPid]) {
+          delete profileState.selected[nextPid];
         }
         currentPid = nextPid;
         pidInput.value = currentPid;
-        selectCb.checked = Boolean(profileState.selected && profileState.selected[currentPid]);
+        wrap.dataset.profileId = String(currentPid || '').trim();
+        selectCb.checked = false;
         updateGroupBtnLabel();
       } else {
         await callBackend(`/settings/profiles/${encodeURIComponent(currentPid)}`, {
           method: 'PUT',
           body: JSON.stringify({
+            name: nameValue,
             cookie: cur.cookie || '',
             access_token: cur.access_token || '',
             fb_dtsg: cur.fb_dtsg || '',
@@ -987,9 +1005,20 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
             spin_t: cur.spin_t || '',
           }),
         });
+        // Cập nhật name trong profileState
+        if (profileState.profiles[currentPid]) {
+          profileState.profiles[currentPid].name = nameValue;
+        }
+        // Bỏ tick checkbox khi lưu profile_id (dù không đổi ID)
+        if (profileState.selected && profileState.selected[currentPid]) {
+          delete profileState.selected[currentPid];
+        }
+        selectCb.checked = false;
       }
 
       saveProfileState();
+      saveFrontendState(); // Lưu state vào backend
+      updateSettingsActionButtons(); // Cập nhật trạng thái các nút
       tokenBtn.textContent = (profileState.profiles[currentPid]?.access_token) ? 'Cập nhật token' : 'Lấy access_token';
       showToast('Đã lưu', 'success');
     } catch (e) {
@@ -1097,6 +1126,7 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
       // Update local state
       if (!profileState.profiles[currentPid]) {
         profileState.profiles[currentPid] = { 
+          name: '',
           cookie: '', 
           access_token: '', 
           fb_dtsg: '', 
@@ -1131,6 +1161,7 @@ function buildProfileRow(initialPid, initialInfo, isNew = false) {
   actions.appendChild(removeBtn);
   selectWrap.appendChild(selectCb);
   row.appendChild(selectWrap);
+  row.appendChild(nameInput);
   row.appendChild(pidInput);
   row.appendChild(actions);
   wrap.appendChild(row);
@@ -1192,6 +1223,7 @@ function showAddProfileRow() {
       .then(() => {
         if (!profileState.profiles[value]) {
           profileState.profiles[value] = { 
+            name: '',
             cookie: '', 
             access_token: '', 
             fb_dtsg: '', 

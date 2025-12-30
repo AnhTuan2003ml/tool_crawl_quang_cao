@@ -144,6 +144,79 @@ def save_group_page_id(profile_id: str, page_id: str, url_page: str) -> bool:
     finally:
         _release_groups_lock(fd)
 
+
+def replace_all_groups_for_profile(profile_id: str, groups: list[dict]) -> bool:
+    """
+    Ghi đè toàn bộ groups cho một profile vào groups.json.
+    
+    Args:
+        profile_id: ID của profile
+        groups: List các dict với format [{"page_id": "...", "url_page": "..."}, ...]
+    
+    Returns:
+        True nếu thành công, False nếu lỗi
+    """
+    pid = str(profile_id or "").strip()
+    if not pid:
+        return False
+    
+    # Validate groups format
+    if not isinstance(groups, list):
+        return False
+    
+    fd = _acquire_groups_lock()
+    if fd is None:
+        print(f"⚠️ [groups.json] Không lấy được lock trong thời gian chờ -> bỏ qua ghi (profile_id={pid})")
+        return False
+    
+    try:
+        data = _read_groups_json()
+        # Ghi đè toàn bộ groups cho profile này
+        data[pid] = groups
+        _write_groups_json(data)
+        return True
+    except Exception as e:
+        print(f"❌ Lỗi khi ghi đè groups.json cho profile {pid}: {e}")
+        return False
+    finally:
+        _release_groups_lock(fd)
+
+
+def remove_profile_groups(profile_id: str) -> bool:
+    """
+    Xóa toàn bộ groups của một profile khỏi groups.json.
+    
+    Args:
+        profile_id: ID của profile cần xóa
+    
+    Returns:
+        True nếu thành công, False nếu lỗi
+    """
+    pid = str(profile_id or "").strip()
+    if not pid:
+        return False
+    
+    fd = _acquire_groups_lock()
+    if fd is None:
+        print(f"⚠️ [groups.json] Không lấy được lock trong thời gian chờ -> bỏ qua xóa (profile_id={pid})")
+        return False
+    
+    try:
+        data = _read_groups_json()
+        if pid in data:
+            del data[pid]
+            _write_groups_json(data)
+            print(f"✅ Đã xóa groups của profile {pid} khỏi groups.json")
+            return True
+        else:
+            # Profile không có trong groups.json, coi như thành công
+            return True
+    except Exception as e:
+        print(f"❌ Lỗi khi xóa groups của profile {pid} khỏi groups.json: {e}")
+        return False
+    finally:
+        _release_groups_lock(fd)
+
 class GroupJoiner(FBController):
     """
     Class chuyên dụng để đi xin vào nhóm
