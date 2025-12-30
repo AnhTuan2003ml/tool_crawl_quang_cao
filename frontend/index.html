@@ -242,74 +242,72 @@
           <div class="settings-grid">
             <!-- Cột trái: Actions và Config Panels -->
             <div class="settings-left-column">
-              <div class="setting-card">
-                <div class="setting-card-header">
-               
-                  <!-- Action Groups Container -->
-                  <div class="action-groups-container">
-                    <!-- Profile Operations -->
-                    <div class="action-group profile-group">
-                      <div class="group-header">
-                        <span class="group-icon">👤</span>
-                        <span class="group-title">Profile Operations</span>
-                      </div>
-                      <div class="group-buttons">
-                        <button id="runAllInfoBtn" class="action-btn action-btn-primary" type="button">
-                          <span class="btn-icon">📊</span>
-                          <span>Lấy thông tin toàn bộ</span>
-                        </button>
-                        <button id="runSelectedInfoBtn" class="action-btn action-btn-primary" type="button">
-                          <span class="btn-icon">🎯</span>
-                          <span>Lấy thông tin profile đã chọn</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    <!-- Scan Operations -->
-                    <div class="action-group scan-group">
-                      <div class="group-header">
-                        <span class="group-icon">🔍</span>
-                        <span class="group-title">Scan Operations</span>
-                      </div>
-                      <div class="group-buttons">
-                        <button id="scanPostsSettingBtn" class="action-btn action-btn-success" type="button">
-                          <span class="btn-icon">📝</span>
-                          <span>Quét bài viết</span>
-                        </button>
-                        <button id="scanGroupSettingBtn" class="action-btn action-btn-success" type="button">
-                          <span class="btn-icon">👥</span>
-                          <span>Quét theo group</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    <!-- Account Management -->
-                    <div class="action-group account-group">
-                      <div class="group-header">
-                        <span class="group-icon">🤖</span>
-                        <span class="group-title">Account Management</span>
-                      </div>
-                      <div class="group-buttons">
-                        <button id="feedAccountSettingBtn" class="action-btn action-btn-info" type="button">
-                          <span class="btn-icon">🌱</span>
-                          <span>Nuôi acc theo kịch bản</span>
-                        </button>
-                        <button id="autoJoinGroupBtn" class="action-btn action-btn-info" type="button">
-                          <span class="btn-icon">➕</span>
-                          <span>Tự động tham gia group</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    <!-- Control Panel -->
-                    <div class="control-panel">
-                      <button id="stopAllSettingBtn" class="control-btn control-btn-danger" type="button">
-                        <span class="btn-icon">⏹️</span>
-                        <span>Dừng tất cả</span>
-                      </button>
-                    </div>
+              <!-- Action Groups Container -->
+              <div class="action-groups-container">
+                <!-- Profile Operations -->
+                <div class="action-group profile-group">
+                  <div class="group-header">
+                    <span class="group-icon">👤</span>
+                    <span class="group-title">Profile Operations</span>
+                  </div>
+                  <div class="group-buttons">
+                    <button id="runAllInfoBtn" class="action-btn action-btn-primary" type="button">
+                      <span class="btn-icon">📊</span>
+                      <span>Lấy thông tin toàn bộ</span>
+                    </button>
+                    <button id="runSelectedInfoBtn" class="action-btn action-btn-primary" type="button">
+                      <span class="btn-icon">🎯</span>
+                      <span>Lấy thông tin profile đã chọn</span>
+                    </button>
                   </div>
                 </div>
+
+                <!-- Scan Operations -->
+                <div class="action-group scan-group">
+                  <div class="group-header">
+                    <span class="group-icon">🔍</span>
+                    <span class="group-title">Scan Operations</span>
+                  </div>
+                  <div class="group-buttons">
+                    <button id="scanPostsSettingBtn" class="action-btn action-btn-success" type="button">
+                      <span class="btn-icon">📝</span>
+                      <span>Quét bài viết</span>
+                    </button>
+                    <button id="scanGroupSettingBtn" class="action-btn action-btn-success" type="button">
+                      <span class="btn-icon">👥</span>
+                      <span>Quét theo group</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Account Management -->
+                <div class="action-group account-group">
+                  <div class="group-header">
+                    <span class="group-icon">🤖</span>
+                    <span class="group-title">Account Management</span>
+                  </div>
+                  <div class="group-buttons">
+                    <button id="feedAccountSettingBtn" class="action-btn action-btn-info" type="button">
+                      <span class="btn-icon">🌱</span>
+                      <span>Nuôi acc theo kịch bản</span>
+                    </button>
+                    <button id="autoJoinGroupBtn" class="action-btn action-btn-info" type="button">
+                      <span class="btn-icon">➕</span>
+                      <span>Tự động tham gia group</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Control Panel -->
+                <div class="control-panel">
+                  <button id="stopAllSettingBtn" class="control-btn control-btn-danger" type="button">
+                    <span class="btn-icon">⏹️</span>
+                    <span>Dừng tất cả</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="setting-card">
                 <div id="feedConfigPanel" class="feed-panel" style="display:none;">
                 <div class="feed-panel-row">
                   <label class="feed-radio">
