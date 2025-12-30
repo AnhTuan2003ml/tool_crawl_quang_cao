@@ -11,8 +11,9 @@ from urllib.parse import quote_plus
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
-from fastapi import Body, FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query, UploadFile, File, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from fastapi.concurrency import run_in_threadpool
 
@@ -3122,4 +3123,115 @@ def stop_multi_thread() -> dict:
         raise HTTPException(status_code=500, detail="Multi-thread module không khả dụng")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi khi dừng multi-thread: {str(e)}")
+
+
+def _cleanup_temp_file(file_path: str) -> None:
+    """Xóa file tạm thời sau khi download"""
+    try:
+        if os.path.exists(file_path):
+            os.unlink(file_path)
+    except Exception:
+        pass
+
+
+@app.post("/excel/sterilize")
+async def sterilize_excel(background_tasks: BackgroundTasks, files: list[UploadFile] = File(...)) -> FileResponse:
+    """
+    Lọc trùng các file Excel theo ID User và trả về file đã lọc.
+    Sử dụng worker/sterilization.py để xử lý.
+    """
+    if not files or len(files) == 0:
+        raise HTTPException(status_code=400, detail="Cần ít nhất 1 file Excel")
+    
+    # Khởi tạo temp_files trước try block để đảm bảo nó luôn tồn tại trong except block
+    temp_files = []
+    
+    try:
+        from worker.sterilization import (
+            read_xlsx,
+            detect_columns,
+            dedupe_by_user_id,
+        )
+        import pandas as pd
+        
+        # Lưu các file tạm thời
+        frames = []
+        user_id_col = None
+        post_id_col = None
+        
+        # Đọc các file Excel đã upload
+        for file in files:
+            if not file.filename.lower().endswith('.xlsx'):
+                raise HTTPException(status_code=400, detail=f"File {file.filename} không phải file .xlsx")
+            
+            # Lưu file tạm thời
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx')
+            temp_files.append(temp_file.name)
+            content = await file.read()
+            temp_file.write(content)
+            temp_file.close()
+            
+            # Đọc file Excel
+            df = read_xlsx(temp_file.name)
+            if df.empty:
+                continue
+            
+            # Detect columns
+            ucol, pcol = detect_columns(df)
+            
+            # Đảm bảo cùng cột ID User giữa các file
+            if user_id_col is None:
+                user_id_col, post_id_col = ucol, pcol
+            
+            # Đổi tên cột nếu khác
+            if ucol != user_id_col:
+                df = df.rename(columns={ucol: user_id_col})
+            if post_id_col is not None and pcol is not None and pcol != post_id_col:
+                df = df.rename(columns={pcol: post_id_col})
+            
+            frames.append(df)
+        
+        if not frames:
+            raise HTTPException(status_code=400, detail="Tất cả file đều rỗng hoặc không đọc được")
+        
+        # Lọc trùng theo ID User
+        merged = dedupe_by_user_id(frames, user_id_col=user_id_col)
+        
+        if merged.empty:
+            raise HTTPException(status_code=400, detail="Không có dòng hợp lệ sau khi lọc")
+        
+        # Tạo file output tạm thời
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_file = tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx', prefix=f'sterilized_{timestamp}_')
+        output_path = output_file.name
+        output_file.close()
+        
+        # Ghi file Excel đã lọc
+        merged.to_excel(output_path, index=False)
+        
+        # Thêm task để xóa file sau khi response được gửi
+        background_tasks.add_task(_cleanup_temp_file, output_path)
+        for temp_file in temp_files:
+            background_tasks.add_task(_cleanup_temp_file, temp_file)
+        
+        # Trả về file để download
+        return FileResponse(
+            output_path,
+            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            filename=f'sterilized_{timestamp}.xlsx'
+        )
+                    
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        # Xóa các file tạm thời nếu có lỗi
+        for temp_file in temp_files:
+            try:
+                if os.path.exists(temp_file):
+                    os.unlink(temp_file)
+            except Exception:
+                pass
+        raise HTTPException(status_code=500, detail=f"Lỗi khi lọc Excel: {str(e)}")
 
