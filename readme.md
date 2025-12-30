@@ -48,3 +48,17 @@
 - Nếu đổi port hoặc host, cập nhật `API_BASE` trong `frontend/script.js` cho khớp.
 
 cd backend; .\venv\Scripts\Activate.ps1; .\build.bat
+
+
+## Lọc trùng 
+from backend.worker.sterilization import sterilize_xlsx_files
+
+files = [
+    "danh_sach_quet_2025-12-29.xlsx",
+    "danh_sach_quet_2025-12-30.xlsx",
+]
+
+df = sterilize_xlsx_files(files)
+
+print(len(df))
+df.to_excel("out.xlsx", index=False)

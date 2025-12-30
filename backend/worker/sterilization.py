@@ -119,6 +119,38 @@ def dedupe_by_user_id(frames: List[pd.DataFrame], user_id_col: str) -> pd.DataFr
 
     return pd.DataFrame(kept_rows)
 
+def sterilize_xlsx_files(
+    input_paths: List[str],
+    *,
+    sheet: Optional[str] = None,
+) -> pd.DataFrame:
+    """
+    Gộp nhiều file xlsx và lọc trùng theo ID User.
+    Dùng như thư viện.
+    """
+    frames = []
+    user_id_col = None
+
+    for p in input_paths:
+        df = read_xlsx(p, sheet=sheet)
+        if df.empty:
+            continue
+
+        ucol, _ = detect_columns(df)
+
+        if user_id_col is None:
+            user_id_col = ucol
+
+        if ucol != user_id_col:
+            df = df.rename(columns={ucol: user_id_col})
+
+        frames.append(df)
+
+    if not frames:
+        return pd.DataFrame()
+
+    return dedupe_by_user_id(frames, user_id_col=user_id_col)
+
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
@@ -194,7 +226,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("Tất cả file đều rỗng hoặc không đọc được.", file=sys.stderr)
         return 2
 
-    merged = dedupe_by_user_id(frames, user_id_col=user_id_col)
+    merged = sterilize_xlsx_files(input_paths, sheet=args.sheet)
 
     if merged.empty:
         print("Không có dòng hợp lệ sau khi lọc.", file=sys.stderr)
@@ -232,4 +264,13 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    files = [
+    "danh_sach_quet_2025-12-29T14-13-02.xlsx",
+    "danh_sach_quet_2025-12-30T06-23-05.xlsx",
+    "danh_sach_quet_2025-12-30T09-21-44.xlsx"
+    ]
+
+    df = sterilize_xlsx_files(files)
+
+    print(len(df))
+    df.to_excel("out.xlsx", index=False)
