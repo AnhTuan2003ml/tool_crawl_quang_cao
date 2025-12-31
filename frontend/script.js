@@ -91,7 +91,10 @@ let timerId = null;
 let initialLoaded = false;
 let dataCheckInterval = null; // Interval để kiểm tra dữ liệu mới
 let loadedPostIds = new Set(); // Lưu các post_id đã load để tránh trùng lặp
+let currentResultsFilename = null; // Track filename hiện tại để phát hiện file mới
+let autoRefreshInterval = null; // Interval để auto-refresh khi ở tab kết quả
 let postsLoaded = false; // Đã load dữ liệu quản lý post hay chưa
+let lastRowCountForToast = null; // Track rowCount cũ để chỉ update toast khi thay đổi
 let profileState = {
   apiKey: '',
   profiles: {}, // { [profileId]: { cookie: '', access_token: '', fb_dtsg: '', lsd: '', spin_r: '', spin_t: '', groups: string[] } }
@@ -133,6 +136,38 @@ try {
 function updateRowCount() {
   const count = tbody.children.length;
   rowCount.textContent = count;
+  
+  // Cập nhật toast số user nếu đang lấy thông tin
+  updateInfoUserCountToast();
+}
+
+// Cập nhật toast hiển thị số user đã quét được
+// Chỉ cập nhật khi rowCount tăng (có user mới), không cập nhật nếu rowCount giữ nguyên hoặc giảm
+function updateInfoUserCountToast() {
+  if (!isInfoCollectorRunning) return;
+  
+  const toast = document.getElementById('infoUserCountToast');
+  const text = document.getElementById('infoUserCountToastText');
+  
+  if (!toast || !text || !rowCount) return;
+  
+  const currentCount = parseInt(rowCount.textContent || '0', 10);
+  
+  // Nếu chưa có giá trị tracking, lưu giá trị hiện tại và hiển thị toast
+  if (lastRowCountForToast === null) {
+    lastRowCountForToast = currentCount;
+    text.textContent = `Đã quét được ${currentCount} user`;
+    toast.style.display = 'block';
+    return;
+  }
+  
+  // Chỉ update khi rowCount tăng (có user mới)
+  if (currentCount > lastRowCountForToast) {
+    lastRowCountForToast = currentCount;
+    text.textContent = `Đã quét được ${currentCount} user`;
+    toast.style.display = 'block';
+  }
+  // Nếu rowCount giữ nguyên hoặc giảm, không làm gì (giữ nguyên giá trị cũ trong toast)
 }
 
 // Load dữ liệu quản lý post từ file post_ids
@@ -1800,6 +1835,11 @@ function resetInfoCollectorState() {
   if (progressToast && (!scanToast || scanToast.style.display === 'none')) {
     progressToast.style.display = 'none';
   }
+  // Ẩn toast số user đã quét được
+  const infoUserCountToast = document.getElementById('infoUserCountToast');
+  if (infoUserCountToast) infoUserCountToast.style.display = 'none';
+  // Reset tracking
+  lastRowCountForToast = null;
 }
 
 async function handleStopAll() {
@@ -1914,6 +1954,10 @@ async function handleStopSelectedProfiles() {
         setScanning(false);
         setButtonLoading(scanStartBtn, false);
         setButtonLoading(scanPostsSettingBtn, false);
+        // Khi dừng quét, nếu đang ở tab scan thì bật lại autoRefreshInterval
+        if (scanView && scanView.style.display !== 'none') {
+          startAutoRefresh();
+        }
       }
     } catch (_) { }
   } catch (e) {
@@ -2013,6 +2057,10 @@ function startScanBackendPoll({ silent = true } = {}) {
       setScanning(false);
       setButtonLoading(scanStartBtn, false);
       setButtonLoading(scanPostsSettingBtn, false);
+      // Khi dừng quét, nếu đang ở tab scan thì bật lại autoRefreshInterval
+      if (scanView && scanView.style.display !== 'none') {
+        startAutoRefresh();
+      }
       if (!silent) showToast('✅ Quét: Hoàn thành', 'success', 1800);
     } else {
       syncRunningLabelsWithPauseState();
@@ -2072,7 +2120,11 @@ async function resyncUiFromBackendAfterReload() {
     setScanning(true);
     setButtonLoading(scanStartBtn, true, isPausedAll ? 'Đang tạm dừng...' : 'Đang chạy...');
     setButtonLoading(scanPostsSettingBtn, true, isPausedAll ? 'Đang tạm dừng...' : 'Đang quét...');
-    if (!dataCheckInterval) dataCheckInterval = setInterval(checkForNewData, 5000);
+    if (!dataCheckInterval) {
+      // Tắt autoRefreshInterval khi bắt đầu quét (dùng dataCheckInterval thay thế)
+      stopAutoRefresh();
+      dataCheckInterval = setInterval(checkForNewData, 5000);
+    }
     startScanBackendPoll({ silent: true });
   } else {
     setScanning(false);
@@ -2330,7 +2382,25 @@ function addGeneratedRow() {
 async function checkForNewData() {
   try {
     const res = await callBackend('/data/latest-results', { method: 'GET' });
+    const filename = res.filename;
     const data = res.data;
+    
+    // Nếu filename khác với filename hiện tại, reload toàn bộ
+    if (currentResultsFilename && filename !== currentResultsFilename) {
+      console.log(`Phát hiện file mới: ${filename} (file cũ: ${currentResultsFilename}), reload toàn bộ...`);
+      currentResultsFilename = filename;
+      // Reset tracking rowCount khi file mới được tạo
+      if (isInfoCollectorRunning) {
+        lastRowCountForToast = null;
+      }
+      await loadInitialData();
+      return;
+    }
+    
+    // Cập nhật filename nếu chưa có
+    if (!currentResultsFilename) {
+      currentResultsFilename = filename;
+    }
 
     // Lấy tất cả posts từ results_by_file
     const allPosts = [];
@@ -2475,12 +2545,22 @@ async function loadInitialData() {
   tbody.innerHTML = '';
   counter = 1;
   loadedPostIds.clear(); // Xóa danh sách post_id đã load
+  
+  // Reset tracking rowCount nếu đang lấy thông tin (để toast có thể hiển thị với rowCount mới)
+  if (isInfoCollectorRunning) {
+    lastRowCountForToast = null;
+  }
 
   try {
     // Gọi API để lấy file JSON có timestamp lớn nhất
     const res = await callBackend('/data/latest-results', { method: 'GET' });
+    const filename = res.filename;
     const data = res.data;
-    console.log(`Đã load file JSON gần nhất: ${res.filename}, tổng số files:`, data.total_files);
+    
+    // Cập nhật filename hiện tại
+    currentResultsFilename = filename;
+    
+    console.log(`Đã load file JSON gần nhất: ${filename}, tổng số files:`, data.total_files);
 
     // Lấy tất cả posts từ results_by_file
     const allPosts = [];
@@ -2903,6 +2983,8 @@ async function startScanFlowMultiThread(options = {}) {
 
     // Tự động kiểm tra dữ liệu mới mỗi 5 giây
     const checkInterval = 5000;
+    // Tắt autoRefreshInterval khi bắt đầu quét (dùng dataCheckInterval thay thế)
+    stopAutoRefresh();
     dataCheckInterval = setInterval(checkForNewData, checkInterval);
 
     setScanning(true);
@@ -2962,6 +3044,8 @@ async function startScanFlow(options = {}) {
 
     // Tự động kiểm tra dữ liệu mới mỗi 5 giây để cập nhật khi có dữ liệu mới
     const checkInterval = 5000; // 5 giây
+    // Tắt autoRefreshInterval khi bắt đầu quét (dùng dataCheckInterval thay thế)
+    stopAutoRefresh();
     dataCheckInterval = setInterval(checkForNewData, checkInterval);
 
     setScanning(true);
@@ -4100,6 +4184,15 @@ async function runInfoCollector(mode = 'all') {
   // Đánh dấu đang chạy
   isInfoCollectorRunning = true;
   
+  // Reset tracking rowCount để đảm bảo toast chỉ hiển thị khi có thay đổi mới
+  lastRowCountForToast = null;
+  
+  // Reset rowCount về 0 và hiển thị toast ngay khi bắt đầu
+  if (rowCount) {
+    rowCount.textContent = '0';
+  }
+  updateInfoUserCountToast();
+  
   // Hiển thị toast khi bắt đầu
   const startMsg = isSelected 
     ? `Đang lấy thông tin cho ${selected.length} profile đã chọn...` 
@@ -4143,6 +4236,8 @@ async function runInfoCollector(mode = 'all') {
     // Tự động tải lại danh sách quét với dữ liệu mới nhất theo timestamp
     try {
       await loadInitialData();
+      // Sau khi loadInitialData() hoàn thành (rowCount đã reset đúng), mới hiển thị toast
+      updateInfoUserCountToast();
       showToast('Đã cập nhật danh sách quét với dữ liệu mới nhất', 'success', 3500);
     } catch (loadErr) {
       console.warn('Không thể tải lại danh sách quét:', loadErr);
@@ -4217,12 +4312,56 @@ function switchTab(key) {
   if (key === 'post') {
     loadPostsForManager();
   }
+  
+  // Bật/tắt auto-refresh khi ở tab kết quả
+  if (key === 'scan') {
+    startAutoRefresh();
+  } else {
+    stopAutoRefresh();
+  }
 
   // nhớ tab đang mở để không bị nhảy về tab đầu
   try {
     localStorage.setItem(ACTIVE_TAB_KEY, key);
   } catch (e) {
     // ignore
+  }
+}
+
+// Bật auto-refresh khi ở tab kết quả
+function startAutoRefresh() {
+  // Nếu đã có interval thì không tạo mới
+  if (autoRefreshInterval) {
+    return;
+  }
+  
+  // Nếu đang có dataCheckInterval (khi đang quét) thì không tạo autoRefreshInterval
+  // vì dataCheckInterval đã đảm nhiệm việc check dữ liệu mới
+  if (dataCheckInterval) {
+    return;
+  }
+  
+  // Tạo interval để kiểm tra dữ liệu mới mỗi 5 giây
+  autoRefreshInterval = setInterval(async () => {
+    // Chỉ chạy khi đang ở tab scan (kết quả) và không có dataCheckInterval đang chạy
+    if (scanView && scanView.style.display !== 'none' && !dataCheckInterval) {
+      try {
+        await checkForNewData();
+      } catch (err) {
+        console.error('Lỗi khi auto-refresh dữ liệu:', err);
+      }
+    }
+  }, 5000);
+  
+  console.log('Đã bật auto-refresh cho tab kết quả');
+}
+
+// Tắt auto-refresh
+function stopAutoRefresh() {
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval);
+    autoRefreshInterval = null;
+    console.log('Đã tắt auto-refresh');
   }
 }
 

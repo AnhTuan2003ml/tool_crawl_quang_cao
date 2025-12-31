@@ -452,15 +452,15 @@ def process_post_ids_file(file_path):
 
             # LUÔN XÓA post_id đã xử lý khỏi file nguồn (dù thành công hay lỗi)
             # để tránh file bị kẹt với các post lỗi
-                post_ids.pop(idx)
-                try:
-                    with file_path.open("w", encoding="utf-8") as f:
-                        json.dump(post_ids, f, ensure_ascii=False, indent=2)
-                    print(f"🗑️ Đã xóa post_id {post_id} khỏi {file_name}")
-                except Exception as e:
-                    print(f"⚠️ Không thể ghi lại file {file_name} sau khi xóa post_id: {e}")
-                # không tăng idx vì đã pop, danh sách đã dịch sang trái
-                continue
+            post_ids.pop(idx)
+            try:
+                with file_path.open("w", encoding="utf-8") as f:
+                    json.dump(post_ids, f, ensure_ascii=False, indent=2)
+                print(f"🗑️ Đã xóa post_id {post_id} khỏi {file_name}")
+            except Exception as e:
+                print(f"⚠️ Không thể ghi lại file {file_name} sau khi xóa post_id: {e}")
+            # không tăng idx vì đã pop, danh sách đã dịch sang trái
+            continue
         
         return results
         
