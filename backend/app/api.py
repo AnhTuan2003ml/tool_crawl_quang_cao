@@ -30,6 +30,7 @@ app = FastAPI(title="NST Tool API", version="1.0.0")
 class InfoRunRequest(BaseModel):
     mode: str = "all"  # "all" hoặc "selected"
     profiles: list[str] | None = None
+    continuous: bool = False  # continuous mode
 
 
 # Cho phép frontend (file tĩnh) gọi API qua localhost
@@ -49,6 +50,8 @@ _join_groups_lock = threading.Lock()
 _join_groups_processes: Dict[str, Process] = {}
 _feed_lock = threading.Lock()
 _feed_processes: Dict[str, Process] = {}
+_info_stop_event = threading.Event()
+_info_thread: threading.Thread | None = None
 
 
 def _hard_stop_everything(reason: str = "") -> dict:
@@ -154,6 +157,15 @@ def _hard_stop_everything(reason: str = "") -> dict:
         print(f"⚠️ Lỗi khi dừng multi-thread runner: {e}")
         import traceback
         traceback.print_exc()
+
+    # 7.5) Stop continuous info thread
+    try:
+        global _info_stop_event, _info_thread
+        _info_stop_event.set()
+        if _info_thread and _info_thread.is_alive():
+            print("🛑 Đã set stop event cho info collector (continuous)")
+    except Exception:
+        pass
 
     # 8) Reset runtime state về mặc định (để lần sau bấm chạy là "mới hoàn toàn")
     try:
@@ -1755,8 +1767,8 @@ async def run_info_collector(payload: InfoRunRequest = Body(...)) -> dict:
       - mode="all": chạy toàn bộ post_ids dir (giống CLI hiện tại)
       - mode="selected": chỉ chạy các profile_id truyền trong payload.profiles
     
-    TRƯỚC KHI lấy cookie, sẽ kiểm tra xem có dữ liệu bài viết không.
-    Nếu có dữ liệu thì mới lấy cookie, sau đó mới lấy thông tin.
+    LƯU Ý: Không tự động lấy cookie nữa. Cookie phải được lấy thủ công bằng nút "Lấy cookie" trước.
+    Chỉ kiểm tra xem có dữ liệu bài viết không, sau đó lấy thông tin (sử dụng cookie đã có trong settings.json).
     """
     mode = (payload.mode or "all").lower()
     
@@ -1770,58 +1782,24 @@ async def run_info_collector(payload: InfoRunRequest = Body(...)) -> dict:
     except Exception:
         pass
     
-    # 🆕 BƯỚC 1: KIỂM TRA DỮ LIỆU TRƯỚC
+    # 🆕 BƯỚC 1: KIỂM TRA DỮ LIỆU TRƯỚC (Trừ khi chạy continuous)
     try:
-        has_data = _check_data_exists(mode, payload.profiles if mode == "selected" else None)
-        if not has_data:
-            print(f"⚠️ [/info/run] Không có dữ liệu bài viết để xử lý")
-            raise HTTPException(status_code=400, detail="Không có dữ liệu bài viết để xử lý")
-        print(f"✅ [/info/run] Đã kiểm tra: có dữ liệu bài viết, tiếp tục lấy cookie...")
+        # Nếu continuous, ta cho phép chạy dù chưa có dữ liệu (worker sẽ đợi)
+        if not payload.continuous:
+            has_data = _check_data_exists(mode, payload.profiles if mode == "selected" else None)
+            if not has_data:
+                print(f"⚠️ [/info/run] Không có dữ liệu bài viết để xử lý")
+                raise HTTPException(status_code=400, detail="Không có dữ liệu bài viết để xử lý")
+            print(f"✅ [/info/run] Đã kiểm tra: có dữ liệu bài viết, tiếp tục lấy thông tin...")
+        else:
+            print(f"ℹ️ [/info/run] Mode continuous: Bỏ qua check dữ liệu ban đầu")
     except HTTPException:
         raise
     except Exception as e:
         print(f"⚠️ [/info/run] Lỗi khi kiểm tra dữ liệu: {e}")
         raise HTTPException(status_code=400, detail="Không có dữ liệu bài viết để xử lý")
     
-    # 🆕 BƯỚC 2: LẤY COOKIE CHO TẤT CẢ PROFILE (TUẦN TỰ) - CHỈ KHI CÓ DỮ LIỆU
-    profiles_to_fetch_cookies = []
-    try:
-        if mode == "selected":
-            profiles_to_fetch_cookies = payload.profiles or []
-            if not profiles_to_fetch_cookies:
-                raise HTTPException(status_code=400, detail="profiles is required when mode=selected")
-        else:
-            # Mode "all": lấy tất cả profile từ settings.json
-            raw = _read_settings_raw()
-            all_profiles = raw.get("PROFILE_IDS") or {}
-            if isinstance(all_profiles, dict):
-                profiles_to_fetch_cookies = list(all_profiles.keys())
-            else:
-                profiles_to_fetch_cookies = []
-        
-        # Lấy cookie tuần tự cho từng profile (tránh race condition)
-        # Dùng run_in_threadpool vì _fetch_cookie_for_profile dùng Playwright Sync API
-        if profiles_to_fetch_cookies:
-            print(f"🍪 [/info/run] Bắt đầu lấy cookie cho {len(profiles_to_fetch_cookies)} profile(s)...")
-            cookie_results = []
-            for pid in profiles_to_fetch_cookies:
-                # Chạy trong thread pool để tránh lỗi "Playwright Sync API inside asyncio loop"
-                result = await run_in_threadpool(_fetch_cookie_for_profile, pid)
-                cookie_results.append(result)
-                if result["status"] == "ok":
-                    print(f"✅ [{pid}] Đã lấy cookie thành công")
-                else:
-                    print(f"⚠️ [{pid}] Lỗi lấy cookie: {result.get('message', 'Unknown error')}")
-            
-            # Thống kê kết quả
-            success_count = sum(1 for r in cookie_results if r["status"] == "ok")
-            error_count = len(cookie_results) - success_count
-            print(f"🍪 [/info/run] Hoàn thành lấy cookie: {success_count} thành công, {error_count} lỗi")
-    except Exception as e:
-        # Nếu lỗi khi lấy cookie, log nhưng vẫn tiếp tục lấy thông tin
-        print(f"⚠️ [/info/run] Lỗi khi lấy cookie: {e}, nhưng vẫn tiếp tục lấy thông tin...")
-    
-    # 🆕 BƯỚC 3: SAU KHI LẤY ĐỦ COOKIE, MỚI BẮT ĐẦU LẤY THÔNG TIN
+    # BƯỚC 2: BẮT ĐẦU LẤY THÔNG TIN (KHÔNG TỰ ĐỘNG LẤY COOKIE NỮA - CHỈ LẤY KHI BẤM NÚT)
     try:
         if mode == "selected":
             profiles = payload.profiles or []
@@ -1829,7 +1807,29 @@ async def run_info_collector(payload: InfoRunRequest = Body(...)) -> dict:
                 raise HTTPException(status_code=400, detail="profiles is required when mode=selected")
             summary = await run_in_threadpool(get_info_for_profile_ids, profiles)
         else:
-            summary = await run_in_threadpool(get_all_info_from_post_ids_dir)
+            if payload.continuous:
+                print(f"🚀 [/info/run] Khởi động lấy thông tin liên tục (Continuous Mode)...")
+                # Chạy trong thread riêng để không block request
+                global _info_thread, _info_stop_event
+                
+                # Nếu đang chạy, signal stop trước (best effort)
+                if _info_thread and _info_thread.is_alive():
+                    print("⚠️ Info thread cũ đang chạy, request stop...")
+                    _info_stop_event.set()
+                    # Không join để tránh block, nhưng clear event ngay sau đây sẽ rủi ro?
+                    # Tạm thời clear luôn để thread mới chạy được, thread cũ check stop trễ thì tự die
+                
+                _info_stop_event.clear()
+                t = threading.Thread(
+                    target=get_all_info_from_post_ids_dir,
+                    daemon=True
+                )
+                t.start()
+                _info_thread = t
+                
+                summary = {"status": "started", "mode": "continuous", "message": "Đã khởi động lấy thông tin liên tục"}
+            else:
+                summary = await run_in_threadpool(get_all_info_from_post_ids_dir)
         return {"status": "ok", "mode": mode, "summary": summary}
     except ValueError as e:
         # Nếu không có dữ liệu bài viết thì trả về message rõ ràng

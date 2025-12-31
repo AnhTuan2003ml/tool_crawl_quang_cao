@@ -95,6 +95,8 @@ let currentResultsFilename = null; // Track filename hiện tại để phát hi
 let autoRefreshInterval = null; // Interval để auto-refresh khi ở tab kết quả
 let postsLoaded = false; // Đã load dữ liệu quản lý post hay chưa
 let lastRowCountForToast = null; // Track rowCount cũ để chỉ update toast khi thay đổi
+let continuousInfoCollectorInterval = null; // Interval để chạy lấy thông tin liên tục
+let isContinuousInfoCollectorRunning = false; // Flag để biết có đang chạy lấy thông tin liên tục không
 let profileState = {
   apiKey: '',
   profiles: {}, // { [profileId]: { cookie: '', access_token: '', fb_dtsg: '', lsd: '', spin_r: '', spin_t: '', groups: string[] } }
@@ -1813,6 +1815,100 @@ if (scanStartBtn) {
   });
 }
 
+// Chạy lấy thông tin liên tục: cứ có bài là quét, không có thì tạm ngừng, có bài lại quét tiếp
+async function runContinuousInfoCollector() {
+  if (!isContinuousInfoCollectorRunning) {
+    console.log('⚠️ Continuous info collector: Không đang chạy, bỏ qua');
+    return;
+  }
+
+  try {
+    // Check xem có post_ids không
+    const res = await callBackendNoAlert('/data/post-ids', { method: 'GET' });
+    console.log('🔍 Continuous info collector: Check post_ids response:', res);
+    
+    // Check xem có files và có ít nhất 1 file có post_ids không
+    const hasPosts = res && res.files && Array.isArray(res.files) && res.files.length > 0 && res.total > 0;
+
+    console.log(`🔍 Continuous info collector: hasPosts=${hasPosts}, files.length=${res?.files?.length || 0}, total=${res?.total || 0}, isInfoCollectorRunning=${isInfoCollectorRunning}`);
+
+    if (hasPosts) {
+      // Có bài viết, chạy lấy thông tin
+      console.log('🔄 Continuous info collector: Có bài viết, bắt đầu lấy thông tin...');
+
+      // Chỉ chạy nếu không đang chạy lấy thông tin
+      if (!isInfoCollectorRunning) {
+        console.log('✅ Continuous info collector: Bắt đầu chạy runInfoCollector("all", skipScanCheck=true)');
+        // Chạy không await để không block polling, skipScanCheck=true để chạy ngay cả khi đang scanning
+        runInfoCollector('all', true).catch(e => {
+          console.error('❌ Lỗi khi chạy lấy thông tin liên tục:', e);
+          // Nếu lỗi "không có dữ liệu bài viết", tiếp tục polling
+          const errorMsg = (e?.message || e?.detail || String(e) || '').toLowerCase();
+          if (!errorMsg.includes('không có dữ liệu bài viết') &&
+              !errorMsg.includes('khong co du lieu bai viet') &&
+              !errorMsg.includes('no data') &&
+              !errorMsg.includes('empty')) {
+            // Lỗi khác, có thể dừng polling
+            console.warn('⚠️ Lỗi nghiêm trọng, dừng continuous info collector');
+            stopContinuousInfoCollector();
+          }
+        });
+      } else {
+        console.log('⏸️ Continuous info collector: Đang chạy lấy thông tin, bỏ qua');
+      }
+    } else {
+      // Không có bài viết, đợi lâu hơn trước khi check lại
+      console.log('⏸️ Continuous info collector: Không có bài viết, đợi...');
+    }
+  } catch (e) {
+    console.error('❌ Lỗi khi check post_ids:', e);
+    // Lỗi khi check, đợi một lúc rồi thử lại
+  }
+}
+
+// Bắt đầu chạy lấy thông tin liên tục
+function startContinuousInfoCollector() {
+  if (isContinuousInfoCollectorRunning) {
+    console.log('⚠️ Continuous info collector: Đã đang chạy, bỏ qua');
+    return;
+  }
+
+  isContinuousInfoCollectorRunning = true;
+  console.log('🚀 Bắt đầu chạy lấy thông tin liên tục');
+
+  // Chạy ngay lập tức lần đầu
+  runContinuousInfoCollector();
+
+  // Sau đó poll mỗi 30 giây để check có bài viết mới không
+  if (continuousInfoCollectorInterval) {
+    clearInterval(continuousInfoCollectorInterval);
+    continuousInfoCollectorInterval = null;
+  }
+  continuousInfoCollectorInterval = setInterval(() => {
+    if (isContinuousInfoCollectorRunning) {
+      console.log('⏰ Continuous info collector: Polling check post_ids...');
+      runContinuousInfoCollector();
+    } else {
+      console.log('⚠️ Continuous info collector: Đã dừng, clear interval');
+      if (continuousInfoCollectorInterval) {
+        clearInterval(continuousInfoCollectorInterval);
+        continuousInfoCollectorInterval = null;
+      }
+    }
+  }, 30000); // 30 giây
+  console.log(`✅ Continuous info collector: Interval đã được set (mỗi 30 giây), interval ID: ${continuousInfoCollectorInterval}`);
+}
+
+// Dừng chạy lấy thông tin liên tục
+function stopContinuousInfoCollector() {
+  if (continuousInfoCollectorInterval) {
+    clearInterval(continuousInfoCollectorInterval);
+    continuousInfoCollectorInterval = null;
+  }
+  isContinuousInfoCollectorRunning = false;
+  console.log('🛑 Dừng chạy lấy thông tin liên tục');
+}
+
 /**
  * Helper function để reset info collector state
  */
@@ -1844,6 +1940,9 @@ function resetInfoCollectorState() {
 
 async function handleStopAll() {
   console.log('[UI] STOP ALL triggered');
+  
+  // Dừng continuous info collector trước
+  stopContinuousInfoCollector();
   
   // Reset info collector state ngay lập tức
   resetInfoCollectorState();
@@ -3345,7 +3444,8 @@ if (startScanBtn) {
 
     setButtonLoading(startScanBtn, true, 'Đang chạy...');
     try {
-      // Gọi multi-thread runner để chạy song song feed+search và group scan
+      // Chạy 3 cái cùng lúc: feed+search, group scan, và lấy thông tin liên tục
+      // 1. Chạy feed+search và group scan
       await startScanFlowMultiThread({ 
         runMinutes, 
         restMinutes, 
@@ -3355,10 +3455,19 @@ if (startScanBtn) {
         startDate,
         endDate
       });
+      
+      // 2. Bắt đầu chạy lấy thông tin liên tục (không chờ)
+      console.log('📍 [startScanBtn] Gọi startContinuousInfoCollector()...');
+      startContinuousInfoCollector();
+      console.log('📍 [startScanBtn] Đã gọi startContinuousInfoCollector()');
+      
+      showToast('✅ Đã khởi động quét feed+search, group scan và lấy thông tin liên tục', 'success', 3000);
     } catch (e) {
       showToast('Không chạy được quét bài viết (kiểm tra FastAPI).', 'error');
       setButtonLoading(startScanBtn, false);
       setScanning(false);
+      // Nếu lỗi thì cũng dừng continuous info collector
+      stopContinuousInfoCollector();
     }
   });
 }
@@ -4142,7 +4251,7 @@ async function waitForScanToComplete(maxWaitSeconds = 300) {
   return false;
 }
 
-async function runInfoCollector(mode = 'all') {
+async function runInfoCollector(mode = 'all', skipScanCheck = false) {
   const isSelected = mode === 'selected';
   const btn = isSelected ? runSelectedInfoBtn : runAllInfoBtn;
   const selected = getSelectedProfileIds();
@@ -4153,32 +4262,36 @@ async function runInfoCollector(mode = 'all') {
     return;
   }
 
-  // Kiểm tra xem quét có đang chạy không
-  try {
-    const st = await callBackendNoAlert('/jobs/status', { method: 'GET' });
-    if (st) lastJobsStatus = st;
-    
-    const botHasProfiles = Array.isArray(st && st.bot_profile_ids) && st.bot_profile_ids.length > 0;
-    const isScanning = !!(st && st.bot_running && botHasProfiles);
-    
-    if (isScanning) {
-      // Quét đang chạy, đợi quét xong
-      setButtonLoading(btn, true, 'Đang đợi quét xong...');
-      showToast('Đang đợi quét bài viết hoàn thành...', 'info', 3000);
+  // Kiểm tra xem quét có đang chạy không (bỏ qua nếu skipScanCheck = true - dùng cho continuous collector)
+  if (!skipScanCheck) {
+    try {
+      const st = await callBackendNoAlert('/jobs/status', { method: 'GET' });
+      if (st) lastJobsStatus = st;
       
-      const scanCompleted = await waitForScanToComplete(60); // Đợi tối đa 5 phút
+      const botHasProfiles = Array.isArray(st && st.bot_profile_ids) && st.bot_profile_ids.length > 0;
+      const isScanning = !!(st && st.bot_running && botHasProfiles);
       
-      if (!scanCompleted) {
-        showToast('Quét vẫn chưa xong sau 1 phút. Bắt đầu lấy thông tin...', 'warning', 3000);
-      } else {
-        showToast('Quét đã xong. Bắt đầu lấy thông tin...', 'success', 2000);
-        // Đợi thêm 1 giây để đảm bảo quét hoàn toàn xong
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      if (isScanning) {
+        // Quét đang chạy, đợi quét xong
+        setButtonLoading(btn, true, 'Đang đợi quét xong...');
+        showToast('Đang đợi quét bài viết hoàn thành...', 'info', 3000);
+        
+        const scanCompleted = await waitForScanToComplete(60); // Đợi tối đa 5 phút
+        
+        if (!scanCompleted) {
+          showToast('Quét vẫn chưa xong sau 1 phút. Bắt đầu lấy thông tin...', 'warning', 3000);
+        } else {
+          showToast('Quét đã xong. Bắt đầu lấy thông tin...', 'success', 2000);
+          // Đợi thêm 1 giây để đảm bảo quét hoàn toàn xong
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       }
+    } catch (e) {
+      console.warn('Không thể kiểm tra trạng thái quét:', e);
+      // Nếu lỗi, tiếp tục lấy thông tin bình thường
     }
-  } catch (e) {
-    console.warn('Không thể kiểm tra trạng thái quét:', e);
-    // Nếu lỗi, tiếp tục lấy thông tin bình thường
+  } else {
+    console.log('🔄 runInfoCollector: Bỏ qua check scanning (skipScanCheck=true)');
   }
 
   // Đánh dấu đang chạy
