@@ -460,32 +460,116 @@ button:active {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-  color     : white;
-  box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.4);
+  background    : linear-gradient(135deg, #3b82f6 0%, #1d4ed8 50%, #1e40af 100%);
+  color         : white;
+  box-shadow    : 0 4px 14px 0 rgba(59, 130, 246, 0.4);
+  border        : 1px solid rgba(255, 255, 255, 0.2);
+  border-radius : 10px;
+  position      : relative;
+  overflow      : hidden;
+  transition    : all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(8px);
+}
+
+.btn-primary::before {
+  content         : '';
+  position        : absolute;
+  top             : 0;
+  left            : -100%;
+  width           : 100%;
+  height          : 100%;
+  background      : linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition      : left 0.6s ease;
+}
+
+.btn-primary:hover::before {
+  left: 100%;
 }
 
 .btn-primary:hover {
-  box-shadow: 0 6px 20px 0 rgba(99, 102, 241, 0.5);
-  transform : translateY(-2px);
+  box-shadow: 0 8px 25px 0 rgba(59, 130, 246, 0.6), 0 4px 12px 0 rgba(0, 0, 0, 0.15);
+  transform : translateY(-3px) scale(1.02);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
-.btn-primary:disabled {
-  background: #9ca3af;
-  cursor    : not-allowed;
-  box-shadow: none;
-  transform : none;
+.btn-primary:active {
+  transform : translateY(-1px) scale(0.98);
+  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.2);
+  transition: all 0.1s ease;
+}
+
+.btn-primary:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3), 0 4px 14px 0 rgba(59, 130, 246, 0.4);
+}
+
+.btn-primary:disabled,
+.btn-danger:disabled,
+.btn-success:disabled {
+  background    : linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+  cursor        : not-allowed;
+  box-shadow    : 0 2px 8px 0 rgba(156, 163, 175, 0.3);
+  transform     : none;
+  border-color  : rgba(156, 163, 175, 0.3);
+  opacity       : 0.6;
+}
+
+.btn-primary:disabled::before,
+.btn-danger:disabled::before,
+.btn-success:disabled::before {
+  display: none;
+}
+
+.btn-primary:disabled:hover,
+.btn-danger:disabled:hover,
+.btn-success:disabled:hover {
+  transform     : none;
+  box-shadow    : 0 2px 8px 0 rgba(156, 163, 175, 0.3);
+  border-color  : rgba(156, 163, 175, 0.3);
 }
 
 .btn-danger {
-  background: linear-gradient(135deg, var(--danger) 0%, var(--danger-dark) 100%);
-  color     : white;
-  box-shadow: 0 4px 14px 0 rgba(239, 68, 68, 0.4);
+  background    : linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%);
+  color         : white;
+  box-shadow    : 0 4px 14px 0 rgba(239, 68, 68, 0.4);
+  border        : 1px solid rgba(255, 255, 255, 0.2);
+  border-radius : 10px;
+  position      : relative;
+  overflow      : hidden;
+  transition    : all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(8px);
+}
+
+.btn-danger::before {
+  content         : '';
+  position        : absolute;
+  top             : 0;
+  left            : -100%;
+  width           : 100%;
+  height          : 100%;
+  background      : linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition      : left 0.6s ease;
+}
+
+.btn-danger:hover::before {
+  left: 100%;
 }
 
 .btn-danger:hover {
-  box-shadow: 0 6px 20px 0 rgba(239, 68, 68, 0.5);
-  transform : translateY(-2px);
+  box-shadow: 0 8px 25px 0 rgba(239, 68, 68, 0.6), 0 4px 12px 0 rgba(0, 0, 0, 0.15);
+  transform : translateY(-3px) scale(1.02);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.btn-danger:active {
+  transform : translateY(-1px) scale(0.98);
+  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.2);
+  transition: all 0.1s ease;
+}
+
+.btn-danger:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.3), 0 4px 14px 0 rgba(239, 68, 68, 0.4);
 }
 
 .btn-danger:disabled {
@@ -496,14 +580,47 @@ button:active {
 }
 
 .btn-success {
-  background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
-  color     : white;
-  box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.4);
+  background    : linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%);
+  color         : white;
+  box-shadow    : 0 4px 14px 0 rgba(16, 185, 129, 0.4);
+  border        : 1px solid rgba(255, 255, 255, 0.2);
+  border-radius : 10px;
+  position      : relative;
+  overflow      : hidden;
+  transition    : all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(8px);
+}
+
+.btn-success::before {
+  content         : '';
+  position        : absolute;
+  top             : 0;
+  left            : -100%;
+  width           : 100%;
+  height          : 100%;
+  background      : linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition      : left 0.6s ease;
+}
+
+.btn-success:hover::before {
+  left: 100%;
 }
 
 .btn-success:hover {
-  box-shadow: 0 6px 20px 0 rgba(16, 185, 129, 0.5);
-  transform : translateY(-2px);
+  box-shadow: 0 8px 25px 0 rgba(16, 185, 129, 0.6), 0 4px 12px 0 rgba(0, 0, 0, 0.15);
+  transform : translateY(-3px) scale(1.02);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.btn-success:active {
+  transform : translateY(-1px) scale(0.98);
+  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.2);
+  transition: all 0.1s ease;
+}
+
+.btn-success:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.3), 0 4px 14px 0 rgba(16, 185, 129, 0.4);
 }
 
 .btn-success:disabled {
@@ -533,7 +650,19 @@ button:active {
 }
 
 .btn-icon {
-  font-size: 16px;
+  font-size    : 16px;
+  transition   : all 0.3s ease;
+  display      : inline-flex;
+  align-items  : center;
+  justify-content: center;
+  filter       : drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+}
+
+.btn-primary:hover .btn-icon,
+.btn-danger:hover .btn-icon,
+.btn-success:hover .btn-icon {
+  transform: scale(1.1) rotate(5deg);
+  filter  : drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
 }
 
 .status-line {
@@ -596,6 +725,22 @@ button:active {
   gap           : 8px;
 }
 
+.filter-group.filter-group-with-time {
+  display        : flex;
+  align-items    : center;
+  justify-content: space-between; /* Label/buttons trái, đồng hồ phải */
+  gap            : 16px;
+  flex-wrap      : wrap; /* Wrap trên mobile */
+  flex-direction: row; /* Override column */
+}
+
+.filter-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1; /* Chiếm không gian còn lại */
+}
+
 .filter-group {
   padding-bottom: 12px;
 }
@@ -620,14 +765,25 @@ button:active {
   width          : 100%;
   box-shadow     : 0 2px 6px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
   transition     : all 0.3s ease;
-  justify-content: space-between;
+  justify-content: flex-start; /* Thay đổi từ space-between thành flex-start */
+  flex-wrap      : wrap;       /* Vẫn giữ wrap cho time filter elements */
+}
+
+.action-buttons-standalone {
+  display        : flex;
+  justify-content: center; /* Căn giữa container */
+  margin         : 8px auto 12px auto; /* Giảm margin trên, giữ margin dưới */
+  padding        : 8px 0;  /* Giảm padding */
+  max-width      : 600px;  /* Giới hạn width tối đa */
 }
 
 .action-buttons-group {
   display    : flex;
   align-items: center;
-  gap        : 8px;
-  margin-left: auto;
+  gap        : 12px;       /* Khoảng cách giữa các button */
+  flex-wrap  : nowrap;     /* Luôn xếp ngang, không wrap */
+  justify-content: center; /* Căn giữa trong group */
+  width      : 100%;       /* Chiếm full width */
 }
 
 .time-filter-inline:hover {
@@ -750,16 +906,117 @@ button:active {
   transform: translateY(0) scale(1);
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .time-filter-inline {
-    flex-wrap: wrap;
-  }
-
-  .time-filter-input-compact {
-    min-width: 120px;
+/* Responsive cho Action Buttons */
+@media (max-width: 1200px) {
+  .action-buttons-group {
+    gap: 10px;
   }
 }
+
+@media (max-width: 992px) {
+  .action-buttons-group {
+    gap: 8px;
+  }
+
+  .action-buttons-standalone {
+    margin: 6px auto 10px auto;
+    max-width: 550px;
+  }
+}
+
+@media (max-width: 768px) {
+  .filter-group.filter-group-with-time {
+    flex-direction: column; /* Xếp dọc trên mobile */
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .filter-content {
+    width: 100%; /* Chiếm full width trên mobile */
+  }
+
+  .current-time-display {
+    align-self: flex-end; /* Đồng hồ căn phải trên mobile */
+    margin: 4px 0;
+  }
+
+  .action-buttons-standalone {
+    margin: 6px auto 8px auto;
+    padding: 6px 0;
+    max-width: 500px;
+  }
+
+  .action-buttons-group {
+    gap: 6px; /* Giảm gap để fit hơn */
+    justify-content: center;
+    flex-wrap: nowrap; /* Đảm bảo không wrap */
+  }
+
+  .btn-primary, .btn-danger, .btn-success {
+    font-size: 11px; /* Giảm font-size */
+    padding: 6px 6px; /* Giảm padding */
+    min-width: 70px; /* Giảm min-width */
+    white-space: nowrap; /* Không xuống dòng text */
+  }
+
+  /* Ẩn text trên mobile nhỏ để chỉ hiện icon */
+  .start-scan-btn-inline span:last-child,
+  .stop-scan-btn-inline span:last-child,
+  .export-btn-inline-time span:last-child {
+    display: none;
+  }
+
+  .btn-icon {
+    font-size: 16px; /* Tăng icon size khi ẩn text */
+  }
+}
+
+@media (max-width: 576px) {
+  .action-buttons-standalone {
+    margin: 4px auto 6px auto;
+    padding: 4px 0;
+    max-width: 100%;
+    overflow-x: auto; /* Cho phép scroll ngang nếu cần */
+  }
+
+  .action-buttons-group {
+    gap: 4px; /* Giảm gap tối đa */
+    justify-content: center;
+    padding: 0 2px;
+    flex-wrap: nowrap; /* Đảm bảo không wrap */
+    min-width: fit-content; /* Không co lại quá nhỏ */
+  }
+
+  .btn-primary, .btn-danger, .btn-success {
+    padding: 6px 4px; /* Giảm padding tối đa */
+    font-size: 10px; /* Giảm font-size tối đa */
+    min-width: 60px; /* Giảm min-width tối đa */
+    white-space: nowrap;
+  }
+
+  /* Luôn ẩn text trên mobile nhỏ để chỉ hiện icon */
+  .start-scan-btn-inline span:last-child,
+  .stop-scan-btn-inline span:last-child,
+  .export-btn-inline-time span:last-child {
+    display: none !important;
+  }
+
+  .btn-icon {
+    font-size: 16px; /* Tăng icon size */
+  }
+}
+
+/*
+CSS cũ cho time-filter đã được comment out vì không còn sử dụng:
+
+.time-filter-inline { ... }
+.time-filter-compact { ... }
+.time-filter-input-compact { ... }
+.time-filter-separator { ... }
+.time-filter-btn-compact { ... }
+.time-filter-apply-compact { ... }
+.time-filter-clear-compact { ... }
+*/
 
 .filter-label {
   font-size    : 13px;
@@ -2541,7 +2798,8 @@ tbody tr:last-child td {
   font-weight: 600;
 }
 
-/* Nút xem comment (icon con mắt) */
+/* Nút xem comment (icon con mắt) - không sử dụng nữa */
+/*
 .comment-eye-btn {
   background   : transparent;
   border       : none;
@@ -2557,21 +2815,22 @@ tbody tr:last-child td {
   background: rgba(148, 163, 184, 0.15);
   transform : scale(1.05);
 }
+*/
 
-/* Text comment có thể click để ẩn */
+/* Text comment hiển thị đầy đủ */
 .comment-text {
-  cursor       : pointer;
   color        : var(--text-primary);
   padding      : 4px 8px;
   border-radius: 6px;
-  transition   : background 0.2s ease;
+  background   : rgba(148, 163, 184, 0.08);
   display      : inline-block;
   word-break   : break-word;
-  max-width    : 100%;
-}
-
-.comment-text:hover {
-  background: rgba(148, 163, 184, 0.1);
+  word-wrap    : break-word;
+  max-width    : 300px;
+  white-space  : normal;
+  font-size    : 13px;
+  line-height  : 1.4;
+  overflow-wrap: break-word;
 }
 
 td:nth-child(5) {
@@ -2919,28 +3178,103 @@ td:nth-child(5) {
   display        : flex;
   align-items    : center;
   gap            : 6px;
-  padding        : 10px 14px;
-  background     : linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding        : 8px 12px;
+  background     : linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #ec4899 100%);
   border-radius  : 6px;
   color          : white;
-  font-size      : 18px;
+  font-size      : 16px;
   font-weight    : 500;
-  border         : 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow     : 0 2px 4px rgba(0, 0, 0, 0.1);
-  margin-right   : 750px;
-  margin-left    : 750px;
-  min-width      : 140px;
+  border         : 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow     : 0 2px 8px rgba(79, 70, 229, 0.2), 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin         : 0;
+  max-width      : 280px;
+  width          : fit-content;
   justify-content: center;
+  transition     : all 0.3s ease;
+  backdrop-filter: blur(8px);
+  position       : relative;
+  overflow       : hidden;
+}
+
+.current-time-display::before {
+  content         : '';
+  position        : absolute;
+  top             : 0;
+  left            : -100%;
+  width           : 100%;
+  height          : 100%;
+  background      : linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transition      : left 0.6s ease;
+}
+
+.current-time-display:hover::before {
+  left: 100%;
+}
+
+.current-time-display:hover {
+  transform      : translateY(-2px);
+  box-shadow     : 0 8px 20px rgba(79, 70, 229, 0.35), 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
 .time-icon {
-  font-size: 14px;
-  opacity  : 0.9;
+  font-size     : 16px;
+  opacity       : 0.95;
+  filter        : drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+  transition    : all 0.3s ease;
+  display       : flex;
+  align-items   : center;
+  justify-content: center;
+}
+
+.current-time-display:hover .time-icon {
+  transform: scale(1.1);
+  opacity  : 1;
 }
 
 .time-text {
-  white-space: nowrap;
-  opacity    : 0.95;
+  white-space   : nowrap;
+  font-family   : 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  letter-spacing: 0.3px;
+  text-shadow   : 0 1px 2px rgba(0, 0, 0, 0.1);
+  position      : relative;
+  z-index       : 1;
+  opacity       : 0.95;
+}
+
+/* Responsive cho Current Time Display */
+@media (max-width: 768px) {
+  .current-time-display {
+    padding     : 6px 10px;
+    font-size   : 11px;
+    max-width   : 250px;
+    gap         : 4px;
+  }
+
+  .time-icon {
+    font-size: 14px;
+  }
+
+  .time-text {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 576px) {
+  .current-time-display {
+    padding     : 4px 8px;
+    font-size   : 10px;
+    max-width   : 200px;
+    gap         : 3px;
+  }
+
+  .time-icon {
+    font-size: 13px;
+  }
+
+  .time-text {
+    font-size: 11px;
+    letter-spacing: 0.2px;
+  }
 }
 
 .file-selector-container {
@@ -3119,7 +3453,7 @@ td:nth-child(5) {
 }
 
 .export-btn-inline-time {
-  background: green
+  background: rgb(43, 170, 43)
 }
 
 .start-scan-btn-inline {

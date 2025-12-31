@@ -47,6 +47,15 @@
         "https://www.facebook.com/groups/330435165902278"
       ],
       "name": "BÚN"
+    },
+    "a": {
+      "cookie": "",
+      "access_token": "",
+      "fb_dtsg": "",
+      "lsd": "",
+      "spin_r": "",
+      "spin_t": "",
+      "groups": []
     }
   },
   "RUN_MINUTES": 30,

@@ -96,64 +96,50 @@
               </div>
             </div>
 
-            <div class="filter-group">
-              <div class="filter-label">📊 Lọc theo:</div>
-              <div class="filter-buttons">
-                <button class="filter-btn filter-react" data-filter-react="has">
-                  <span>✓ Có React</span>
-                </button>
-                <button class="filter-btn filter-react" data-filter-react="none">
-                  <span>✗ Không React</span>
-                </button>
-                <button class="filter-btn filter-comment" data-filter-comment="has">
-                  <span>💬 Có Comment</span>
-                </button>
-                <button class="filter-btn filter-comment" data-filter-comment="none">
-                  <span>✗ Không Comment</span>
-                </button>
-              </div>
-            </div>
-            <div class="filter-group">
-              <div class="filter-label">⏰ Lọc theo thời gian:</div>
-              <div class="time-filter-compact">
-                <div class="time-filter-inline">
-                  <input type="datetime-local" id="timeFilterFrom" class="time-filter-input-compact" placeholder="Từ" />
-                  <span class="time-filter-separator">→</span>
-                  <input type="datetime-local" id="timeFilterTo" class="time-filter-input-compact" placeholder="Đến" />
-                  <button id="applyTimeFilterBtn" class="time-filter-btn-compact time-filter-apply-compact"
-                    title="Áp dụng">
-                    <span>✓</span>
+            <div class="filter-group filter-group-with-time">
+              <div class="filter-content">
+                <div class="filter-label">📊 Lọc theo:</div>
+                <div class="filter-buttons">
+                  <button class="filter-btn filter-react" data-filter-react="has">
+                    <span>✓ Có React</span>
                   </button>
-                  <button id="clearTimeFilterBtn" class="time-filter-btn-compact time-filter-clear-compact" title="Xóa">
-                    <span>✗</span>
+                  <button class="filter-btn filter-react" data-filter-react="none">
+                    <span>✗ Không React</span>
                   </button>
-                <!-- Action Buttons - Bên phải trong hàng lọc thời gian -->
-                <div class="action-buttons-group">
-                  <button id="startScanBtn" class="btn-primary start-scan-btn-inline">
-                    <span class="btn-icon">▶️</span>
-                    <span>Bắt đầu</span>
+                  <button class="filter-btn filter-comment" data-filter-comment="has">
+                    <span>💬 Có Comment</span>
                   </button>
-                  <button id="stopScanBtn" class="btn-danger stop-scan-btn-inline">
-                    <span class="btn-icon">⏹️</span>
-                    <span>Dừng</span>
-                  </button>
-                  <button id="exportExcelBtn" class="btn-success export-btn-inline-time">
-                    <span class="btn-icon">📊</span>
-                    <span>Xuất Excel</span>
-                  </button>
-                  <button id="sterilizeExcelBtn" class="btn-success export-btn-inline-time" style="margin-left: 8px;">
-                    <span class="btn-icon">🔍</span>
-                    <span>Lọc Excel</span>
+                  <button class="filter-btn filter-comment" data-filter-comment="none">
+                    <span>✗ Không Comment</span>
                   </button>
                 </div>
-                </div>
+              </div>
+              <!-- Current Time Display (chỉ đồng hồ sang phải) -->
+              <div id="currentTimeDisplay" class="current-time-display" title="Thời gian của file đã chọn">
+                <div class="time-icon">⏰</div>
+                <div class="time-text" id="currentTimeText">Chưa chọn file</div>
               </div>
             </div>
-
-            <!-- Current Time Display -->
-            <div id="currentTimeDisplay" class="current-time-display" title="Thời gian của file đã chọn">
-              <div class="time-icon">📄</div>
-              <div class="time-text" id="currentTimeText">Chưa chọn file</div>
+            <!-- Action Buttons Container -->
+            <div class="action-buttons-standalone">
+              <div class="action-buttons-group">
+                <button id="startScanBtn" class="btn-primary start-scan-btn-inline">
+                  <span class="btn-icon">▶️</span>
+                  <span>Bắt đầu</span>
+                </button>
+                <button id="stopScanBtn" class="btn-danger stop-scan-btn-inline">
+                  <span class="btn-icon">⏹️</span>
+                  <span>Dừng</span>
+                </button>
+                <button id="exportExcelBtn" class="btn-success export-btn-inline-time">
+                  <span class="btn-icon">📊</span>
+                  <span>Xuất Excel</span>
+                </button>
+                <button id="sterilizeExcelBtn" class="btn-success export-btn-inline-time">
+                  <span class="btn-icon">🔍</span>
+                  <span>Lọc Excel</span>
+                </button>
+              </div>
             </div>
 
             <!-- Date Range Buttons -->
