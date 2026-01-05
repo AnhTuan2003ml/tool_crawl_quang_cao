@@ -44,9 +44,8 @@ body.splash-active {
   left           : 0;
   width          : 100%;
   height         : 100%;
-  background     : linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #4facfe 75%, #00f2fe 100%);
-  background-size: 400% 400%;
-  animation      : gradientShift 15s ease infinite;
+  background     : url('icon/background.gif') center center no-repeat;
+  background-size: cover;
   display        : flex;
   align-items    : center;
   justify-content: center;
@@ -71,6 +70,76 @@ body.splash-active {
   100% {
     background-position: 0% 50%;
   }
+}
+
+.splash-language-selector {
+  position: absolute;
+  top: 30px;
+  right: 30px;
+  display: flex;
+  gap: 8px;
+  z-index: 1000;
+}
+
+.splash-lang-btn {
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  backdrop-filter: blur(10px);
+  min-width: 60px;
+  justify-content: center;
+}
+
+/* Màu cờ Việt Nam - đỏ */
+.splash-lang-vi {
+  background: linear-gradient(135deg, #DA001E 0%, #FF0000 100%);
+  border-color: #DA001E;
+  color: white;
+}
+
+.splash-lang-vi:hover {
+  background: linear-gradient(135deg, #FF0000 0%, #DA001E 100%);
+  border-color: #FF0000;
+}
+
+/* Màu cờ Hoa Kỳ - đỏ-trắng-xanh */
+.splash-lang-en {
+  background: linear-gradient(135deg, #B22234 0%, #FFFFFF 50%, #3C3B6E 100%);
+  border-color: #B22234;
+  color: white;
+}
+
+.splash-lang-en:hover {
+  background: linear-gradient(135deg, #DC143C 0%, #FFFFFF 50%, #1E90FF 100%);
+  border-color: #DC143C;
+}
+
+.splash-lang-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.5);
+  color: white;
+  transform: translateY(-1px);
+}
+
+.splash-lang-btn.active {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.8);
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.splash-lang-btn.active:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
 }
 
 .splash-content {
@@ -164,8 +233,90 @@ body.splash-active .container {
 .header-content {
   display    : flex;
   align-items: center;
+  justify-content: space-between;
   gap        : 16px;
   padding    : 12px 20px;
+}
+
+/* Main Language Selector (trong ứng dụng chính) */
+.main-language-selector {
+  display: flex;
+  gap: 8px;
+  margin-right: 60px;
+}
+
+.main-lang-btn {
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  backdrop-filter: blur(10px);
+  min-width: 60px;
+  justify-content: center;
+}
+
+/* Màu cờ Việt Nam - đỏ */
+.main-lang-vi {
+  background: linear-gradient(135deg, #DA001E 0%, #FF0000 100%);
+  border-color: #DA001E;
+  color: white;
+}
+
+.main-lang-vi:hover {
+  background: linear-gradient(135deg, #FF0000 0%, #DA001E 100%);
+  border-color: #FF0000;
+}
+
+/* Màu cờ Hoa Kỳ - đỏ-trắng-xanh */
+.main-lang-en {
+  background: linear-gradient(135deg, #B22234 0%, #FFFFFF 50%, #3C3B6E 100%);
+  border-color: #B22234;
+  color: white;
+}
+
+.main-lang-en:hover {
+  background: linear-gradient(135deg, #DC143C 0%, #FFFFFF 50%, #1E90FF 100%);
+  border-color: #DC143C;
+}
+
+/* Flag icon và text styling */
+.flag-icon {
+  font-size: 16px;
+  line-height: 1;
+  display: inline-block;
+}
+
+.lang-text {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.main-lang-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.5);
+  color: white;
+  transform: translateY(-1px);
+}
+
+.main-lang-btn.active {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.8);
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.main-lang-btn.active:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
 }
 
 .header-logo {
@@ -180,6 +331,8 @@ body.splash-active .container {
   flex: 1;
 
 }
+
+/* Global Language Selector */
 
 .header-content h1 {
   font-size  : 28px;
@@ -2507,7 +2660,7 @@ tbody tr:last-child td {
 .modal-close {
   background     : rgba(255, 255, 255, 0.2);
   border         : none;
-  color          : white;
+  color          : rgb(255, 255, 255);
   font-size      : 24px;
   width          : 32px;
   height         : 32px;
@@ -3883,4 +4036,612 @@ td:nth-child(5) {
 .btn-secondary:hover {
   background  : #f9fafb;
   border-color: #d1d5db;
+}
+
+/* Modal Điều Khoản Sử Dụng */
+.terms-modal-content {
+  max-width       : 750px;
+  width           : 95%;
+  max-height      : 90vh;
+  background      : linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  border-radius   : 20px;
+  box-shadow      : 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  backdrop-filter : blur(20px);
+  border          : 1px solid rgba(255, 255, 255, 0.2);
+  position        : relative;
+  overflow        : hidden;
+  animation       : termsModalSlideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform       : scale(0.9);
+  opacity         : 0;
+}
+
+.terms-modal-content.show {
+  animation: termsModalSlideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes termsModalSlideIn {
+  0% {
+    opacity  : 0;
+    transform: scale(0.9) translateY(20px);
+  }
+  100% {
+    opacity  : 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.terms-modal-content::before {
+  content         : '';
+  position        : absolute;
+  top             : 0;
+  left            : 0;
+  right           : 0;
+  height          : 4px;
+  background      : linear-gradient(90deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+  border-radius   : 20px 20px 0 0;
+}
+
+.modal-header {
+  display        : flex;
+  align-items    : center;
+  justify-content: space-between;
+  padding        : 24px 24px 16px;
+  border-bottom  : 1px solid var(--border);
+}
+
+.modal-header h3 {
+  color          : #ffffff;
+  font-size      : 22px;
+  font-weight    : 700;
+  margin         : 0;
+  display        : flex;
+  align-items    : center;
+  gap            : 12px;
+}
+
+.modal-close {
+  background   : none;
+  border       : none;
+  font-size    : 32px;
+  color        : #ffffff;
+  cursor       : pointer;
+  padding      : 4px;
+  border-radius: 4px;
+  transition   : all 0.2s ease;
+  line-height  : 1;
+  width        : 40px;
+  height       : 40px;
+  display      : flex;
+  align-items  : center;
+  justify-content: center;
+}
+
+.modal-close:hover {
+  background: #f3f4f6;
+  color     : #374151;
+}
+
+.modal-header h3::before {
+  
+  font-size   : 24px;
+  filter      : drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.terms-body {
+  padding   : 24px;
+  max-height: 60vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(102, 126, 234, 0.3) transparent;
+}
+
+.terms-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.terms-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.terms-body::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(102, 126, 234, 0.3) 0%, rgba(102, 126, 234, 0.6) 100%);
+  border-radius: 3px;
+}
+
+.terms-body::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(102, 126, 234, 0.4) 0%, rgba(102, 126, 234, 0.8) 100%);
+}
+
+.terms-content {
+  line-height: 1.7;
+  font-size: 15px;
+  color: #000000;
+  font-weight: 400;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.terms-intro {
+  background      : linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
+  padding         : 20px 24px;
+  border-radius   : 12px;
+  border-left     : 4px solid var(--primary);
+  margin-bottom   : 24px;
+  position        : relative;
+  box-shadow      : 0 4px 12px rgba(102, 126, 234, 0.1);
+  color           : #000000;
+  font-weight     : 500;
+  line-height     : 1.6;
+}
+
+.terms-intro::before {
+  content     : '⚠️';
+  position    : absolute;
+  top         : 20px;
+  right       : 20px;
+  font-size   : 20px;
+  opacity     : 0.6;
+}
+
+.terms-divider {
+  border          : none;
+  height          : 1px;
+  background      : linear-gradient(90deg, transparent 0%, rgba(102, 126, 234, 0.3) 50%, transparent 100%);
+  margin          : 28px 0;
+  position        : relative;
+}
+
+.terms-divider::before {
+  content     : '✦';
+  position    : absolute;
+  top         : -8px;
+  left        : 50%;
+  transform   : translateX(-50%);
+  background  : white;
+  color       : var(--primary);
+  font-size   : 12px;
+  padding     : 0 8px;
+}
+
+.terms-section-title {
+  color           : #000000;
+  font-size       : 17px;
+  font-weight     : 700;
+  margin          : 20px 0 12px 0;
+  display         : flex;
+  align-items     : center;
+  gap            : 8px;
+  text-shadow     : 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition      : all 0.3s ease;
+}
+
+.terms-section-title:hover {
+  transform : translateX(4px);
+  color     : #000000;
+}
+
+.terms-section-title::before {
+  content     : '📋';
+  font-size   : 18px;
+  opacity     : 0.8;
+}
+
+.terms-list {
+  margin      : 12px 0 20px 24px;
+  padding-left: 8px;
+}
+
+.terms-list li {
+  margin-bottom  : 10px;
+  color          : #000000;
+  position       : relative;
+  padding-left   : 8px;
+  line-height    : 1.7;
+  transition     : all 0.2s ease;
+  border-radius  : 6px;
+  padding        : 6px 8px 6px 16px;
+  font-size      : 15px;
+  font-weight    : 400;
+}
+
+.terms-list li:hover {
+  background: rgba(102, 126, 234, 0.08);
+  color     : #000000;
+  transform : translateX(2px);
+}
+
+.terms-list li::before {
+  content         : '•';
+  position        : absolute;
+  left            : -16px;
+  color           : var(--primary);
+  font-weight     : bold;
+  font-size       : 16px;
+}
+
+.terms-list li ul {
+  margin-top    : 8px;
+  margin-left   : 16px;
+}
+
+.terms-list li ul li::before {
+  content     : '◦';
+  color       : var(--orange);
+  font-size   : 12px;
+  left        : -12px;
+}
+
+.terms-footer {
+  padding         : 24px;
+  background      : linear-gradient(135deg, rgba(248, 250, 252, 0.8) 0%, rgba(255, 255, 255, 0.9) 100%);
+  border-top      : 1px solid rgba(102, 126, 234, 0.1);
+  display         : flex;
+  flex-direction  : column;
+  gap            : 20px;
+}
+
+.terms-checkbox-container {
+  display         : flex;
+  align-items     : center;
+  background      : rgba(255, 255, 255, 0.7);
+  padding         : 16px 20px;
+  border-radius   : 12px;
+  border          : 2px solid rgba(102, 126, 234, 0.1);
+  transition      : all 0.3s ease;
+}
+
+.terms-checkbox-container:hover {
+  border-color: rgba(102, 126, 234, 0.3);
+  box-shadow   : 0 4px 12px rgba(102, 126, 234, 0.1);
+}
+
+.terms-checkbox-label {
+  display    : flex;
+  align-items: flex-start;
+  gap        : 14px;
+  cursor     : pointer;
+  font-size  : 15px;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+.terms-checkbox {
+  width         : 20px;
+  height        : 20px;
+  margin-top    : 2px;
+  accent-color  : var(--primary);
+  cursor        : pointer;
+  border-radius : 4px;
+  transition    : all 0.2s ease;
+}
+
+.terms-checkbox:checked {
+  transform: scale(1.1);
+  animation: checkboxChecked 0.3s ease;
+}
+
+@keyframes checkboxChecked {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1.1);
+  }
+}
+
+.terms-checkbox-text {
+  color      : #000000;
+  font-weight: 600;
+}
+
+.terms-buttons {
+  display        : flex;
+  justify-content: flex-end;
+}
+
+.terms-agree-btn {
+  background     : #000000;
+  color          : white;
+  border         : none;
+  padding        : 14px 28px;
+  border-radius  : 12px;
+  font-weight    : 700;
+  font-size      : 16px;
+  cursor         : pointer;
+  transition     : all 0.3s ease;
+  min-width      : 140px;
+  box-shadow     : 0 4px 15px rgba(0, 0, 0, 0.3);
+  position       : relative;
+  overflow       : hidden;
+}
+
+.terms-agree-btn::before {
+  content         : '';
+  position        : absolute;
+  top             : 0;
+  left            : -100%;
+  width           : 100%;
+  height          : 100%;
+  background      : linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition      : left 0.5s ease;
+}
+
+.terms-agree-btn:hover:not(:disabled)::before {
+  left: 100%;
+}
+
+.terms-agree-btn:hover:not(:disabled) {
+  background    : #333333;
+  transform     : translateY(-2px);
+  box-shadow    : 0 8px 25px rgba(0, 0, 0, 0.5);
+}
+
+.terms-agree-btn:active:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.terms-agree-btn:disabled {
+  background    : #666666;
+  cursor        : not-allowed;
+  transform     : none;
+  box-shadow    : 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.terms-agree-btn:disabled::before {
+  display: none;
+}
+
+/* Warning Ticker Bar */
+.warning-ticker {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 50%, #ffffff 100%);
+  color: #000000;
+  padding: 8px 0;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 9999;
+  overflow: hidden;
+  display: block; /* Luôn hiển thị nền trắng */
+  border-top: 2px solid #e5e7eb;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.ticker-content {
+  white-space: nowrap;
+  animation: tickerScroll 60s linear infinite;
+}
+
+.ticker-text {
+  display: inline-block;
+  padding-left: 100%;
+  animation: tickerSlide 60s linear infinite;
+}
+
+@keyframes tickerScroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes tickerSlide {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+/* Responsive cho ticker */
+@media (max-width: 768px) {
+  .warning-ticker {
+    font-size: 12px;
+    padding: 6px 0;
+  }
+
+  .ticker-content,
+  .ticker-text {
+    animation-duration: 45s;
+  }
+}
+
+@media (max-width: 480px) {
+  .warning-ticker {
+    font-size: 11px;
+    padding: 5px 0;
+  }
+
+  .ticker-content,
+  .ticker-text {
+    animation-duration: 35s;
+  }
+}
+
+/* Khi checkbox được tích - nút chuyển thành nền trắng chữ đen */
+.terms-agree-btn.checked-style {
+  background    : #ffffff !important;
+  color         : #000000 !important;
+  border        : 2px solid #000000 !important;
+  box-shadow    : 0 4px 15px rgba(0, 0, 0, 0.1) !important;
+}
+
+.terms-agree-btn.checked-style:hover {
+  background    : #f8f9fa !important;
+  color         : #000000 !important;
+  border-color  : #333333 !important;
+  box-shadow    : 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+}
+
+.terms-agree-btn.checked-style::before {
+  background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.1), transparent) !important;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .main-language-selector {
+    gap: 6px;
+  }
+
+  .main-lang-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    min-width: 50px;
+  }
+
+  .flag-icon {
+    font-size: 14px;
+  }
+
+  .lang-text {
+    font-size: 11px;
+  }
+
+  .splash-language-selector {
+    top: 20px;
+    right: 20px;
+    gap: 6px;
+  }
+
+  .splash-lang-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    min-width: 50px;
+  }
+
+  .splash-lang-btn .flag-icon {
+    font-size: 14px;
+  }
+
+  .splash-lang-btn .lang-text {
+    font-size: 11px;
+  }
+
+  .terms-modal-content {
+    max-width    : 95%;
+    width        : 95%;
+    max-height   : 95vh;
+    border-radius: 16px;
+  }
+
+  .modal-header h3 {
+    font-size: 20px;
+  }
+
+  .terms-body {
+    padding   : 20px;
+    max-height: 55vh;
+  }
+
+  .terms-intro {
+    padding: 16px 20px;
+  }
+
+  .terms-section-title {
+    font-size: 16px;
+  }
+
+  .terms-footer {
+    padding: 20px;
+  }
+
+  .terms-checkbox-container {
+    padding: 14px 18px;
+  }
+
+}
+
+@media (max-width: 480px) {
+  .main-language-selector {
+    gap: 4px;
+  }
+
+  .main-lang-btn {
+    padding: 5px 10px;
+    font-size: 11px;
+    min-width: 45px;
+  }
+
+  .main-lang-btn .flag-icon {
+    font-size: 13px;
+  }
+
+  .main-lang-btn .lang-text {
+    font-size: 10px;
+  }
+
+  .splash-language-selector {
+    top: 15px;
+    right: 15px;
+    gap: 4px;
+  }
+
+  .splash-lang-btn {
+    padding: 5px 10px;
+    font-size: 11px;
+    min-width: 45px;
+  }
+
+  .splash-lang-btn .flag-icon {
+    font-size: 13px;
+  }
+
+  .splash-lang-btn .lang-text {
+    font-size: 10px;
+  }
+
+  .terms-modal-content {
+    max-width    : 98%;
+    width        : 98%;
+    border-radius: 12px;
+  }
+
+  .modal-header {
+    padding: 20px 20px 12px;
+  }
+
+  .modal-header {
+    padding: 20px 20px 12px;
+  }
+
+  .modal-header h3 {
+    font-size: 18px;
+  }
+
+  .modal-close {
+    font-size: 28px;
+    width: 36px;
+    height: 36px;
+  }
+
+  .terms-body {
+    padding   : 16px;
+    max-height: 50vh;
+  }
+
+  .terms-section-title {
+    font-size: 15px;
+  }
+
+  .terms-list {
+    margin-left: 20px;
+  }
+
+  .terms-footer {
+    padding: 16px;
+  }
+
+  .terms-agree-btn {
+    padding    : 12px 24px;
+    font-size  : 15px;
+    min-width  : 120px;
+  }
+
 }

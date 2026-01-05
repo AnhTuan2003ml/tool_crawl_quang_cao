@@ -13,6 +13,16 @@
 <body>
   <!-- Splash Screen -->
   <div id="splashScreen" class="splash-screen">
+    <div class="splash-language-selector">
+      <button id="splashLangViBtn" class="splash-lang-btn active splash-lang-vi" data-lang="vi" title="Tiếng Việt">
+        <span class="flag-icon">VN</span>
+        <span class="lang-text">VI</span>
+      </button>
+      <button id="splashLangEnBtn" class="splash-lang-btn splash-lang-en" data-lang="en" title="English">
+        <span class="flag-icon">US</span>
+        <span class="lang-text">EN</span>
+      </button>
+    </div>
     <div class="splash-content">
       <h1 class="splash-title">HỆ THỐNG ADS FACEBOOK</h1>
       <p class="splash-subtitle">Giải pháp tự động hóa – quản lý & scale quảng cáo</p>
@@ -56,7 +66,17 @@
         <img src="icon/512px-2023_Facebook_icon.svg.png" alt="Facebook Logo" class="header-logo">
         <div class="header-text">
           <h1>HỆ THỐNG ADS FACEBOOK</h1>
-          <p class="subtitle">Giải pháp tự động hóa – quản lý & scale quảng cáo</p>
+          <p class="subtitle">Giải pháp tự động hóa – quản lý & scale quảng cáo,thống kê</p>
+        </div>
+        <div class="main-language-selector">
+          <button id="mainLangViBtn" class="main-lang-btn active main-lang-vi" data-lang="vi" title="Tiếng Việt">
+            <span class="flag-icon">🇻🇳</span>
+            <span class="lang-text">VI</span>
+          </button>
+          <button id="mainLangEnBtn" class="main-lang-btn main-lang-en" data-lang="en" title="English">
+            <span class="flag-icon">🇺🇸</span>
+            <span class="lang-text">EN</span>
+          </button>
         </div>
       </div>
     </header>
@@ -193,7 +213,7 @@
             <table id="listTable">
               <thead>
                 <tr>
-                  <th>ID Bài Post</th>
+                  <th>ID Post</th>
                   <th>ID User</th>
                   <th>Name</th>
                   <th>React</th>
@@ -452,7 +472,7 @@
                   </div>
                   <div class="security-note">
                     <span class="note-icon">🔒</span>
-                    <span>API Key được lưu an toàn trên trình duyệt của bạn</span>
+                    <span></span>
                   </div>
                 </div>
               </div>
@@ -471,7 +491,6 @@
                   <div class="profile-section">
                     <div class="section-label">
                       <span class="section-icon">📋</span>
-                      <span>Danh sách profile</span>
                     </div>
                     <div id="profileList" class="profile-container">
                       <div class="empty-profile-state">
@@ -583,6 +602,108 @@
         </button>
         <button id="deleteDataModalCancel" class="btn-secondary">Hủy</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Modal Điều Khoản Sử Dụng -->
+  <div id="termsModal" class="modal-overlay hidden">
+    <div class="modal-content terms-modal-content">
+      <div class="modal-header">
+        <h3>ĐIỀU KHOẢN SỬ DỤNG DỊCH VỤ</h3>
+        <button class="modal-close" id="termsModalClose">&times;</button>
+      </div>
+      <div class="modal-body terms-body">
+        <div class="terms-content">
+          <p class="terms-intro">
+            Vui lòng đọc kỹ các điều khoản dưới đây trước khi sử dụng phần mềm.<br>
+            <strong>Việc bạn sử dụng phần mềm đồng nghĩa với việc bạn đã đọc, hiểu và đồng ý với toàn bộ nội dung điều khoản này.</strong>
+          </p>
+
+          <hr class="terms-divider">
+
+          <h4 class="terms-section-title">1. Phạm vi sử dụng</h4>
+          <p>Phần mềm được cung cấp nhằm hỗ trợ người dùng thống kê và phân tích dữ liệu công khai trên nền tảng Facebook, bao gồm:</p>
+          <ul class="terms-list">
+            <li>ID bài viết</li>
+            <li>ID người dùng</li>
+            <li>Số lượng like, comment</li>
+            <li>Các số liệu thống kê tổng hợp liên quan</li>
+          </ul>
+          <p>Phần mềm <strong>không can thiệp, không tự động tương tác và không thay đổi dữ liệu trên Facebook</strong>.</p>
+
+          <hr class="terms-divider">
+
+          <h4 class="terms-section-title">2. Tuân thủ chính sách Facebook</h4>
+          <p>Người dùng cam kết:</p>
+          <ul class="terms-list">
+            <li>Tuân thủ Điều khoản dịch vụ và Chính sách của Facebook</li>
+            <li>Chỉ sử dụng phần mềm cho mục đích hợp pháp</li>
+            <li>Chỉ thu thập và sử dụng dữ liệu công khai (Public)</li>
+          </ul>
+
+          <hr class="terms-divider">
+
+          <h4 class="terms-section-title">3. Trách nhiệm người dùng</h4>
+          <ul class="terms-list">
+            <li>Người dùng tự chịu trách nhiệm đối với mọi hoạt động sử dụng phần mềm</li>
+            <li>Không sử dụng phần mềm cho các mục đích như:
+              <ul>
+                <li>Spam, seeding trái phép</li>
+                <li>Thu thập hoặc kinh doanh dữ liệu người dùng</li>
+                <li>Vi phạm quyền riêng tư hoặc chính sách nền tảng</li>
+              </ul>
+            </li>
+          </ul>
+
+          <hr class="terms-divider">
+
+          <h4 class="terms-section-title">4. Giới hạn trách nhiệm</h4>
+          <p>Chúng tôi không chịu trách nhiệm đối với:</p>
+          <ul class="terms-list">
+            <li>Bất kỳ vi phạm nào phát sinh từ việc người dùng sử dụng sai mục đích</li>
+            <li>Các rủi ro liên quan đến tài khoản Facebook, dữ liệu hoặc bên thứ ba</li>
+            <li>Thay đổi chính sách từ Facebook ảnh hưởng đến khả năng hoạt động của phần mềm</li>
+          </ul>
+
+          <hr class="terms-divider">
+
+          <h4 class="terms-section-title">5. Thay đổi điều khoản</h4>
+          <p>Chúng tôi có quyền cập nhật hoặc điều chỉnh điều khoản khi cần thiết.<br>
+          Phiên bản mới sẽ có hiệu lực ngay khi được công bố trong phần mềm.</p>
+
+          <hr class="terms-divider">
+
+          <h4 class="terms-section-title">6. Xác nhận đồng ý</h4>
+          <p>Bằng việc nhấn "Tôi đồng ý", người dùng xác nhận:</p>
+          <ul class="terms-list">
+            <li>Đã đọc và hiểu toàn bộ điều khoản</li>
+            <li>Đồng ý tuân thủ các quy định nêu trên</li>
+            <li>Tự chịu trách nhiệm khi sử dụng phần mềm</li>
+          </ul>
+        </div>
+      </div>
+      <div class="modal-footer terms-footer">
+        <div class="terms-checkbox-container">
+          <label class="terms-checkbox-label">
+            <input type="checkbox" id="termsAgreeCheckbox" class="terms-checkbox">
+            <span class="terms-checkbox-text">Tôi đã đọc và đồng ý với các điều khoản sử dụng</span>
+          </label>
+        </div>
+        <div class="terms-buttons">
+          <button id="termsAgreeBtn" class="btn-primary terms-agree-btn" disabled>
+            <span>Tôi đồng ý</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ticker Warning Bar -->
+  <div id="warningTicker" class="warning-ticker">
+    <div class="ticker-content">
+      <span class="ticker-text">
+        ⚠️ LƯU Ý KHI SỬ DỤNG: Vui lòng sử dụng phần mềm phù hợp với Điều khoản dịch vụ và Chính sách của Facebook. Phần mềm được thiết kế nhằm hỗ trợ các hoạt động hợp pháp và đúng mục đích. Mọi hoạt động sử dụng nằm trong trách nhiệm của người dùng. Chúng tôi khuyến khích bạn tuân thủ đầy đủ các quy định hiện hành để đảm bảo trải nghiệm an toàn và hiệu quả.
+      </span>
     </div>
   </div>
 

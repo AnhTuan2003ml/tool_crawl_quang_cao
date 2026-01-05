@@ -2,20 +2,111 @@
 const splashScreen = document.getElementById('splashScreen');
 const splashStartBtn = document.getElementById('splashStartBtn');
 
+// Modal Điều Khoản
+const termsModal = document.getElementById('termsModal');
+const termsAgreeCheckbox = document.getElementById('termsAgreeCheckbox');
+const termsAgreeBtn = document.getElementById('termsAgreeBtn');
+const termsModalClose = document.getElementById('termsModalClose');
+
 // Thêm class splash-active khi trang load để ẩn container
 if (splashScreen) {
   document.body.classList.add('splash-active');
 }
 
-// Ẩn splash screen khi click nút "Bắt đầu"
+// Hiển thị modal điều khoản khi click nút "Bắt đầu"
 if (splashStartBtn) {
   splashStartBtn.addEventListener('click', () => {
+    showTermsModal();
+  });
+}
+
+// Function hiển thị modal điều khoản
+function showTermsModal() {
+  if (termsModal) {
+    termsModal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden'; // Ngăn scroll khi modal mở
+    // Trigger animation
+    setTimeout(() => {
+      const modalContent = termsModal.querySelector('.terms-modal-content');
+      if (modalContent) {
+        modalContent.classList.add('show');
+      }
+    }, 10);
+  }
+}
+
+// Function ẩn modal điều khoản và hiển thị trang chính
+function hideTermsModal() {
+  if (termsModal) {
+    termsModal.classList.add('hidden');
+    document.body.style.overflow = ''; // Khôi phục scroll
+
+    // Ẩn splash screen và hiển thị container chính
     if (splashScreen) {
       splashScreen.classList.add('hidden');
-      // Cho phép hiển thị container và scroll sau khi ẩn splash
       setTimeout(() => {
         document.body.classList.remove('splash-active');
+        // Ticker đã luôn chạy
       }, 600); // Đợi animation hoàn thành
+    }
+  }
+}
+
+// Function hiển thị lại splash screen (ticker vẫn chạy nhưng ở splash screen)
+function showSplashScreen() {
+  if (splashScreen) {
+    splashScreen.classList.remove('hidden');
+    document.body.classList.add('splash-active');
+    // Ticker vẫn chạy ở splash screen
+  }
+}
+
+// Function đóng modal và quay lại trang bắt đầu (splash screen)
+function closeTermsAndReturnToSplash() {
+  if (termsModal) {
+    termsModal.classList.add('hidden');
+    document.body.style.overflow = ''; // Khôi phục scroll
+
+    // Hiển thị lại splash screen
+    showSplashScreen();
+  }
+}
+
+// Event listener cho checkbox điều khoản
+if (termsAgreeCheckbox && termsAgreeBtn) {
+  termsAgreeCheckbox.addEventListener('change', () => {
+    termsAgreeBtn.disabled = !termsAgreeCheckbox.checked;
+
+    // Thay đổi style nút khi checkbox được tích
+    if (termsAgreeCheckbox.checked) {
+      termsAgreeBtn.classList.add('checked-style');
+    } else {
+      termsAgreeBtn.classList.remove('checked-style');
+    }
+  });
+}
+
+// Event listener cho nút đồng ý
+if (termsAgreeBtn) {
+  termsAgreeBtn.addEventListener('click', () => {
+    if (termsAgreeCheckbox.checked) {
+      hideTermsModal();
+    }
+  });
+}
+
+// Event listener cho nút đóng modal - quay lại trang bắt đầu
+if (termsModalClose) {
+  termsModalClose.addEventListener('click', () => {
+    closeTermsAndReturnToSplash();
+  });
+}
+
+// Event listener để đóng modal khi click vào overlay - quay lại trang bắt đầu
+if (termsModal) {
+  termsModal.addEventListener('click', (e) => {
+    if (e.target === termsModal) {
+      closeTermsAndReturnToSplash();
     }
   });
 }
@@ -5348,6 +5439,570 @@ if (deleteDataModal) {
 }
 
 // ==================== END DELETE DATA MODAL ====================
+
+// ==================== GLOBAL LANGUAGE SYSTEM ====================
+
+// Global translations object
+const globalTranslations = {
+  vi: {
+    // Splash Screen
+    splashTitle: "HỆ THỐNG ADS FACEBOOK",
+    splashSubtitle: "Giải pháp tự động hóa – quản lý & scale quảng cáo",
+    splashStartBtn: "Bắt đầu",
+
+    // Header
+    headerTitle: "HỆ THỐNG ADS FACEBOOK",
+    headerSubtitle: "Giải pháp tự động hóa – quản lý & scale quảng cáo",
+
+    // Tabs
+    tabResults: "📋 Kết quả",
+    tabPostManager: "📝 Quản Lý Post",
+    tabSettings: "⚙️ Setting profile",
+
+    // Filters
+    filterByColor: "🔍 Lọc theo màu:",
+    filterByType: "📊 Lọc theo:",
+    filterReact: "✓ Có React",
+    filterNoReact: "✗ Không React",
+    filterComment: "💬 Có Comment",
+    filterNoComment: "✗ Không Comment",
+
+    // Buttons
+    btnStart: "Bắt đầu",
+    btnStop: "Dừng",
+    btnExportExcel: "Xuất Excel",
+    btnFilterExcel: "Lọc Excel",
+
+    // Filter Colors
+    filterGreen: "Xanh (type1)",
+    filterYellow: "Vàng (type2)",
+    filterRed: "Đỏ (type3)",
+
+    // Date Controls
+    todayBtn: "📅 Ngày hôm nay",
+    selectDateBtn: "📅 Chọn ngày",
+    deleteDataBtn: "🗑️ Xóa dữ liệu",
+
+    // File Selector
+    fileSelectorTitle: "Chọn file data ngày hôm nay",
+    cancelFileSelection: "Hủy",
+
+    // Status
+    scannedUsers: "Đã quét được 0 user",
+    scanningUsers: "Đang quét users...",
+    scanCompleted: "Quét hoàn thành",
+
+    // Empty states
+    emptyMessage: "Chưa có dữ liệu",
+    emptyHint: "Nhấn \"Bắt đầu quét\" để bắt đầu",
+    noProfiles: "Chưa có profile nào",
+
+    // Progress messages
+    progressScanning: "Đang lấy thông tin...",
+    progressComplete: "Hoàn thành!",
+
+    // Modal titles and messages
+    deleteConfirmTitle: "🗑️ Xóa Dữ Liệu Theo Ngày",
+    deleteConfirmMessage: "Click vào ngày để xem danh sách file, sau đó tick chọn file cần xóa:",
+    deleteSelectedBtn: "🗑️ Xóa các file đã chọn",
+    deleteCancelBtn: "Hủy",
+
+    // Settings
+    apiKeyLabel: "NST BROWSER API Key",
+    apiKeyPlaceholder: "Nhập API Key của bạn",
+    saveApiKeyBtn: "💾 Lưu",
+    apiKeyNote: "🔒 API Key được lưu an toàn trên trình duyệt của bạn",
+
+    // Profile Management
+    profileTitle: "Profile Management",
+    profileSubtitle: "Quản lý các profile Facebook của bạn",
+    profileListTitle: "📋 Danh sách profile",
+    addProfileBtn: "➕ Thêm profile mới",
+    addProfileHint: "Nhấp để thêm profile_id và bắt đầu quản lý tài khoản",
+
+    // Action Groups
+    profileOperations: "👤 Profile Operations",
+    getAllInfo: "📊 Lấy thông tin toàn bộ",
+    getSelectedInfo: "🎯 Lấy thông tin profile đã chọn",
+    scanOperations: "🔍 Scan Operations",
+    scanPosts: "📝 Quét bài viết",
+    scanByGroup: "👥 Quét theo group",
+    accountManagement: "🤖 Account Management",
+    autoFeed: "🌱 Nuôi acc theo kịch bản",
+    autoJoinGroup: "➕ Tự động tham gia group",
+    stopAllBtn: "⏹️ Dừng tất cả",
+
+    // Terms Modal
+    termsTitle: "📄 ĐIỀU KHOẢN SỬ DỤNG DỊCH VỤ",
+    termsIntro: "Vui lòng đọc kỹ các điều khoản dưới đây trước khi sử dụng phần mềm.<br><strong>Việc bạn sử dụng phần mềm đồng nghĩa với việc bạn đã đọc, hiểu và đồng ý với toàn bộ nội dung điều khoản này.</strong>",
+    termsSection1: "1. Phạm vi sử dụng",
+    termsSection1Content: "Phần mềm được cung cấp nhằm hỗ trợ người dùng thống kê và phân tích dữ liệu công khai trên nền tảng Facebook, bao gồm:",
+    termsSection1List: ["ID bài viết", "ID người dùng", "Số lượng like, comment", "Các số liệu thống kê tổng hợp liên quan"],
+    termsSection1Note: "Phần mềm <strong>không can thiệp, không tự động tương tác và không thay đổi dữ liệu trên Facebook</strong>.",
+    termsSection2: "2. Tuân thủ chính sách Facebook",
+    termsSection2Intro: "Người dùng cam kết:",
+    termsSection2List: ["Tuân thủ Điều khoản dịch vụ và Chính sách của Facebook", "Chỉ sử dụng phần mềm cho mục đích hợp pháp", "Chỉ thu thập và sử dụng dữ liệu công khai (Public)"],
+    termsSection3: "3. Trách nhiệm người dùng",
+    termsSection3List: ["Người dùng tự chịu trách nhiệm đối với mọi hoạt động sử dụng phần mềm", "Không sử dụng phần mềm cho các mục đích như:", "Spam, seeding trái phép", "Thu thập hoặc kinh doanh dữ liệu người dùng", "Vi phạm quyền riêng tư hoặc chính sách nền tảng"],
+    termsSection4: "4. Giới hạn trách nhiệm",
+    termsSection4Intro: "Chúng tôi không chịu trách nhiệm đối với:",
+    termsSection4List: ["Bất kỳ vi phạm nào phát sinh từ việc người dùng sử dụng sai mục đích", "Các rủi ro liên quan đến tài khoản Facebook, dữ liệu hoặc bên thứ ba", "Thay đổi chính sách từ Facebook ảnh hưởng đến khả năng hoạt động của phần mềm"],
+    termsSection5: "5. Thay đổi điều khoản",
+    termsSection5Content: "Chúng tôi có quyền cập nhật hoặc điều chỉnh điều khoản khi cần thiết.<br>Phiên bản mới sẽ có hiệu lực ngay khi được công bố trong phần mềm.",
+    termsSection6: "6. Xác nhận đồng ý",
+    termsSection6Intro: "Bằng việc nhấn \"Tôi đồng ý\", người dùng xác nhận:",
+    termsSection6List: ["Đã đọc và hiểu toàn bộ điều khoản", "Đồng ý tuân thủ các quy định nêu trên", "Tự chịu trách nhiệm khi sử dụng phần mềm"],
+    termsCheckboxText: "Tôi đã đọc và đồng ý với các điều khoản sử dụng",
+    termsAgreeButton: "Tôi đồng ý",
+
+    // Warning Ticker
+    warningTickerText: "⚠️ LƯU Ý KHI SỬ DỤNG: Vui lòng sử dụng phần mềm phù hợp với Điều khoản dịch vụ và Chính sách của Facebook. Phần mềm được thiết kế nhằm hỗ trợ các hoạt động hợp pháp và đúng mục đích. Mọi hoạt động sử dụng nằm trong trách nhiệm của người dùng. Chúng tôi khuyến khích bạn tuân thủ đầy đủ các quy định hiện hành để đảm bảo trải nghiệm an toàn và hiệu quả."
+  },
+  en: {
+    // Splash Screen
+    splashTitle: "FACEBOOK ADS SYSTEM",
+    splashSubtitle: "Automated solution – manage & scale advertising",
+    splashStartBtn: "Start",
+
+    // Header
+    headerTitle: "FACEBOOK ADS SYSTEM",
+    headerSubtitle: "Automated solution – manage & scale advertising",
+
+    // Tabs
+    tabResults: "📋 Results",
+    tabPostManager: "📝 Post Manager",
+    tabSettings: "⚙️ Profile Settings",
+
+    // Filters
+    filterByColor: "🔍 Filter by color:",
+    filterByType: "📊 Filter by:",
+    filterReact: "✓ Has React",
+    filterNoReact: "✗ No React",
+    filterComment: "💬 Has Comment",
+    filterNoComment: "✗ No Comment",
+
+    // Buttons
+    btnStart: "Start",
+    btnStop: "Stop",
+    btnExportExcel: "Export Excel",
+    btnFilterExcel: "Filter Excel",
+
+    // Filter Colors
+    filterGreen: "Green (type1)",
+    filterYellow: "Yellow (type2)",
+    filterRed: "Red (type3)",
+
+    // Date Controls
+    todayBtn: "📅 Today",
+    selectDateBtn: "📅 Select date",
+    deleteDataBtn: "🗑️ Delete data",
+
+    // File Selector
+    fileSelectorTitle: "Select data file",
+    cancelFileSelection: "Cancel",
+
+    // Status
+    scannedUsers: "Scanned 0 users",
+    scanningUsers: "Scanning users...",
+    scanCompleted: "Scan completed",
+
+    // Empty states
+    emptyMessage: "No data yet",
+    emptyHint: "Click \"Start Scan\" to begin",
+    noProfiles: "No profiles yet",
+
+    // Progress messages
+    progressScanning: "Getting information...",
+    progressComplete: "Completed!",
+
+    // Modal titles and messages
+    deleteConfirmTitle: "🗑️ Delete Data by Date",
+    deleteConfirmMessage: "Click on date to view file list, then check files to delete:",
+    deleteSelectedBtn: "🗑️ Delete selected files",
+    deleteCancelBtn: "Cancel",
+
+    // Settings
+    apiKeyLabel: "NST BROWSER API Key",
+    apiKeyPlaceholder: "Enter your API Key",
+    saveApiKeyBtn: "💾 Save",
+    apiKeyNote: "🔒 API Key is safely stored in your browser",
+
+    // Profile Management
+    profileTitle: "Profile Management",
+    profileSubtitle: "Manage your Facebook profiles",
+    profileListTitle: "📋 Profile list",
+    addProfileBtn: "➕ Add new profile",
+    addProfileHint: "Click to add profile_id and start account management",
+
+    // Action Groups
+    profileOperations: "👤 Profile Operations",
+    getAllInfo: "📊 Get all information",
+    getSelectedInfo: "🎯 Get selected profile info",
+    scanOperations: "🔍 Scan Operations",
+    scanPosts: "📝 Scan posts",
+    scanByGroup: "👥 Scan by group",
+    accountManagement: "🤖 Account Management",
+    autoFeed: "🌱 Auto feed account",
+    autoJoinGroup: "➕ Auto join groups",
+    stopAllBtn: "⏹️ Stop all",
+
+    // Terms Modal
+    termsTitle: "📄 TERMS OF SERVICE",
+    termsIntro: "Please read the following terms carefully before using the software.<br><strong>Your use of the software means you have read, understood and agreed to all terms and conditions.</strong>",
+    termsSection1: "1. Scope of Use",
+    termsSection1Content: "The software is provided to help users collect and analyze public data on the Facebook platform, including:",
+    termsSection1List: ["Post IDs", "User IDs", "Number of likes, comments", "Related aggregated statistics"],
+    termsSection1Note: "The software <strong>does not interfere, does not automatically interact and does not change data on Facebook</strong>.",
+    termsSection2: "2. Facebook Policy Compliance",
+    termsSection2Intro: "Users commit to:",
+    termsSection2List: ["Comply with Facebook's Terms of Service and Policies", "Use the software only for legal purposes", "Only collect and use Public data"],
+    termsSection3: "3. User Responsibility",
+    termsSection3List: ["Users are fully responsible for all software usage activities", "Do not use the software for purposes such as:", "Spam, illegal seeding", "Collecting or trading user data", "Violating privacy or platform policies"],
+    termsSection4: "4. Limitation of Liability",
+    termsSection4Intro: "We are not responsible for:",
+    termsSection4List: ["Any violations arising from users' improper use", "Risks related to Facebook accounts, data or third parties", "Facebook policy changes affecting software functionality"],
+    termsSection5: "5. Terms Changes",
+    termsSection5Content: "We reserve the right to update or modify terms when necessary.<br>New versions will take effect immediately upon publication in the software.",
+    termsSection6: "6. Consent Confirmation",
+    termsSection6Intro: "By clicking \"I Agree\", users confirm:",
+    termsSection6List: ["Have read and understood all terms", "Agree to comply with the above regulations", "Take full responsibility when using the software"],
+    termsCheckboxText: "I have read and agree to the terms of use",
+    termsAgreeButton: "I Agree",
+
+    // Warning Ticker
+    warningTickerText: "⚠️ USAGE NOTICE: Please use the software in accordance with Facebook's Terms of Service and Policies. The software is designed to support legal and proper activities. All usage activities are the user's responsibility. We encourage you to fully comply with current regulations to ensure a safe and effective experience."
+  }
+};
+
+
+// Main language elements (trong ứng dụng chính)
+const mainLangViBtn = document.getElementById('mainLangViBtn');
+const mainLangEnBtn = document.getElementById('mainLangEnBtn');
+
+// Splash language elements
+const splashLangViBtn = document.getElementById('splashLangViBtn');
+const splashLangEnBtn = document.getElementById('splashLangEnBtn');
+
+// Current global language
+let currentGlobalLang = localStorage.getItem('globalLanguage') || 'vi';
+
+// Set active global language button
+function setActiveGlobalLanguageButton(lang) {
+  // Reset all language buttons
+  document.querySelectorAll('.main-lang-btn, .splash-lang-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+
+  // Set active for both main and splash buttons
+  document.querySelectorAll(`.main-lang-btn[data-lang="${lang}"], .splash-lang-btn[data-lang="${lang}"]`).forEach(btn => {
+    btn.classList.add('active');
+  });
+}
+
+// Set global language function
+function setGlobalLanguage(lang) {
+  currentGlobalLang = lang;
+  localStorage.setItem('globalLanguage', lang);
+  setActiveGlobalLanguageButton(lang);
+
+  const t = globalTranslations[lang];
+
+  // Update Splash Screen (only if visible)
+  const splashScreen = document.getElementById('splashScreen');
+  if (splashScreen && !splashScreen.classList.contains('hidden')) {
+    const splashTitle = document.querySelector('.splash-title');
+    const splashSubtitle = document.querySelector('.splash-subtitle');
+    const splashStartBtn = document.getElementById('splashStartBtn');
+
+    if (splashTitle) splashTitle.textContent = t.splashTitle;
+    if (splashSubtitle) splashSubtitle.textContent = t.splashSubtitle;
+    if (splashStartBtn) splashStartBtn.textContent = t.splashStartBtn;
+  }
+
+  // Update Header
+  const headerTitle = document.querySelector('.header-content h1');
+  const headerSubtitle = document.querySelector('.header-content .subtitle');
+
+  if (headerTitle) headerTitle.textContent = t.headerTitle;
+  if (headerSubtitle) headerSubtitle.textContent = t.headerSubtitle;
+
+  // Update Tabs
+  const tabScanList = document.getElementById('tabScanList');
+  const tabPostManager = document.getElementById('tabPostManager');
+  const tabSettings = document.getElementById('tabSettings');
+
+  if (tabScanList) tabScanList.innerHTML = t.tabResults;
+  if (tabPostManager) tabPostManager.innerHTML = t.tabPostManager;
+  if (tabSettings) tabSettings.innerHTML = t.tabSettings;
+
+  // Update Filters
+  const filterColorLabel = document.querySelector('.filter-label');
+  const filterTypeLabel = document.querySelectorAll('.filter-label')[1];
+
+  if (filterColorLabel && filterColorLabel.textContent.includes('Lọc theo màu')) {
+    filterColorLabel.textContent = t.filterByColor;
+  }
+  if (filterTypeLabel && filterTypeLabel.textContent.includes('Lọc theo')) {
+    filterTypeLabel.textContent = t.filterByType;
+  }
+
+  // Update Filter Buttons
+  const filterReactBtn = document.querySelector('.filter-react[data-filter-react="has"] span');
+  const filterNoReactBtn = document.querySelector('.filter-react[data-filter-react="none"] span');
+  const filterCommentBtn = document.querySelector('.filter-comment[data-filter-comment="has"] span');
+  const filterNoCommentBtn = document.querySelector('.filter-comment[data-filter-comment="none"] span');
+
+  if (filterReactBtn) filterReactBtn.textContent = t.filterReact;
+  if (filterNoReactBtn) filterNoReactBtn.textContent = t.filterNoReact;
+  if (filterCommentBtn) filterCommentBtn.textContent = t.filterComment;
+  if (filterNoCommentBtn) filterNoCommentBtn.textContent = t.filterNoComment;
+
+  // Update Filter Color Buttons
+  const filterGreenBtn = document.querySelector('.filter-green span:last-child');
+  const filterYellowBtn = document.querySelector('.filter-yellow span:last-child');
+  const filterRedBtn = document.querySelector('.filter-red span:last-child');
+
+  if (filterGreenBtn) filterGreenBtn.textContent = t.filterGreen;
+  if (filterYellowBtn) filterYellowBtn.textContent = t.filterYellow;
+  if (filterRedBtn) filterRedBtn.textContent = t.filterRed;
+
+  // Update Action Buttons
+  const startBtn = document.getElementById('startScanBtn');
+  const stopBtn = document.getElementById('stopScanBtn');
+  const exportBtn = document.getElementById('exportExcelBtn');
+  const filterBtn = document.getElementById('sterilizeExcelBtn');
+
+  if (startBtn) startBtn.querySelector('span:last-child').textContent = t.btnStart;
+  if (stopBtn) stopBtn.querySelector('span:last-child').textContent = t.btnStop;
+  if (exportBtn) exportBtn.querySelector('span:last-child').textContent = t.btnExportExcel;
+  if (filterBtn) filterBtn.querySelector('span:last-child').textContent = t.btnFilterExcel;
+
+  // Update Date Control Buttons
+  const todayBtn = document.getElementById('todayBtn');
+  const selectDateBtn = document.getElementById('selectDateBtn');
+  const deleteDataBtn = document.getElementById('deleteDataBtn');
+
+  if (todayBtn) todayBtn.innerHTML = t.todayBtn;
+  if (selectDateBtn) selectDateBtn.querySelector('span').textContent = t.selectDateBtn.replace('📅 ', '');
+  if (deleteDataBtn) deleteDataBtn.innerHTML = t.deleteDataBtn;
+
+  // Update File Selector Elements
+  const fileSelectorTitle = document.getElementById('fileSelectorTitle');
+  const cancelFileSelection = document.getElementById('cancelFileSelection');
+
+  if (fileSelectorTitle) fileSelectorTitle.textContent = t.fileSelectorTitle;
+  if (cancelFileSelection) cancelFileSelection.textContent = t.cancelFileSelection;
+
+  // Update Status Text
+  const userCountText = document.getElementById('infoUserCountToastText');
+  if (userCountText) {
+    // Replace the number but keep the structure
+    const currentNumber = userCountText.textContent.match(/\d+/)?.[0] || '0';
+    userCountText.textContent = t.scannedUsers.replace('0', currentNumber);
+  }
+
+  // Update Empty States
+  const emptyMessage = document.querySelector('.empty p:first-child');
+  const emptyHint = document.querySelector('.empty .empty-hint');
+
+  if (emptyMessage) emptyMessage.textContent = t.emptyMessage;
+  if (emptyHint) {
+    emptyHint.textContent = t.emptyHint.replace('"Bắt đầu quét"', `"${t.btnStart}"`).replace('"Start Scan"', `"${t.btnStart}"`);
+  }
+
+  // Update Settings Panel Elements (if visible)
+  const apiKeyLabel = document.querySelector('.input-label');
+  const apiKeyInput = document.querySelector('.api-input');
+  const saveApiKeyBtn = document.querySelector('.btn-save-api');
+  const apiKeyNote = document.querySelector('.security-note span');
+
+  if (apiKeyLabel) apiKeyLabel.textContent = t.apiKeyLabel;
+  if (apiKeyInput) apiKeyInput.placeholder = t.apiKeyPlaceholder;
+  if (saveApiKeyBtn) saveApiKeyBtn.innerHTML = t.saveApiKeyBtn;
+  if (apiKeyNote) apiKeyNote.textContent = t.apiKeyNote.replace('🔒 API Key', `🔒 ${t.apiKeyLabel}`);
+
+  // Update Profile Management Elements (if visible)
+  const profileTitle = document.querySelector('.setting-card h4');
+  const profileSubtitle = document.querySelector('.setting-card .muted');
+  const profileListTitle = document.querySelector('.section-label span');
+
+  if (profileTitle && (profileTitle.textContent.includes('Profile Management') || profileTitle.textContent.includes('Quản lý'))) {
+    profileTitle.textContent = t.profileTitle;
+  }
+  if (profileSubtitle) profileSubtitle.textContent = t.profileSubtitle;
+  if (profileListTitle) profileListTitle.textContent = t.profileListTitle.replace('📋 ', '');
+
+  // Update Action Group Headers
+  const actionGroups = document.querySelectorAll('.group-header');
+  actionGroups.forEach(group => {
+    const titleSpan = group.querySelector('.group-title');
+    if (titleSpan) {
+      if (titleSpan.textContent.includes('Profile Operations') || titleSpan.textContent.includes('Profile')) {
+        titleSpan.textContent = t.profileOperations.replace('👤 ', '');
+      } else if (titleSpan.textContent.includes('Scan Operations') || titleSpan.textContent.includes('Scan')) {
+        titleSpan.textContent = t.scanOperations.replace('🔍 ', '');
+      } else if (titleSpan.textContent.includes('Account Management') || titleSpan.textContent.includes('Account')) {
+        titleSpan.textContent = t.accountManagement.replace('🤖 ', '');
+      }
+    }
+  });
+
+  // Update Action Buttons in Settings
+  const getAllInfoBtn = document.getElementById('runAllInfoBtn');
+  const getSelectedInfoBtn = document.getElementById('runSelectedInfoBtn');
+  const scanPostsBtn = document.getElementById('scanPostsSettingBtn');
+  const scanGroupBtn = document.getElementById('scanGroupSettingBtn');
+  const feedAccountBtn = document.getElementById('feedAccountSettingBtn');
+  const joinGroupBtn = document.getElementById('autoJoinGroupBtn');
+  const stopAllBtn = document.getElementById('stopAllSettingBtn');
+
+  if (getAllInfoBtn) getAllInfoBtn.innerHTML = t.getAllInfo;
+  if (getSelectedInfoBtn) getSelectedInfoBtn.innerHTML = t.getSelectedInfo;
+  if (scanPostsBtn) scanPostsBtn.innerHTML = t.scanPosts;
+  if (scanGroupBtn) scanGroupBtn.innerHTML = t.scanByGroup;
+  if (feedAccountBtn) feedAccountBtn.innerHTML = t.autoFeed;
+  if (joinGroupBtn) joinGroupBtn.innerHTML = t.autoJoinGroup;
+  if (stopAllBtn) stopAllBtn.innerHTML = t.stopAllBtn;
+
+  // Update Warning Ticker
+  const tickerText = document.querySelector('.ticker-text');
+  if (tickerText) {
+    tickerText.textContent = t.warningTickerText;
+  }
+
+  // Update Terms Modal if it's open
+  updateTermsModalLanguage(lang);
+}
+
+// Update Terms Modal Language
+function updateTermsModalLanguage(lang) {
+  const t = globalTranslations[lang];
+
+  // Update title
+  document.querySelector('#termsModal .modal-header h3').innerHTML = t.termsTitle;
+
+  // Update intro
+  document.querySelector('.terms-intro').innerHTML = t.termsIntro;
+
+  // Update all content by rebuilding the terms content
+  const termsContent = document.querySelector('.terms-content');
+  if (termsContent) {
+    termsContent.innerHTML = `
+      <p class="terms-intro">${t.termsIntro}</p>
+
+      <hr class="terms-divider">
+
+      <h4 class="terms-section-title">${t.termsSection1}</h4>
+      <p>${t.termsSection1Content}</p>
+      <ul class="terms-list">${t.termsSection1List.map(item => `<li>${item}</li>`).join('')}</ul>
+      <p>${t.termsSection1Note}</p>
+
+      <hr class="terms-divider">
+
+      <h4 class="terms-section-title">${t.termsSection2}</h4>
+      <p>${t.termsSection2Intro}</p>
+      <ul class="terms-list">${t.termsSection2List.map(item => `<li>${item}</li>`).join('')}</ul>
+
+      <hr class="terms-divider">
+
+      <h4 class="terms-section-title">${t.termsSection3}</h4>
+      <ul class="terms-list">
+        <li>${t.termsSection3List[0]}</li>
+        <li>${t.termsSection3List[1]}
+          <ul>${t.termsSection3List.slice(2).map(item => `<li>${item}</li>`).join('')}</ul>
+        </li>
+      </ul>
+
+      <hr class="terms-divider">
+
+      <h4 class="terms-section-title">${t.termsSection4}</h4>
+      <p>${t.termsSection4Intro}</p>
+      <ul class="terms-list">${t.termsSection4List.map(item => `<li>${item}</li>`).join('')}</ul>
+
+      <hr class="terms-divider">
+
+      <h4 class="terms-section-title">${t.termsSection5}</h4>
+      <p>${t.termsSection5Content}</p>
+
+      <hr class="terms-divider">
+
+      <h4 class="terms-section-title">${t.termsSection6}</h4>
+      <p>${t.termsSection6Intro}</p>
+      <ul class="terms-list">${t.termsSection6List.map(item => `<li>${item}</li>`).join('')}</ul>
+    `;
+  }
+
+  // Update checkbox text
+  document.querySelector('.terms-checkbox-text').textContent = t.termsCheckboxText;
+
+  // Update button text
+  document.querySelector('.terms-agree-btn span').textContent = t.termsAgreeButton;
+}
+
+// Initialize global language on page load
+document.addEventListener('DOMContentLoaded', () => {
+  setGlobalLanguage(currentGlobalLang);
+});
+
+
+// Event listeners for main language buttons
+if (mainLangViBtn && mainLangEnBtn) {
+  mainLangViBtn.addEventListener('click', () => setGlobalLanguage('vi'));
+  mainLangEnBtn.addEventListener('click', () => setGlobalLanguage('en'));
+}
+
+// Event listeners for splash language buttons
+if (splashLangViBtn && splashLangEnBtn) {
+  splashLangViBtn.addEventListener('click', () => setGlobalLanguage('vi'));
+  splashLangEnBtn.addEventListener('click', () => setGlobalLanguage('en'));
+}
+
+// ==================== END GLOBAL LANGUAGE SYSTEM ====================
+
+// ==================== WARNING TICKER SYSTEM ====================
+
+// Warning ticker functionality - luôn hiển thị và chạy
+const warningTicker = document.getElementById('warningTicker');
+let tickerInterval;
+
+// Function để restart animation
+function restartTickerAnimation() {
+  if (warningTicker) {
+    const tickerContent = warningTicker.querySelector('.ticker-content');
+    if (tickerContent) {
+      // Reset animation bằng cách remove và add lại class
+      tickerContent.style.animation = 'none';
+      setTimeout(() => {
+        tickerContent.style.animation = '';
+      }, 10);
+    }
+  }
+}
+
+// Bắt đầu ticker schedule - chạy ngay từ đầu
+function startWarningTickerSchedule() {
+  // Chạy ngay lập tức
+  restartTickerAnimation();
+
+  // Sau đó lặp lại mỗi 10 phút (600000ms)
+  tickerInterval = setInterval(() => {
+    restartTickerAnimation();
+  }, 600000); // 10 minutes
+}
+
+// Dừng ticker schedule khi cần
+function stopWarningTickerSchedule() {
+  if (tickerInterval) {
+    clearInterval(tickerInterval);
+  }
+}
+
+// Khởi tạo ticker schedule khi trang load - chạy ngay
+document.addEventListener('DOMContentLoaded', () => {
+  startWarningTickerSchedule();
+});
+
+// ==================== END WARNING TICKER SYSTEM ====================
 
 // Khởi tạo: luôn vào tab danh sách quét + load state profile
 let initialTab = 'scan';
